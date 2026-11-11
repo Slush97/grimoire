@@ -46,18 +46,16 @@ Most read endpoints work without an API key. Key required for custom match creat
 | `GET /v1/players/steam-search?search_query=` | Search Steam profiles by name | 100req/s |
 | `GET /v1/players/{id}/enemy-stats` | Win rates vs specific opponents | 100req/s |
 | `GET /v1/players/{id}/mate-stats` | Win rates with teammates | 100req/s |
-| `GET /v1/players/{id}/party-stats` | Party performance stats | 100req/s |
 
-### MMR
+### Rank
+
+The MMR endpoints (`/players/mmr*`, `/players/{id}/mmr-history*`) were removed in November 2026. There is no rank history endpoint: per-match history comes from `ranked_display_badge` on match history entries.
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /v1/players/mmr?account_ids=` | Batch MMR (SteamID3 format) |
-| `GET /v1/players/mmr/{hero_id}?account_ids=` | Batch hero-specific MMR |
-| `GET /v1/players/{id}/mmr-history` | Complete MMR history |
-| `GET /v1/players/{id}/mmr-history/{hero_id}` | Hero-specific MMR history |
-| `GET /v1/players/mmr/distribution` | Global MMR distribution |
-| `GET /v1/players/mmr/distribution/{hero_id}` | Hero-specific MMR distribution |
+| `GET /v1/players/rank?account_ids=` | Batch rank after each player's latest ranked match (SteamID3 format) |
+| `GET /v1/players/{id}/rank` | Rank after the player's latest ranked match |
+| `GET /v1/players/rank/distribution` | Players per badge |
 
 ### Matches
 
@@ -177,9 +175,9 @@ Most analytics endpoints support:
 
 | Resource | URL |
 |----------|-----|
-| Heroes list | `https://assets.deadlock-api.com/v2/heroes` |
-| Items list | `https://assets.deadlock-api.com/v2/items` |
-| Ranks/Badges | `https://assets.deadlock-api.com/v2/ranks` |
+| Heroes list | `https://api.deadlock-api.com/v1/assets/heroes` |
+| Items list | `https://api.deadlock-api.com/v1/assets/items` |
+| Ranks/Badges | `https://api.deadlock-api.com/v1/assets/ranks` |
 
 ---
 

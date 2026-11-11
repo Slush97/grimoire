@@ -1,3 +1,5 @@
+import type { AppTheme } from '../lib/theme';
+
 export interface MergedModSource {
   /** Filename of the source VPK after the merge: typically in `.disabled/`
    *  because mergeMods disables sources to free their priority slots. May
@@ -1071,6 +1073,8 @@ export interface PeekImprintResult {
   gamebananaId?: number;
   gamebananaFileId?: number;
   author?: string;
+  /** The label the imprint recorded for this file among its mod's files. */
+  variantLabel?: string;
   /** The recognized submission's art, from the local catalog mirror. */
   thumbnailUrl?: string;
   kind: 'mod' | 'merge';
@@ -1119,6 +1123,13 @@ export interface AppearanceBg {
 export interface HiddenCreator {
   id: number;
   name: string;
+  /** When the user hid them, in ms since the epoch. Entries hidden before this
+   *  was recorded have none. */
+  hiddenAt?: number;
+  /** The user's own reminder of why. */
+  note?: string;
+  /** The mod whose details the creator was hidden from, when there was one. */
+  fromMod?: { id: number; name: string; section: string };
 }
 
 /** A single GameBanana submission the user has hidden from Browse. GameBanana
@@ -1129,7 +1140,14 @@ export interface HiddenMod {
   name: string;
   /** GameBanana model name: "Mod", "Sound" or "Wip". */
   section: string;
+  /** When the user hid it, in ms since the epoch. */
+  hiddenAt?: number;
+  /** The user's own reminder of why. */
+  note?: string;
 }
+
+/** Longest note kept for a hidden creator or mod. */
+export const HIDDEN_NOTE_MAX_LENGTH = 140;
 
 export interface AppSettings {
   updateChannel: UpdateChannel;
@@ -1168,6 +1186,9 @@ export interface AppSettings {
   hiddenMods: HiddenMod[];
   /** Open Locker list-view hero cards expanded on first load. */
   lockerCardsExpandedByDefault: boolean;
+  /** Clicking a multi-file GameBanana card on Installed opens its mod page
+   *  instead of the file picker. */
+  installedGroupClickOpensDetails: boolean;
   /** Installing a different file of an already-enabled mod disables the
    *  prior variant (not about updates). */
   autoDisableSiblingVariants: boolean;
@@ -1254,8 +1275,11 @@ export interface AppSettings {
   /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
    *  focus rings throughout the app. */
   accentColor: string;
-  /** Use true black for the app canvas and near-black neutral surfaces. */
-  oledMode: boolean;
+  /** Surface palette: the default dark, true-black OLED, or light. */
+  theme: AppTheme;
+  /** Accent colors the user picked themselves, kept as swatches beside the
+   *  presets (oldest first, at most MAX_CUSTOM_SWATCHES). */
+  customAccentColors?: string[];
   /** Hero render used as the active sidebar highlight background.
    *  @deprecated Superseded by `appearanceBackgrounds.activeTab`. Kept as a
    *  legacy compat read so existing installs keep their chosen highlight; the
@@ -1272,6 +1296,9 @@ export interface AppSettings {
    *  (top-left, bottom-right) rather than a preset id, so a custom pick and a
    *  preset are the same shape. Null/absent leaves the flat background. */
   backgroundGradient?: { from: string; to: string } | null;
+  /** Background glows the user made themselves, kept as swatches beside the
+   *  presets (oldest first, at most MAX_CUSTOM_SWATCHES). */
+  customBackgroundGradients?: { from: string; to: string }[];
   /** Drop the sidebar's own panel background so it sits flush with the page
    *  background instead of reading as a separate dark grey column. The divider,
    *  nav art, and launch buttons are unaffected. Off by default. */

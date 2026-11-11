@@ -29,7 +29,7 @@ vi.mock('better-sqlite3', () => ({ default: class {
   close() { this.database.close(); }
 } }));
 
-import { closeDatabase, getCachedCategoryTree, getModById, getModCount, getModsDownloadCounts, getModsNsfwStatus, getSyncState, initDatabase, updateModDownloadCount, updateModNsfw, updateSyncState, upsertMod, upsertMods, type CachedMod } from './modDatabase';
+import { closeDatabase, getCachedCategoryTree, getHiddenContentPreviews, getModById, getModCount, getModsDownloadCounts, getModsNsfwStatus, getSyncState, initDatabase, updateModDownloadCount, updateModNsfw, updateSyncState, upsertMod, upsertMods, type CachedMod } from './modDatabase';
 import { searchMods } from './searchService';
 
 function row(section: string, name = `${section} sample`): CachedMod {
@@ -99,5 +99,37 @@ describe('section-aware catalog identity', () => {
     closeDatabase();
     expect(getSyncState('Mod')?.lastSync).toBe(999);
     expect(getModCount()).toBe(2);
+  });
+});
+
+describe('previews for the hidden creator and hidden mod lists', () => {
+  const upload = (id: number, likeCount: number, extra: Partial<CachedMod> = {}): CachedMod =>
+    ({ ...row('Mod', `Upload ${id}`), id, submitterId: 7, submitterName: 'Krak4n', likeCount, thumbnailUrl: `https://images.example/${id}.jpg`, ...extra });
+
+  it('counts the cached uploads of a creator and returns the most liked few', () => {
+    directory();
+    upsertMods([upload(1, 5), upload(2, 50), upload(3, 20), upload(4, 1), upload(5, 9, { section: 'Sound', isNsfw: true }),
+      upload(6, 99, { submitterId: 8, submitterName: 'Someone else' })]);
+    const { creators } = getHiddenContentPreviews([7, 7, 404], []);
+    expect(Object.keys(creators)).toEqual(['7']);
+    expect(creators[7].count).toBe(5);
+    expect(creators[7].mods.map(mod => mod.id)).toEqual([2, 3, 5]);
+    expect(creators[7].mods[2]).toEqual({ id: 5, section: 'Sound', name: 'Upload 5', thumbnailUrl: 'https://images.example/5.jpg', isNsfw: true, submitterName: 'Krak4n' });
+  });
+
+  it('finds hidden mods by section and id, and leaves out what the catalog lacks', () => {
+    directory();
+    upsertMods([upload(42, 1), upload(42, 1, { section: 'Sound', name: 'Same id, a sound', thumbnailUrl: null })]);
+    const { mods } = getHiddenContentPreviews([], [{ id: 42, section: 'Mod' }, { id: 42, section: 'Sound' }, { id: 43, section: 'Mod' }]);
+    expect(Object.keys(mods).sort()).toEqual(['Mod:42', 'Sound:42']);
+    expect(mods['Sound:42']).toMatchObject({ name: 'Same id, a sound', thumbnailUrl: null, submitterName: 'Krak4n' });
+  });
+
+  it('skips anything from the renderer that is not an id or a known section', () => {
+    directory();
+    upsertMods([upload(1, 5)]);
+    expect(getHiddenContentPreviews('7', null)).toEqual({ creators: {}, mods: {} });
+    expect(getHiddenContentPreviews([0, -7, 1.5, '7', null], [{ id: 1, section: 'Tool' }, { id: '1', section: 'Mod' }, null, 'Mod:1']))
+      .toEqual({ creators: {}, mods: {} });
   });
 });

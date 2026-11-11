@@ -5,7 +5,7 @@
 // Runs a particle system (emitters, initializers, operators, forces, constraints, children) with no
 // graphics backend. The partial classes are merged here in the same order.
 
-import { ParticleBuffer } from './buffer';
+import { type ConstantValues, ParticleBuffer, fillVectors } from './buffer';
 import { MAX_GPU_PARTICLES, MAX_PARTICLES, ParticleCollection } from './collection';
 import { ParticleDiagnostics } from './diagnostics';
 import { ParticleDetailLevel, ParticleEventType, ParticleField } from './enums';
@@ -112,6 +112,27 @@ const FUNCTION_LABELS: Record<FunctionKind, string> = {
   constraint: 'constraint',
 };
 
+/** What swapDefinitions changes in a system and its children, worked out before anything changes. */
+interface SwapPlan {
+  simulation: ParticleSystemSimulation;
+  source: ParticleDefinitionSource;
+  children: SwapPlan[];
+  /** Null when the system's own definition is the same one. */
+  edit: {
+    loadedData: KVObject;
+    rootData: KVObject;
+    constants: ConstantValues;
+    preEmission: SwappedList<ParticleFunctionPreEmissionOperator>;
+    initializers: SwappedList<ParticleFunctionInitializer>;
+    operators: SwappedList<ParticleFunctionOperator>;
+    forceGenerators: SwappedList<ParticleFunctionForceGenerator>;
+    constraints: SwappedList<ParticleFunctionConstraint>;
+  } | null;
+}
+
+/** A function list after a swap, and each new function with the one of the same class it replaces. */
+interface SwappedList<T> { list: T[]; replaced: [T, T | undefined][] }
+
 export class ParticleSystemSimulation {
   private readonly preEmissionOperators: ParticleFunctionPreEmissionOperator[] = [];
   private readonly emitters: ParticleFunctionEmitter[] = [];
@@ -123,7 +144,10 @@ export class ParticleSystemSimulation {
   private readonly constraints: ParticleFunctionConstraint[] = [];
 
   /** Every function of the system, in the order the definition lists their kinds. */
-  private readonly functions: ParticleFunction[];
+  private functions: ParticleFunction[];
+
+  /** Each function's entry in the definition, as JSON, to tell an edited one from the same one (swapDefinitions). */
+  private readonly functionSources = new WeakMap<ParticleFunction, string>();
 
   private bounds: AABB = { min: Vector3.zero, max: Vector3.zero };
   private boundsValid = false;
@@ -175,7 +199,11 @@ export class ParticleSystemSimulation {
 
   private readonly childSimulations: ParticleSystemSimulation[] = [];
   readonly diagnostics: ParticleDiagnostics;
-  private readonly source: ParticleDefinitionSource;
+  private source: ParticleDefinitionSource;
+  /** The definition as loaded (before the upgrade), to tell an edited one apart (swapDefinitions). */
+  private loadedData: KVObject;
+  /** The constants every particle starts from, shared by the particle buffers. */
+  private readonly constants: ConstantValues;
 
   private firstFramePending = true;
   private previousControlPointsValid = false;
@@ -191,8 +219,8 @@ export class ParticleSystemSimulation {
   private particleIdCounter = 0;
   private readonly systemState: ParticleSystemState;
 
-  /** The upgraded definition this system was built from. */
-  readonly definition: KVObject;
+  /** The upgraded definition this system was built from (or swapped to, see swapDefinitions). */
+  definition: KVObject;
 
   /** The system's named values. */
   readonly namedValues: ParticleNamedValues;
@@ -215,6 +243,7 @@ export class ParticleSystemSimulation {
 
     const rootData = upgradeToLatest(particleSystem.data, particleSystem.format, this.diagnostics, this.name);
     this.definition = rootData;
+    this.loadedData = particleSystem.data;
 
     let parse = new ParticleDefinitionParser(rootData, this.diagnostics, this.initialReads);
     this.behaviorVersion = parse.int32('m_nBehaviorVersion', 0);
@@ -257,6 +286,7 @@ export class ParticleSystemSimulation {
     };
 
     const constantAttributes = ParticleBuffer.createConstants(parse);
+    this.constants = constantAttributes;
     this.particleCollection = new ParticleCollection(constantAttributes, this.maxParticles);
 
     this.systemState = new ParticleSystemState(parentSystemState, this);
@@ -460,7 +490,8 @@ export class ParticleSystemSimulation {
     this.systemState.particleCount = scope.particleCount;
   }
 
-  private setupFunctions<T extends ParticleFunction>(parse: ParticleDefinitionParser, data: KVObject[], kind: FunctionKind, target: T[]): void {
+  private setupFunctions<T extends ParticleFunction>(parse: ParticleDefinitionParser, data: KVObject[], kind: FunctionKind, target: T[],
+    diagnostics: ParticleDiagnostics = this.diagnostics): void {
     let definitionIndex = 0;
     let listIndex = 0;
 
@@ -491,15 +522,132 @@ export class ParticleSystemSimulation {
         }
 
         fn.className = className;
+        this.functionSources.set(fn, JSON.stringify(info));
         target.push(fn as T);
         listIndex++;
       } else {
         const label = FUNCTION_LABELS[kind];
         const reason = created.knownToVrf ? 'not ported yet' : 'unknown to ValveResourceFormat';
-        this.diagnostics.report('unsupported-class', `Unsupported ${label} class '${className}' (${reason})`, this.name);
+        diagnostics.report('unsupported-class', `Unsupported ${label} class '${className}' (${reason})`, this.name);
       }
 
       definitionIndex++;
+    }
+  }
+
+  /**
+   * Takes another version of this system's tree from `source` (a live recolour) while it runs: its
+   * particles, their ages and positions, its emission, children and time all carry on. Functions the
+   * new definition leaves as they were stay (with their state); edited ones take the new values from the
+   * next step, and an edited initializer that can (adoptLive) recolours the live particles in place.
+   * Changed constants (m_ConstantColor) reach the live particles that took them. Returns false, changing
+   * nothing, when the new tree differs in what it emits or in its children: that needs a restart.
+   */
+  swapDefinitions(source: ParticleDefinitionSource): boolean {
+    const plan = this.planSwap(source);
+    if (plan === null) return false;
+    this.applySwap(plan);
+    return true;
+  }
+
+  private planSwap(source: ParticleDefinitionSource): SwapPlan | null {
+    const loaded = source.loadSystem(this.name);
+    if (loaded === null) return null;
+    const children: SwapPlan[] = [];
+    for (const child of this.childSimulations) {
+      const plan = child.planSwap(source);
+      if (plan === null) return null;
+      children.push(plan);
+    }
+    if (loaded.data === this.loadedData) return { simulation: this, source, children, edit: null };
+
+    const scratch = new ParticleDiagnostics();
+    const rootData = upgradeToLatest(loaded.data, loaded.format, scratch, this.name);
+    const sameEntries = (key: string) => JSON.stringify(getObjectArray(rootData, key)) === JSON.stringify(getObjectArray(this.definition, key));
+    if (!sameEntries('m_Emitters') || !sameEntries('m_Children')) return null;
+    let parse = new ParticleDefinitionParser(rootData, scratch, this.initialReads);
+    if (parse.int32('m_nBehaviorVersion', 0) !== this.behaviorVersion) return null;
+    parse = parse.withBehaviorVersion(this.behaviorVersion);
+
+    // Each list again; an entry the edit left alone keeps its function (and its state)
+    const lists = {
+      preEmission: [] as ParticleFunctionPreEmissionOperator[],
+      initializers: [] as ParticleFunctionInitializer[],
+      operators: [] as ParticleFunctionOperator[],
+      forceGenerators: [] as ParticleFunctionForceGenerator[],
+      constraints: [] as ParticleFunctionConstraint[],
+    };
+    this.setupFunctions(parse, getObjectArray(rootData, 'm_PreEmissionOperators'), 'preEmission', lists.preEmission, scratch);
+    this.setupFunctions(parse, getObjectArray(rootData, 'm_Initializers'), 'initializer', lists.initializers, scratch);
+    this.setupFunctions(parse, getObjectArray(rootData, 'm_Operators'), 'operator', lists.operators, scratch);
+    this.setupFunctions(parse, getObjectArray(rootData, 'm_ForceGenerators'), 'forceGenerator', lists.forceGenerators, scratch);
+    this.setupFunctions(parse, getObjectArray(rootData, 'm_Constraints'), 'constraint', lists.constraints, scratch);
+    const keep = <T extends ParticleFunction>(next: T[], previous: T[]): SwappedList<T> => {
+      const replaced: [T, T | undefined][] = [];
+      const list = next.map((fn, index) => {
+        const old = previous[index];
+        if (old !== undefined && old.className === fn.className && this.functionSources.get(old) === this.functionSources.get(fn)) return old;
+        replaced.push([fn, old?.className === fn.className ? old : undefined]);
+        return fn;
+      });
+      return { list, replaced };
+    };
+    return {
+      simulation: this, source, children,
+      edit: {
+        loadedData: loaded.data, rootData, constants: ParticleBuffer.createConstants(parse),
+        preEmission: keep(lists.preEmission, this.preEmissionOperators),
+        initializers: keep(lists.initializers, this.initializers),
+        operators: keep(lists.operators, this.operators),
+        forceGenerators: keep(lists.forceGenerators, this.forceGenerators),
+        constraints: keep(lists.constraints, this.constraints),
+      },
+    };
+  }
+
+  private applySwap(plan: SwapPlan): void {
+    this.source = plan.source;
+    for (const child of plan.children) child.simulation.applySwap(child);
+    const edit = plan.edit;
+    if (edit === null) return;
+    this.loadedData = edit.loadedData;
+    this.definition = edit.rootData;
+    const replace = <T>(target: T[], list: T[]) => target.splice(0, target.length, ...list);
+    replace(this.preEmissionOperators, edit.preEmission.list);
+    replace(this.initializers, edit.initializers.list);
+    replace(this.operators, edit.operators.list);
+    replace(this.forceGenerators, edit.forceGenerators.list);
+    replace(this.constraints, edit.constraints.list);
+    this.functions = [...this.preEmissionOperators, ...this.emitters, ...this.initializers, ...this.operators, ...this.forceGenerators, ...this.constraints];
+    this.declareFunctionFields();
+
+    // The constants every particle starts from. A live particle keeps the colour and alpha it took
+    // from them unless an initializer sets them, so it takes the new ones
+    const before = { color: this.constants.vectors[ParticleField.Color], alpha: this.constants.scalars[ParticleField.Alpha] };
+    this.constants.scalarBits.set(edit.constants.scalarBits);
+    this.constants.vectors.splice(0, this.constants.vectors.length, ...edit.constants.vectors);
+    this.constants.boneIndices = edit.constants.boneIndices;
+    const initialized = (field: number) => this.initializers.some((fn) => maskContains(fn.storedFields | fn.initialWrittenFields, field));
+    const collection = this.particleCollection;
+    if (!before.color.equals(this.constants.vectors[ParticleField.Color]) && !initialized(ParticleField.Color)) {
+      for (const span of [collection.currentSpan, collection.initialSpan]) {
+        const { values } = span.tryGetVectors(ParticleField.Color);
+        if (values) fillVectors(values.subarray(0, collection.count * 3), this.constants.vectors[ParticleField.Color]);
+      }
+    }
+    if (before.alpha !== this.constants.scalars[ParticleField.Alpha] && !initialized(ParticleField.Alpha)) {
+      for (const span of [collection.currentSpan, collection.initialSpan]) {
+        const { values } = span.tryGetFloats(ParticleField.Alpha);
+        if (values) values.fill(this.constants.scalars[ParticleField.Alpha], 0, collection.count);
+      }
+    }
+
+    // New functions start as the system did; an edited initializer recolours what it set on the live particles
+    const fresh = [edit.preEmission, edit.initializers, edit.operators, edit.forceGenerators, edit.constraints].flatMap(
+      (group): [ParticleFunction, ParticleFunction | undefined][] => group.replaced);
+    for (const [fn] of fresh) fn.initialize(this.systemState);
+    for (const [fn, previous] of edit.initializers.replaced) {
+      if (previous !== undefined) fn.adoptLive(previous, collection, this.systemState);
     }
   }
 
@@ -1163,6 +1311,8 @@ export class ParticleSystemSimulation {
     state.initializingParticles = false;
     this.fillParticleIds(first, count);
     this.advanceParticleIds(first, count);
+    const particleIds = this.particleCollection.currentSpan.integers(ParticleField.ParticleId);
+    for (const initializer of this.initializers) initializer.spawned(particleIds, first, count);
 
     this.particleCollection.saveInitial(first, count);
     this.particleCollection.setPreviousStep(first, count);

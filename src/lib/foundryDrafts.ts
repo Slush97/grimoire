@@ -40,8 +40,7 @@ export function restoreMovementFxDraft(storage: Pick<Storage, 'setItem'>, scope:
   const entries: Array<[string, unknown]> = [
     [`movement:${choice.kind}:choice`, choice],
     ['movement:kind', choice.kind],
-    ['workshop:section', 'abilities'],
-    ['workshop:ability', 'movement'],
+    ['workshop:section', 'mechanics'],
     ['page:mode', 'heroes'],
   ];
   return entries.every(([key, value]) => writeFoundryDraft(storage, foundryDraftKey(scope, key), value));

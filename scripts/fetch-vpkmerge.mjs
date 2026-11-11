@@ -16,12 +16,12 @@ import { fileURLToPath } from 'node:url';
 import { get as httpsGet } from 'node:https';
 import { pipeline } from 'node:stream/promises';
 
-const VPKMERGE_VERSION = 'v0.29.3';
+const VPKMERGE_VERSION = 'v0.30.1';
 
 const ASSETS = {
-    'linux-x64':  { name: 'vpkmerge-linux-x86_64',      sha256: '5634aebc11b7f9ef976c3c4e08414738bf43cf496878b97f322060976b5dfd25' },
-    'darwin-arm64': { name: 'vpkmerge-macos-aarch64',    sha256: '9a0341933d9117b401966ed28da608e530e9a2120660d1c7f6161825d2363272' },
-    'win32-x64':  { name: 'vpkmerge-windows-x86_64.exe', sha256: 'd015090b0aad407243b13af45c98cc5d6b52fa75f4d833b0f8bffdf279528a5c' },
+    'linux-x64':  { name: 'vpkmerge-linux-x86_64',      sha256: 'f0d1c5f4de19be3e91e940b2d959cea4b0a41cf9ebff0398c1be543cc0570c96' },
+    'darwin-arm64': { name: 'vpkmerge-macos-aarch64',    sha256: '23b812f3b524d67004178c3aa914ad85149abdc44d5cac446ce0b06d7c706bfa' },
+    'win32-x64':  { name: 'vpkmerge-windows-x86_64.exe', sha256: 'c3fbc856dc7765ccf2aeb8d1bc9bf1e6c13a1bb10dfdd6d57b910e8c838d1bb1' },
 };
 
 const here = dirname(fileURLToPath(import.meta.url));

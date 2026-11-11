@@ -142,11 +142,30 @@ function pickRuntimeConfiguration(definition: KVObject): KVObject | null {
   return chosen;
 }
 
-export interface EffectHostContext {
-  source: ParticleDefinitionSource;
+/** A model the effect can be placed on: its skeleton, posed object and attachments. */
+export interface EffectHostModel {
   model: ParticleModel;
   modelObject: PosedModelObject;
   attachments: ReadonlyMap<string, BundleAttachment>;
+}
+
+export interface EffectHostContext extends EffectHostModel {
+  source: ParticleDefinitionSource;
+  /** Other models on the stage, by actor id, for control points staged on them. */
+  actors?: ReadonlyMap<string, EffectHostModel>;
+}
+
+/**
+ * A model's own spelling of an attachment or bone a stage names. Source looks names up without regard
+ * to case, and game data does not always match the model's (Lash's ability names `palm_r`, his model
+ * `palm_R`).
+ */
+function stagedAttachmentName(on: EffectHostModel, name: string): string {
+  if (on.attachments.has(name) || on.model.skeleton.getBoneIndex(name) !== -1) return name;
+  const lower = name.toLowerCase();
+  return [...on.attachments.keys()].find((key) => key.toLowerCase() === lower)
+    ?? on.model.skeleton.bones.find((bone) => bone.name.toLowerCase() === lower)?.name
+    ?? name;
 }
 
 export class ParticleEffectHost {
@@ -185,10 +204,15 @@ export class ParticleEffectHost {
     if (this.usesConfiguration) {
       this.applyControlPointDefaults();
       const configuration = pickConfiguration(definition, effect.configuration);
-      this.drivers = (configuration ? getArray(configuration, 'm_drivers') ?? [] : []).filter(isCollection).map(readDriver);
-      const first = this.drivers[0];
-      this.previewAttachmentPoint = first !== undefined && (first.attachType === ParticleAttachment.PATTACH_POINT || first.attachType === ParticleAttachment.PATTACH_POINT_FOLLOW)
-        ? first.attachmentName : null;
+      // A control point the stage places replaces the configuration's driver for it: the configuration
+      // stages the effect on its preview model, the stage on this one (a parried attacker in front, not
+      // the hero's own attachment)
+      const staged = new Set((effect.controlPoints ?? []).map((point) => point.cp));
+      const drivers = (configuration ? getArray(configuration, 'm_drivers') ?? [] : []).filter(isCollection).map(readDriver);
+      this.drivers = drivers.filter((driver) => !staged.has(driver.controlPoint));
+      const first = drivers[0];
+      this.previewAttachmentPoint = first !== undefined && !staged.has(first.controlPoint)
+        && (first.attachType === ParticleAttachment.PATTACH_POINT || first.attachType === ParticleAttachment.PATTACH_POINT_FOLLOW) ? first.attachmentName : null;
       this.simulation.getControlPoint(0).modelObject = context.modelObject;
       this.applyPreviewControlPoints(true);
     } else {
@@ -324,37 +348,38 @@ export class ParticleEffectHost {
 
     const first = !this.stagedPlaced;
     this.stagedPlaced = true;
-    const pose = this.pose();
 
     for (const point of staged) {
+      // A point on another actor's model, or on the effect's own
+      const on = point.kind !== 'world' && point.actor !== undefined ? this.context.actors?.get(point.actor) ?? null : this.context;
+      if (on === null) continue;
+      if (point.kind === 'height') {
+        if (first) {
+          const frame = childFrame(stagedAttachmentName(on, point.attachment), on.attachments, on.model.skeleton, on.modelObject.resolvedPose, Matrix4x4.identity());
+          this.setControlPointTo(point.cp, Matrix4x4.identity().withTranslation(new Vector3((frame.translation.z + point.above) / point.per, 0, 0)));
+          this.simulation.getControlPoint(point.cp).modelObject = null;
+        }
+        continue;
+      }
       if (point.kind === 'world') {
         if (first) {
           const forward = new Vector3(...point.forward);
           const side = safeNormalize(new Vector3(-forward.y, forward.x, 0).lengthSquared() > 0 ? new Vector3(-forward.y, forward.x, 0) : Vector3.unitY);
           const up = safeNormalize(new Vector3(forward.y * side.z - forward.z * side.y, forward.z * side.x - forward.x * side.z, forward.x * side.y - forward.y * side.x));
           this.setControlPointTo(point.cp, Matrix4x4.createBasis(safeNormalize(forward), side, up).withTranslation(new Vector3(...point.position)));
+          // A point in the world stands for something other than the hero: functions on its model
+          // (on-model emission, bone locks) must not find the hero there
+          this.simulation.getControlPoint(point.cp).modelObject = null;
         }
       } else if (point.kind === 'origin') {
-        if (first || point.follow) this.setControlPointTo(point.cp, rigidTransform(this.context.modelObject.transform));
+        if (first || point.follow) this.setControlPointTo(point.cp, rigidTransform(on.modelObject.transform));
       } else if (first || point.follow) {
-        const frame = childFrame(this.stagedAttachmentName(point.attachment), this.context.attachments, this.context.model.skeleton, pose,
-          this.context.modelObject.transform);
-        this.setControlPointTo(point.cp, point.facing === 'model' ? rigidTransform(this.context.modelObject.transform).withTranslation(frame.translation) : frame);
+        const frame = childFrame(stagedAttachmentName(on, point.attachment), on.attachments, on.model.skeleton, on.modelObject.resolvedPose,
+          on.modelObject.transform);
+        const facing = point.facing === 'model' ? on : point.facing === 'owner' ? this.context : null;
+        this.setControlPointTo(point.cp, facing ? rigidTransform(facing.modelObject.transform).withTranslation(frame.translation) : frame);
       }
     }
-  }
-
-  /**
-   * The model's own spelling of an attachment or bone a stage names. Source looks names up without
-   * regard to case, and game data does not always match the model's (Lash's ability names `palm_r`,
-   * his model `palm_R`).
-   */
-  private stagedAttachmentName(name: string): string {
-    if (this.context.attachments.has(name) || this.context.model.skeleton.getBoneIndex(name) !== -1) return name;
-    const lower = name.toLowerCase();
-    return [...this.context.attachments.keys()].find((key) => key.toLowerCase() === lower)
-      ?? this.context.model.skeleton.bones.find((bone) => bone.name.toLowerCase() === lower)?.name
-      ?? name;
   }
 
   private placeBound(): void {

@@ -24,6 +24,18 @@ export interface MovementGameData {
     /** m_MovementSpeedCurve of the heavy attack: how long the lunge lasts (seconds) and how far it carries (inches). */
     lunge: Lunge | null;
   } | null;
+  parry: {
+    /** The bound ability that carries m_ActiveParryParticle. */
+    ability: string;
+    /** m_ActiveParryParticle: plays while the parry is up. */
+    active: string | null;
+    /** m_SuccessfulParryParticle: plays on the parrying hero when a melee is parried. */
+    success: string | null;
+    /** m_ParryVictimModifier.m_strParticleEffect: plays on the parried attacker (the stun). */
+    victim: string | null;
+    /** m_mapAbilityProperties.ParriedStunTime: how long the attacker stays stunned, seconds. */
+    stunSeconds: number | null;
+  } | null;
   dash: {
     /** The ability bound to ESlot_Ability_Innate_1. */
     ability: string;
@@ -125,10 +137,12 @@ export function speedCurveTravel(curve: unknown): Lunge | null {
   return { duration, distance, profile };
 }
 
+/** Slots a hero's parry is bound to, most likely first (ESlot_Ability_Innate_3 for every hero as of 2026-11). */
+const PARRY_SLOTS = ['ESlot_Ability_Innate_3', 'ESlot_Ability_Innate_2', 'ESlot_Ability_Innate_4', 'ESlot_Ability_Innate_1'];
 const particle = (value: unknown): string | null => (typeof value === 'string' && PARTICLE_PATH.test(value) && !value.includes('..') ? value : null);
 const finite = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
-/** Resolves a hero's heavy melee and dash data, or null when heroes.vdata has no entry for any codename. */
+/** Resolves a hero's heavy melee, parry and dash data, or null when heroes.vdata has no entry for any codename. */
 export function resolveMovementGameData(heroesInput: unknown, abilitiesInput: unknown, codenames: readonly string[]): MovementGameData | null {
   const heroes = tableSchema.parse(heroesInput);
   const abilities = tableSchema.parse(abilitiesInput);
@@ -162,6 +176,21 @@ export function resolveMovementGameData(heroesInput: unknown, abilitiesInput: un
     };
   }
 
+  let parry: MovementGameData['parry'] = null;
+  for (const slot of PARRY_SLOTS) {
+    const ability = heroField(['m_mapBoundAbilities', slot]);
+    if (typeof ability !== 'string' || !isTable(abilities[ability]) || !inheritedField(abilities, ability, ['m_ActiveParryParticle'])) continue;
+    const stun = abilityField(ability, ['m_mapAbilityProperties', 'ParriedStunTime', 'm_strValue']);
+    parry = {
+      ability,
+      active: particle(abilityField(ability, ['m_ActiveParryParticle'])),
+      success: particle(abilityField(ability, ['m_SuccessfulParryParticle'])),
+      victim: particle(abilityField(ability, ['m_ParryVictimModifier', 'm_strParticleEffect'])),
+      stunSeconds: finite(typeof stun === 'string' ? Number(stun) : stun),
+    };
+    break;
+  }
+
   const dashAbility = heroField(['m_mapBoundAbilities', 'ESlot_Ability_Innate_1']);
   let dash: MovementGameData['dash'] = null;
   const distance = finite(heroField(['m_mapStartingStats', 'EAirDashDistanceInMeters']));
@@ -170,5 +199,5 @@ export function resolveMovementGameData(heroesInput: unknown, abilitiesInput: un
     dash = { ability: dashAbility, particle: particle(abilityField(dashAbility, ['m_DashParticle'])), distance: distance * INCHES_PER_METER, duration };
   }
 
-  return { heroKey, melee, dash, evidence };
+  return { heroKey, melee, parry, dash, evidence };
 }

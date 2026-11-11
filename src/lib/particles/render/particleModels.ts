@@ -40,6 +40,8 @@ export interface ParticleMaterialData {
   textureParams: Record<string, string>;
   /** The material's int attributes (`translucent`, `IgnoreMaterialOverride`, ...). */
   intAttributes: Record<string, number>;
+  /** By param name, the compiled dynamic expression (VfxEval bytecode) that sets the param at draw time. */
+  dynamicParams?: Record<string, number[]>;
 }
 
 export interface ParticleModelSource {
@@ -147,5 +149,6 @@ export function readParticleMaterial(data: Record<string, unknown>): ParticleMat
     }),
     textureParams: named('m_textureParams', (entry) => (typeof entry.m_pValue === 'string' ? entry.m_pValue.replace(/\\/g, '/').replace(/_c$/, '') : undefined)),
     intAttributes: named('m_intAttributes', number('m_nValue')),
+    dynamicParams: named('m_dynamicParams', (entry) => (Array.isArray(entry.m_value) && entry.m_value.every((byte) => typeof byte === 'number') ? (entry.m_value as number[]) : undefined)),
   };
 }

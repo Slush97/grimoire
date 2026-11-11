@@ -46,6 +46,8 @@ interface CrosshairStore extends CrosshairSettings {
     generateCommands: () => string;
     getSettings: () => CrosshairSettings;
     importFromGame: (gamePath: string) => Promise<boolean>;
+    copyShareCode: () => Promise<void>;
+    pasteShareCode: () => Promise<boolean>;
 
     // Preset actions
     loadPresets: () => Promise<void>;
@@ -106,6 +108,14 @@ export const useCrosshairStore = create<CrosshairStore>((set, get) => ({
             return true;
         }
         return false;
+    },
+
+    // The game's crosshair share codes, encoded and decoded by deadlock-api
+    copyShareCode: () => window.electronAPI.copyCrosshairShareCode(get().getSettings()),
+    pasteShareCode: async () => {
+        const settings = await window.electronAPI.pasteCrosshairShareCode(get().getSettings());
+        if (settings) set(settings);
+        return settings !== null;
     },
 
     // Load presets from backend

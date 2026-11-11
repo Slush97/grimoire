@@ -10,6 +10,8 @@
     },
     "unchecked": "Can't check",
     "uncheckedBody": "It stays disabled while Mod safety is on. Downloading it again won't change that, so please report it with a link to the mod.",
+    "enableAnyway": "Enable anyway",
+    "enableAnywayHint": "Grimoire can't tell what this mod does. Enable it only if you trust where it came from.",
     "incomplete": "Check incomplete",
     "incompleteBody": "Grimoire couldn't finish checking this mod. This isn't a finding about the mod. Check installed mods to try again.",
     "needsReview": "Review",
@@ -173,6 +175,7 @@
     "workshop": {
       "appearance": "Appearance",
       "abilities": "Abilities",
+      "mechanics": "Mechanics",
       "voice": "Voice",
       "icons": "Icons & Textures",
       "back": "All heroes",
@@ -502,8 +505,6 @@
       "keepAvailable": "Keep available parts"
     },
     "movement": {
-      "title": "Movement effects",
-      "sounds": "Gameplay sounds",
       "dash": "Dash trails",
       "heavy-melee": "Heavy melee",
       "globalHint": "Applies to all heroes.",
@@ -514,7 +515,6 @@
       "upload": "Choose an image",
       "originalTrail": "Original trail",
       "imageTrail": "Emoji / image",
-      "updating": "Updating effect…",
       "replay": "Replay effect",
       "loop": "Loop",
       "export": "Export VPK",
@@ -529,7 +529,24 @@
       "brightness": "Brightness",
       "illuminated": "Illuminated",
       "outline": "Image outline",
-      "outlineColor": "Outline color"
+      "outlineColor": "Outline color",
+      "parry": "Parry",
+      "shieldImage": "Shield symbol",
+      "stunImage": "Stun icon",
+      "originalSymbol": "Original",
+      "effectFinish": "Finish",
+      "parrySounds": "Sounds",
+      "parrySound": "Parry",
+      "parrySuccessSound": "Successful parry",
+      "parts": "Parry parts",
+      "part": {
+        "shield": "Shield",
+        "catch": "Catch",
+        "stun": "Stun"
+      },
+      "linkParts": "Use one color for every part",
+      "unlinkParts": "Color each part separately",
+      "keepOriginal": "Keep original"
     }
   },
   "autoexec": {
@@ -740,12 +757,18 @@
       "playerDataTitle": "Failed to load player data"
     },
     "overview": {
-      "rankedScore": "Ranked Score",
+      "rank": "Rank",
+      "rankProgressTitle": "{{points}} / {{needed}} points to {{next}}",
+      "topPercent": "Top {{percent}}%",
+      "topPercentTitle": "Share of this season's ranked players at or above this rank",
+      "winStreakTitle": "Win streak: {{count}}",
+      "protectionTitle_one": "Demotion protection: {{count}} shield left",
+      "protectionTitle_other": "Demotion protection: {{count}} shields left",
       "winLoss": "{{wins}}W / {{losses}}L",
       "winRate": "Win Rate",
       "bestStreak": "Best streak: {{count}}",
       "rankedTrajectory": "Ranked Trajectory",
-      "rankedTrajectoryDescription": "Score per ranked match, from the full account history",
+      "rankedTrajectoryDescription": "Rank after each ranked match, from the full account history",
       "recentMatches": "Recent Matches",
       "lastMatches": "Last {{count}} matches",
       "noRecentMatches": "No recent matches",
@@ -784,11 +807,11 @@
       "all": "All",
       "localDailySnapshots": "(local daily snapshots)",
       "noMatchesInRange": "No ranked matches in this range. Try a wider one.",
-      "noScoreHistory": "No ranked score history for this player yet.",
+      "noRankHistory": "No ranked matches for this player yet.",
       "rangeDays": "{{days}}D",
       "divisionFallback": "Division {{division}}",
       "dateRange": "{{from}} to {{to}}",
-      "scoreRangeAria": "Ranked score from {{fromScore}} ({{fromRank}}) to {{toScore}} ({{toRank}})"
+      "rankRangeAria": "Rank from {{fromRank}} to {{toRank}}"
     },
     "matches": {
       "matchHistory": "Match History",
@@ -805,22 +828,48 @@
       "loss": "Loss",
       "souls": "souls",
       "damage": "damage",
-      "viewMatchOnStatlocker": "View match on Statlocker"
+      "viewMatchOnStatlocker": "View match on Statlocker",
+      "rankPoints": "Rank points",
+      "rankPointsProtected": "Rank points. Demotion protection was used.",
+      "brawl": "Brawl"
+    },
+    "scoreboard": {
+      "open": "Open scoreboard",
+      "title": "Match",
+      "loadFailed": "Couldn't load this match. deadlock-api may not have it yet.",
+      "mode": {
+        "ranked": "Ranked",
+        "standard": "Standard Match",
+        "brawl": "Street Brawl"
+      },
+      "soulsLead": "Souls lead",
+      "minutes": "{{minutes}}m",
+      "yourTeam": "Your team",
+      "enemyTeam": "Enemy team",
+      "farm": "LH/DN",
+      "farmTitle": "Last hits / denies",
+      "healing": "Healing",
+      "build": "Build",
+      "mvp": "MVP #{{rank}}",
+      "level": "Level {{level}}",
+      "bans": "Bans"
     },
     "leaderboard": {
       "asia": "Asia",
       "topPlayers": "Top Players",
       "valveLeaderboardUpdatedHourly": "Valve leaderboard, updated hourly",
-      "noDataForRegion": "No leaderboard data for this region"
+      "noDataForRegion": "No leaderboard data for this region",
+      "season": "Season",
+      "trackedPosition": "{{name}} #{{rank}}"
     },
     "ranks": {
       "initiate": "Initiate",
       "seeker": "Seeker",
-      "alchemist": "Alchemist",
-      "arcanist": "Arcanist",
+      "acolyte": "Acolyte",
+      "sentinel": "Sentinel",
+      "mystic": "Mystic",
       "ritualist": "Ritualist",
       "emissary": "Emissary",
-      "archon": "Archon",
       "oracle": "Oracle",
       "phantom": "Phantom",
       "ascendant": "Ascendant",
@@ -927,6 +976,18 @@
     "shownToast": "{{name}} is visible in Browse again.",
     "none": "No mods are hidden right now."
   },
+  "hiddenContent": {
+    "hiddenOn": "Hidden {{date}}",
+    "hiddenOnFrom": "Hidden {{date}} from {{mod}}",
+    "uploads_one": "{{count}} upload",
+    "uploads_other": "{{count}} uploads",
+    "byCreator": "by {{name}}",
+    "addNote": "Add a note",
+    "editNote": "Edit note",
+    "noteFor": "Note for {{name}}",
+    "notePlaceholder": "Why did you hide this?",
+    "openMod": "Open {{name}}"
+  },
   "settings": {
     "header": {
       "description": "Game paths, preferences, and maintenance"
@@ -1024,10 +1085,15 @@
       "accentNamed": "Use {{name}} accent color",
       "pickCustomColor": "Pick custom color",
       "accentCustom": "Custom accent",
+      "yourColor": "Use your color {{color}}",
+      "removeYourColor": "Remove {{color}}",
       "selectedColorPreview": "Selected color preview",
       "customAccent": "Custom Accent",
-      "oled": {
-        "title": "OLED mode"
+      "theme": {
+        "title": "Theme",
+        "dark": "Dark",
+        "oled": "OLED",
+        "light": "Light"
       },
       "launchButtons": {
         "combine": "Combine launch buttons",
@@ -1067,6 +1133,8 @@
         "description": "Tint the app background with light bleeding in from the top-left and bottom-right corners.",
         "none": "No glow",
         "custom": "Custom glow",
+        "yourGlow": "Use your glow {{number}}",
+        "removeYourGlow": "Remove your glow {{number}}",
         "customTitle": "Custom background glow",
         "topLeft": "Top left",
         "bottomRight": "Bottom right",
@@ -1097,6 +1165,7 @@
     },
     "preferences": {
       "expandLocker": "Expand Locker cards by default",
+      "groupClickOpensDetails": "Open the mod page when clicking a multi-file mod",
       "switchVariants": "Switch variants instead of stacking them",
       "autoMatchRemainingFiles": "Match remaining update files automatically",
       "skipModReplacementConfirmation": "Skip file replacement confirmation",
@@ -1254,6 +1323,7 @@
     },
     "toggles": {
       "expandLocker": "Start Locker list view with hero cards expanded.",
+      "groupClickOpensDetails": "Clicking a mod with more than one file on Installed opens its GameBanana page. Off opens the file picker.",
       "switchVariants": "Installing a new variant disables the old one. Off keeps both active. Updates always replace the old file.",
       "autoMatchRemainingFiles": "After matching names and descriptions, pair one unmatched installed file with one remaining new upload. This can replace a different variant. Turn off to choose these replacements yourself.",
       "skipModReplacementConfirmation": "Replace files without showing the confirmation dialog. Turn off to ask again.",
@@ -1293,6 +1363,10 @@
     "actions": {
       "applyToGame": "Apply to Game",
       "copyCode": "Copy Code",
+      "copyCodeTitle": "Copy this crosshair as a code you can paste in the game's crosshair settings",
+      "copyCommands": "Copy Commands",
+      "pasteCode": "Paste Code",
+      "pasteCodeTitle": "Apply a crosshair code from your clipboard",
       "importFromGame": "Import from Game",
       "importTitle": "Load your current in-game crosshair settings into the editor",
       "saveCurrent": "Save current"
@@ -1302,7 +1376,9 @@
       "clearFailed": "Failed to clear crosshair. Check the game path in Settings.",
       "configureGamePath": "Please configure your Deadlock game path in Settings first.",
       "noSettingsFound": "No crosshair settings found in the game config. Change any crosshair setting in-game once, then try again.",
-      "readConfigFailed": "Failed to read the game config. Check the game path in Settings."
+      "readConfigFailed": "Failed to read the game config. Check the game path in Settings.",
+      "noShareCode": "The clipboard doesn't contain a crosshair code.",
+      "shareCodeFailed": "Couldn't reach deadlock-api.com. Try again in a moment."
     },
     "colors": {
       "blue": "Blue",
@@ -1335,7 +1411,7 @@
       "description": "Tune your crosshair and read it against a real scene"
     },
     "hints": {
-      "applyExplainer": "Copy Code pastes the whole crosshair into the in-game console (press F7). Applying a saved preset writes it to autoexec.cfg instead, so it survives a restart.",
+      "applyExplainer": "Copy Commands pastes the whole crosshair into the in-game console (press F7). Applying a saved preset writes it to autoexec.cfg instead, so it survives a restart.",
       "dotHidden": "The dot is fully transparent. Raise Opacity to see it.",
       "pressF7": "Press F7 in-game"
     },
@@ -1374,7 +1450,8 @@
       "lines": "Lines"
     },
     "status": {
-      "imported": "Imported"
+      "imported": "Imported",
+      "pasted": "Applied"
     },
     "toggles": {
       "staticGap": "Keep the gap fixed. Off lets it expand with weapon spread (not shown in preview).",
@@ -1845,7 +1922,9 @@
       "nextFile": "Next file",
       "pin": "Pin",
       "resize": "Resize",
-      "unavailable": "No 3D preview for this file"
+      "unavailable": "No 3D preview for this file",
+      "clips": "Clips",
+      "allClips": "All"
     },
     "card": {
       "soundPreview": "Sound Preview",
@@ -1865,6 +1944,7 @@
       "addVariant": "Add variant",
       "ungroupVariants": "Ungroup variants",
       "viewDetails": "View details",
+      "chooseFiles": "Choose files",
       "viewAuthorPage": "View author's page",
       "fixUnknownMatch": "Fix unknown match",
       "disableMod": "Disable mod",
@@ -1884,6 +1964,7 @@
       "staleSourcesTitle_other": "{{count}} merged sources have newer versions on GameBanana. Unmerge to update them.",
       "noFilesEnabled": "No files enabled",
       "variantStatusTitle": "{{labels}} - click card to choose files",
+      "variantFilesTitle": "{{labels}} (right-click the card to choose files)",
       "revealInFolder": "Reveal in folder",
       "soloLaunch": "Start with only this enabled",
       "openDoorStuck": "Open in Door Stuck",

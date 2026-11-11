@@ -21,7 +21,7 @@ import { CrashAdvisoryHost } from './CrashAdvisories';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { applyAccentColor } from '../lib/accentColor';
 import { applyBackgroundGradient } from '../lib/backgroundGradient';
-import { applyOledMode } from '../lib/applyOledMode';
+import { applyTheme } from '../lib/applyTheme';
 import { useAppStore } from '../stores/appStore';
 import { useCategoryStore } from '../stores/categoryStore';
 import type {
@@ -68,7 +68,7 @@ export default function Layout() {
   // even when the user has picked a different accent.
   const accentColor = useAppStore((s) => s.settings?.accentColor);
   const backgroundGradient = useAppStore((s) => s.settings?.backgroundGradient);
-  const oledMode = useAppStore((s) => s.settings?.oledMode);
+  const theme = useAppStore((s) => s.settings?.theme);
   const loadStoreSettings = useAppStore((s) => s.loadSettings);
   const loadAppearanceImages = useAppStore((s) => s.loadAppearanceImages);
   const activeDeadlockPath = useAppStore((s) => getActiveDeadlockPath(s.settings));
@@ -107,13 +107,13 @@ export default function Layout() {
   useEffect(() => {
     applyBackgroundGradient(backgroundGradient);
   }, [backgroundGradient]);
-  // main.tsx seeds the OLED attribute from the preload before first paint, so
+  // main.tsx seeds the theme attribute from the preload before first paint, so
   // hold off until settings actually arrive: applying the undefined value here
   // would strip the seed and reintroduce the startup flash.
   useEffect(() => {
-    if (oledMode === undefined) return;
-    applyOledMode(oledMode);
-  }, [oledMode]);
+    if (theme === undefined) return;
+    applyTheme(theme);
+  }, [theme]);
 
   useEffect(() => {
     const checkFirstRun = async () => {

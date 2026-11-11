@@ -118,7 +118,7 @@ for (const caseName of cases) {
     for (let frame = 0; frame < frames; frame++) {
       for (const [index, viewer] of viewers.entries()) {
         if (frame > 0) await advance(viewer.page, perFrame);
-        await viewer.page.locator('#hero-viewer canvas').screenshot({ path: join(dir, `${index}-${String(frame).padStart(4, '0')}.png`) });
+        await viewer.page.locator('#hero-viewer canvas').first().screenshot({ path: join(dir, `${index}-${String(frame).padStart(4, '0')}.png`) });
       }
     }
     const labelPage = await browser.newPage({ viewport: { width: size.width * viewers.length, height: 40 } });
@@ -132,7 +132,13 @@ for (const caseName of cases) {
       '-filter_complex', `${panels};[${viewers.length}:v][pair]vstack=inputs=2,pad=ceil(iw/2)*2:ceil(ih/2)*2,format=yuv420p`,
       '-r', String(fps), '-c:v', 'libx264', '-profile:v', 'high', '-crf', '20', '-preset', 'slow', '-movflags', '+faststart', `${stem}.mp4`]);
     // A contact sheet: four moments of the loop, both paths
-    if (viewers.length !== 2) continue;
+    if (viewers.length !== 2) {
+      const picks = [0.1, 0.2, 0.3, 0.4, 0.5, 0.7].map((fraction) => Math.min(frames - 1, Math.round(fraction * frames)));
+      execFileSync('ffmpeg', ['-y', '-loglevel', 'error', ...picks.flatMap((frame) => ['-i', join(dir, `0-${String(frame).padStart(4, '0')}.png`)]),
+        '-filter_complex', `${picks.map((_, i) => `[${i}:v]${scale},scale=iw/2:ih/2[e${i}]`).join(';')};${picks.map((_, i) => `[e${i}]`).join('')}hstack=inputs=${picks.length}`,
+        '-frames:v', '1', `${stem}.sheet.png`]);
+      continue;
+    }
     const picks = [0.2, 0.4, 0.6, 0.8].map((fraction) => Math.min(frames - 1, Math.round(fraction * frames)));
     execFileSync('ffmpeg', ['-y', '-loglevel', 'error',
       ...picks.flatMap((frame) => ['-i', join(dir, `0-${String(frame).padStart(4, '0')}.png`), '-i', join(dir, `1-${String(frame).padStart(4, '0')}.png`)]),

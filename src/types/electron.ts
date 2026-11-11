@@ -1,4 +1,5 @@
 import type { ProfileShuffle } from '../lib/profileShuffle';
+import type { AppTheme } from '../lib/theme';
 import type { ModSafetyPrompt, InstalledModSafety } from './modSafety';
 import type { ChooseModUpdateReplacementArgs, ModUpdateState, StartModUpdatesArgs } from './modUpdates';
 import type {
@@ -725,6 +726,25 @@ export interface LocalSearchResult {
     limit: number;
 }
 
+/** What the local catalog knows about a hidden mod or one of a hidden creator's uploads. */
+export interface HiddenPreviewMod {
+    id: number;
+    section: string;
+    name: string;
+    thumbnailUrl: string | null;
+    isNsfw: boolean;
+    submitterName: string | null;
+}
+
+/** Previews for Settings' hidden lists, read from the local catalog only. A mod
+ *  or creator the catalog does not hold is simply absent. */
+export interface HiddenContentPreviews {
+    /** By creator id: how many uploads the catalog holds and its most liked few. */
+    creators: Record<number, { count: number; mods: HiddenPreviewMod[] }>;
+    /** By `${section}:${id}`. */
+    mods: Record<string, HiddenPreviewMod>;
+}
+
 export interface CachedMod {
     id: number;
     name: string;
@@ -882,9 +902,9 @@ export interface ElectronAPI {
     // bar strip (the native frame is hidden on Windows only).
     platform: string;
 
-    // Saved OLED setting at window creation, forwarded through the preload's
-    // argv so the theme can apply before the settings IPC round-trip.
-    initialOledMode: boolean;
+    // Saved theme at window creation, forwarded through the preload's argv so
+    // it can apply before the settings IPC round-trip.
+    initialTheme: AppTheme;
 
     // Settings
     detectDeadlock: () => Promise<string | null>;
@@ -986,6 +1006,8 @@ export interface ElectronAPI {
      *  defaults to the soul-container model when omitted. `animated` keeps a
      *  real rig and its clips (the Installed preview); use its own cacheKey. */
     exportSoulModel: (metaKey: string, cacheKey: string, entry?: string, options?: { animated?: boolean }) => Promise<SoulModelInfo>;
+    /** An animation mod's clips exported onto its hero (the Installed preview); null when it has none to play. */
+    exportAnimationModPreview: (metaKey: string) => Promise<{ heroName: string; key: string; clips: string[]; meshGroup: string | null } | null>;
     getSkinEditInfo: (source: import('./skinEditor').SkinEditSource) => Promise<import('./skinEditor').SkinEditInfo>;
     previewMovementFx: (request: import('../lib/movementFx').MovementFxPreviewRequest) => Promise<import('../lib/movementFx').MovementFxPreview>;
     previewMovementEngine: (request: import('../lib/movementFx').MovementFxPreviewRequest) => Promise<import('../lib/movementFx').MovementEnginePreview>;
@@ -1015,12 +1037,14 @@ export interface ElectronAPI {
     ) => Promise<HeroPoseInfo>;
     getRiggedHeroPose: (
         heroName: string,
-        skinSources?: HeroPoseSkinSource[]
+        skinSources?: HeroPoseSkinSource[],
+        meshGroup?: string
     ) => Promise<HeroPoseInfo>;
     exportRiggedHeroPose: (
         heroName: string,
         skinSources?: HeroPoseSkinSource[],
-        fallbackSkinMetaKey?: string
+        fallbackSkinMetaKey?: string,
+        meshGroup?: string
     ) => Promise<HeroPoseInfo>;
     getHeroEffectInfo: (heroName: string, skinSources?: HeroPoseSkinSource[]) => Promise<HeroEffectInfo>;
     exportHeroEffect: (heroName: string, skinSources?: HeroPoseSkinSource[]) => Promise<HeroEffectInfo>;
@@ -1386,6 +1410,7 @@ export interface ElectronAPI {
     isSyncInProgress: () => Promise<boolean>;
     searchLocalMods: (options: SearchLocalModsOptions) => Promise<LocalSearchResult>;
     getCachedMod: (id: number, section?: string) => Promise<CachedMod | null>;
+    getHiddenContentPreviews: (creatorIds: number[], mods: Array<{ id: number; section: string }>) => Promise<HiddenContentPreviews>;
     getLocalModCount: (section?: string) => Promise<number>;
     getLocalCategories: (section?: string) => Promise<Array<{ id: number; name: string; count: number }>>;
     getSectionStats: () => Promise<Array<{ section: string; count: number }>>;
@@ -1409,6 +1434,10 @@ export interface ElectronAPI {
     /** Read the player's live in-game crosshair from machine_convars.vcfg.
      *  settings is null when the file is missing or has no crosshair convars. */
     importCrosshairFromGame: (gamePath: string) => Promise<{ found: boolean; settings: CrosshairSettings | null }>;
+    /** Copy settings to the clipboard as the game's crosshair share code (via deadlock-api). */
+    copyCrosshairShareCode: (settings: CrosshairSettings) => Promise<void>;
+    /** Decode the share code on the clipboard, or null when it holds none (nothing is sent then). */
+    pasteCrosshairShareCode: (current: CrosshairSettings) => Promise<CrosshairSettings | null>;
     getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; manualCommands: string[]; exists: boolean }>;
     saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
 
@@ -1538,8 +1567,10 @@ export interface ElectronAPI {
         setPrimaryPlayer: (accountId: number) => Promise<void>;
 
         // Player Data (API)
-        getPlayerMMR: (accountIds: number[]) => Promise<unknown[]>;
-        getPlayerMMRHistory: (accountId: number) => Promise<unknown[]>;
+        getPlayerRank: (accountIds: number[]) => Promise<unknown[]>;
+        getRankedSeasons: () => Promise<unknown[]>;
+        getMatchScoreboard: (matchId: number) => Promise<unknown>;
+        getSeasonRankDistribution: () => Promise<unknown[]>;
         getHeroes: () => Promise<unknown[]>;
         getRanks: () => Promise<unknown[]>;
         getPlayerHeroStats: (accountId: number) => Promise<unknown>;
@@ -1560,7 +1591,7 @@ export interface ElectronAPI {
         getActiveMatches: () => Promise<unknown[]>;
 
         // Leaderboards
-        getLeaderboard: (region: string) => Promise<unknown[]>;
+        getLeaderboard: (region: string, leaderboardId?: number) => Promise<unknown[]>;
         getHeroLeaderboard: (region: string, heroId: number) => Promise<unknown[]>;
 
         // Analytics
@@ -1569,18 +1600,10 @@ export interface ElectronAPI {
         getHeroSynergies: (heroId?: number) => Promise<unknown[]>;
         getItemAnalytics: () => Promise<unknown[]>;
         getBadgeDistribution: () => Promise<unknown[]>;
-        getMMRDistribution: () => Promise<unknown>;
-
-        // Extended MMR
-        getHeroMMR: (accountIds: number[], heroId: number) => Promise<unknown[]>;
-        getHeroMMRHistory: (accountId: number, heroId: number) => Promise<unknown[]>;
-        getMMRDistributionGlobal: (filters?: unknown) => Promise<unknown[]>;
-        getHeroMMRDistribution: (heroId: number, filters?: unknown) => Promise<unknown[]>;
 
         // Player Social Stats
         getEnemyStats: (accountId: number, filters?: unknown) => Promise<unknown[]>;
         getMateStats: (accountId: number, filters?: unknown) => Promise<unknown[]>;
-        getPartyStats: (accountId: number, filters?: unknown) => Promise<unknown[]>;
         searchSteamProfiles: (query: string) => Promise<unknown[]>;
 
         // Advanced Analytics

@@ -6,7 +6,7 @@
 // panorama/class_name namespace for Abrams (sound `abrams`, panorama `atlas`)
 // and Mo & Krill (`mokrill`, `krill`).
 //
-// Source of truth: assets.deadlock-api.com/v2/heroes `class_name`. Both
+// Source of truth: api.deadlock-api.com/v1/assets/heroes `class_name`. Both
 // "Doorman" (GameBanana's category name) and "The Doorman" (the API/roster
 // name) are keyed so the lookup works whichever name flows in.
 const PANORAMA_CODENAME_BY_HERO: Readonly<Record<string, string>> = {

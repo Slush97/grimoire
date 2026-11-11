@@ -680,6 +680,22 @@ function SoundRow({ label, event, clips, duration, state, onToggle, swap, target
     );
 }
 
+/** Sounds every hero shares (the parry's), auditioned and swapped clip by clip. A swap installs as a sound
+ *  mod for all heroes. */
+export function SharedSoundSwaps({ sounds }: { sounds: readonly { label: string; event: string; vsnd: string[] }[] }) {
+    const player = useClipPlayer();
+    const swap = useMemo<SwapContext>(() => ({ hero: '', heroName: '' }), []);
+    return (
+        <div className="space-y-1.5">
+            {sounds.map((sound) => (
+                <SoundRow key={sound.event} label={sound.label} event={sound.event} clips={sound.vsnd.length} duration={null}
+                    state={player.stateFor(sound.event)} onToggle={() => player.toggle(sound)} swap={swap}
+                    targetClip={sound.vsnd[0]} clipPaths={sound.vsnd} />
+            ))}
+        </div>
+    );
+}
+
 // ----- Sound-swap panel (drop your own MP3 onto an event) ------------------
 
 /**

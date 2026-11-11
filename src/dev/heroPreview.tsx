@@ -40,6 +40,8 @@ interface PreviewCase {
   postBloomEnabled?: boolean;
   /** Whether the case has the movement preview's clips (movement.glb). */
   hasMovement?: boolean;
+  /** How many parts they come in (movement.glb, movement-2.glb, ...). */
+  movementParts?: number;
   hasAnimationFallback: boolean;
 }
 
@@ -88,6 +90,7 @@ async function cacheCases(): Promise<PreviewCase[]> {
     hasParticles: item.particles,
     postBloomEnabled: item.postBloomEnabled,
     hasMovement: item.files.includes('movement.glb'),
+    movementParts: item.files.filter((file) => /^movement(?:-\d)?\.glb$/.test(file)).length,
     hasAnimationFallback: item.files.includes('animation-fallback.glb'),
   }));
 }
@@ -117,7 +120,7 @@ async function main() {
   const byHero = new Map(prepared.map((item) => [item.label, item]));
   const info = (hero: string, rigged: boolean) => {
     const item = byHero.get(hero);
-    return { key: item?.name ?? '', hasModel: !!(rigged ? item?.rigged : item?.posed), hasMovement: !!item?.hasMovement, mtimeMs: item?.exportedAt ?? null,
+    return { key: item?.name ?? '', hasModel: !!(rigged ? item?.rigged : item?.posed), hasMovement: !!item?.hasMovement, movementParts: item?.movementParts ?? 0, mtimeMs: item?.exportedAt ?? null,
       hasAnimationFallback: rigged && !!item?.hasAnimationFallback };
   };
 
@@ -176,8 +179,8 @@ async function main() {
   const movementPreview = async (heroName: string): Promise<MovementViewerPreview | undefined> => {
     if (!movementKey) return undefined;
     const descriptor = await (await fetchAsset(`/@movement/${movementKey}/effect.${heroDirOf(heroName)}.json`)).json() as FxDescriptor & { name?: string };
-    const kind: MovementFxChoice['kind'] = descriptor.name?.includes('air_dash') ? 'dash' : 'heavy-melee';
-    const choice: MovementFxChoice = { kind, color: '#ffffff', palette: { mode: 'solid' }, image: null, brightness: 1, illuminated: false, outline: false, outlineColor: '#ffffff' };
+    const kind: MovementFxChoice['kind'] = descriptor.name?.includes('air_dash') ? 'dash' : descriptor.name?.includes('melee_parry') ? 'parry' : 'heavy-melee';
+    const choice: MovementFxChoice = { kind, color: '#ffffff', palette: { mode: 'solid' }, parts: null, image: null, stunImage: null, brightness: 1, illuminated: false, outline: false, outlineColor: '#ffffff' };
     return { key: `${movementKey}:${heroName}`, descriptor, textureBaseUrl: `grimoire-hero://f/${movementKey}/effect-tex/`, kind, revision: replay, loop: true, request: { choice, heroName } };
   };
   const render = async () => {

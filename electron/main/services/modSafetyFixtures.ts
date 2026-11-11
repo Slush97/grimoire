@@ -1,6 +1,12 @@
-/** Tiny inert archives for scanner tests. Their script bytes are never executed. */
-export function safetyVpk(files: Array<{ path: string; bytes: Buffer; preload?: number }>, version = 1): Buffer {
-    const { directory, data } = safetyArchive(files, version, 0x7fff);
+type SafetyFile = { path: string; bytes: Buffer; preload?: number; crc?: number };
+
+/**
+ * Tiny inert archives for scanner tests. Their script bytes are never executed.
+ * `root` is how a root-level file's folder is spelled: a space, or the empty
+ * string some packers write.
+ */
+export function safetyVpk(files: SafetyFile[], version = 1, root = ' '): Buffer {
+    const { directory, data } = safetyArchive(files, version, 0x7fff, root);
     return Buffer.concat([directory, data]);
 }
 
@@ -10,7 +16,7 @@ export function safetyChunkedVpk(files: Array<{ path: string; bytes: Buffer }>):
     return { dir: directory, chunk: data };
 }
 
-function safetyArchive(files: Array<{ path: string; bytes: Buffer; preload?: number }>, version: number, archive: number) {
+function safetyArchive(files: SafetyFile[], version: number, archive: number, root = ' ') {
     const tree: Buffer[] = [];
     const data: Buffer[] = [];
     let offset = 0;
@@ -19,7 +25,7 @@ function safetyArchive(files: Array<{ path: string; bytes: Buffer; preload?: num
         const slash = file.path.lastIndexOf('/');
         const dot = file.path.lastIndexOf('.');
         const extension = dot > slash ? file.path.slice(dot + 1) : ' ';
-        const folder = slash === -1 ? ' ' : file.path.slice(0, slash);
+        const folder = slash === -1 ? root : file.path.slice(0, slash);
         if (!groups.has(extension)) groups.set(extension, new Map());
         const folders = groups.get(extension)!;
         if (!folders.has(folder)) folders.set(folder, []);
@@ -36,6 +42,7 @@ function safetyArchive(files: Array<{ path: string; bytes: Buffer; preload?: num
                 str(file.path.slice(slash + 1, dot > slash ? dot : undefined));
                 const preload = file.preload ?? 0;
                 const meta = Buffer.alloc(18);
+                meta.writeUInt32LE(file.crc ?? 0);
                 meta.writeUInt16LE(preload, 4);
                 meta.writeUInt16LE(archive, 6);
                 meta.writeUInt32LE(offset, 8);
@@ -60,15 +67,30 @@ function safetyArchive(files: Array<{ path: string; bytes: Buffer; preload?: num
 }
 
 export function safetyResource(data: Buffer, tag = 'DATA'): Buffer {
-    const header = Buffer.alloc(28);
-    header.writeUInt32LE(header.length + data.length);
+    return safetyResourceBlocks([[tag, data]]);
+}
+
+/** A compiled resource with several blocks, in the given order. */
+export function safetyResourceBlocks(blocks: Array<[tag: string, data: Buffer]>): Buffer {
+    const header = Buffer.alloc(16 + blocks.length * 12);
+    let offset = header.length;
+    blocks.forEach(([tag, data], i) => {
+        const entry = 16 + i * 12;
+        header.write(tag, entry, 4, 'ascii');
+        header.writeUInt32LE(offset - (entry + 4), entry + 4);
+        header.writeUInt32LE(data.length, entry + 8);
+        offset += data.length;
+    });
+    header.writeUInt32LE(offset);
     header.writeUInt16LE(12, 4);
     header.writeUInt32LE(8, 8);
-    header.writeUInt32LE(1, 12);
-    header.write(tag, 16, 4, 'ascii');
-    header.writeUInt32LE(8, 20);
-    header.writeUInt32LE(data.length, 24);
-    return Buffer.concat([header, data]);
+    header.writeUInt32LE(blocks.length, 12);
+    return Buffer.concat([header, ...blocks.map(([, data]) => data)]);
+}
+
+/** The DATA block of a stylesheet, SVG or text layout: a CRC, an empty image-name table, then the text. */
+export function safetyPanoramaText(text: string): Buffer {
+    return Buffer.concat([Buffer.alloc(6), Buffer.from(text)]);
 }
 
 /** Minimal uncompressed KV3 v4 LaCo fixture: only object, array and string lanes. */

@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { initDatabase, getModById, getModCount, wipeDatabase, getModsNsfwStatus, updateModNsfw, getModsDownloadCounts, updateModDownloadCount } from '../services/modDatabase';
+import { initDatabase, getModById, getModCount, wipeDatabase, getModsNsfwStatus, updateModNsfw, getModsDownloadCounts, updateModDownloadCount, getHiddenContentPreviews } from '../services/modDatabase';
 import { searchMods, getCategories, getSectionStats, type SearchOptions } from '../services/searchService';
 import { syncAllSections, syncSingleSection, syncCatalogHead, getSyncStatus, needsSync, isSyncInProgress } from '../services/syncService';
 
@@ -49,6 +49,10 @@ ipcMain.handle('search-local-mods', (_, options: SearchOptions) => {
 
 ipcMain.handle('get-cached-mod', (_, id: number, section?: string) => {
     return getModById(id, section);
+});
+
+ipcMain.handle('get-hidden-content-previews', (_, creatorIds: unknown, mods: unknown) => {
+    return getHiddenContentPreviews(creatorIds, mods);
 });
 
 ipcMain.handle('get-local-mod-count', (_, section?: string) => {

@@ -16,8 +16,7 @@ describe('local Door Stuck drafts', () => {
     expect(readFoundryDraft(storage, key('movement:dash:choice'), movementFxSchema)).toEqual(dash);
     expect(readFoundryDraft(storage, key('movement:heavy-melee:choice'), movementFxSchema)).toEqual(melee);
     expect(readFoundryDraft(storage, key('movement:kind'), z.string())).toBe('heavy-melee');
-    expect(readFoundryDraft(storage, key('workshop:section'), z.string())).toBe('abilities');
-    expect(readFoundryDraft(storage, key('workshop:ability'), z.string())).toBe('movement');
+    expect(readFoundryDraft(storage, key('workshop:section'), z.string())).toBe('mechanics');
     expect(readFoundryDraft(storage, key('page:mode'), z.string())).toBe('heroes');
     expect(readFoundryDraft(storage, key('page:hero'), z.string())).toBe('lash');
     expect(readFoundryDraft(storage, foundryDraftKey('game-b', 'movement:kind'), z.string())).toBeUndefined();

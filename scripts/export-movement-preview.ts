@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   await fs.mkdir(bakeOut, { recursive: true });
   await fs.cp(join(bake, 'effect-tex'), join(bakeOut, 'effect-tex'), { recursive: true });
   const descriptor = JSON.parse(await fs.readFile(join(bake, 'effect.json'), 'utf8')) as FxDescriptor & { name?: string };
-  const kind = descriptor.name?.includes('air_dash') ? 'dash' : 'heavy-melee';
+  const kind = descriptor.name?.includes('air_dash') ? 'dash' : descriptor.name?.includes('melee_parry') ? 'parry' : 'heavy-melee';
 
   const stack = new PackageStack(packages, vpkmerge, join(bakeOut, '.scratch'));
   const [heroData, abilities] = await Promise.all([stack.decode('scripts/heroes.vdata_c'), stack.decode('scripts/abilities.vdata_c')]);
@@ -86,7 +86,9 @@ async function main(): Promise<void> {
     // The engine path: as previewMovementEngine exports it
     const engineDir = join(bakeOut, 'engine', heroDir);
     await fs.mkdir(engineDir, { recursive: true });
-    const systems = kind === 'dash' ? [data.dash?.particle] : [data.melee?.holdBegin, data.melee?.attack, data.melee?.swing, data.melee?.impact];
+    const systems = kind === 'dash' ? [data.dash?.particle]
+      : kind === 'parry' ? [data.parry?.active, data.parry?.success, data.parry?.victim]
+      : [data.melee?.holdBegin, data.melee?.attack, data.melee?.swing, data.melee?.impact];
     const effects = systems.filter((system): system is string => !!system).map((system, i) => ({
       id: `${i}`, system, source: 'anim-event' as const, evidence: 'movement staging', configuration: 'preview', attachment: null, attachmentCp1: null,
     }));
@@ -104,8 +106,12 @@ async function main(): Promise<void> {
       await fs.copyFile(join(appCase, file), join(caseDir, file)).catch(() => console.warn(`  no ${file} in ${appCase}`));
     }
     const motions = selectMovementClips(directory, modelEntry, codenamesForHero(hero));
-    await run(nodeVpkmergePath(), ['workshop', 'motions', '--vpk', pak, '--entry', modelEntry,
-      ...motions.flatMap(([name, path]) => ['--clip', `movement_${name}=${path}`]), '--out', join(caseDir, 'movement.glb')], { maxBuffer: 1 << 26 });
+    // In parts of eight clips (workshop motions' limit), as the app exports them
+    for (let part = 0; part * 8 < motions.length; part++) {
+      await run(nodeVpkmergePath(), ['workshop', 'motions', '--vpk', pak, '--entry', modelEntry,
+        ...motions.slice(part * 8, part * 8 + 8).flatMap(([name, path]) => ['--clip', `movement_${name}=${path}`]),
+        '--out', join(caseDir, part === 0 ? 'movement.glb' : `movement-${part + 1}.glb`)], { maxBuffer: 1 << 26 });
+    }
 
     console.log(`${hero} (${kind}): ${bundle.effects.length} effects, ${Object.keys(bundle.systems).length} systems, ${Object.keys(bundle.models ?? {}).length} models, `
       + `clips ${motions.map(([name]) => name).join(',')}, attachment ${data.melee?.attachment ?? '-'}, ${Date.now() - started} ms`);
