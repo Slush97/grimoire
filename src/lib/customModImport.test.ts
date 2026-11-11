@@ -4,9 +4,12 @@ import {
   classifyDroppedModFiles,
   deriveModNameFromPath,
   deriveVariantLabel,
+  imprintVariantLabel,
   fileNameOf,
   pathDedupeKey,
+  planLocalImport,
   resolveImportedVariantLabel,
+  suggestVariantGroupName,
 } from './customModImport';
 
 describe('deriveModNameFromPath', () => {
@@ -73,6 +76,159 @@ describe('local variant labels', () => {
 
   it('preserves the generated fallback when no custom name is entered', () => {
     expect(resolveImportedVariantLabel(undefined, 'pak66_dir', 1, 0)).toBe('Pak66 Dir');
+  });
+});
+
+describe('variant labels from imprints', () => {
+  const hud = { title: 'Minimal HUD' };
+  const lighting = { title: 'Brighter lighting' };
+
+  it('labels a file with its imprint title when no other member carries it', () => {
+    expect(imprintVariantLabel(hud, [hud, lighting, null], 'Comp pack')).toBe('Minimal HUD');
+  });
+
+  it('uses the recorded variant label for files of one mod', () => {
+    const gold = { title: 'Royal Abrams', variantLabel: 'Gold' };
+    const silver = { title: 'royal abrams', variantLabel: 'Silver' };
+    expect(imprintVariantLabel(gold, [gold, silver], 'Skins')).toBe('Gold');
+    expect(imprintVariantLabel(silver, [gold, silver], 'Skins')).toBe('Silver');
+  });
+
+  it('does not repeat the group name as a label', () => {
+    expect(imprintVariantLabel(hud, [hud], ' minimal hud ')).toBeUndefined();
+    expect(imprintVariantLabel({ ...hud, variantLabel: 'Compact' }, [hud], 'Minimal HUD')).toBe('Compact');
+  });
+
+  it('has nothing to offer for a file without an imprint', () => {
+    expect(imprintVariantLabel(null, [hud, null], 'Comp pack')).toBeUndefined();
+  });
+
+  it('prefers the imprint label over the file name for an archive member', () => {
+    expect(resolveImportedVariantLabel(undefined, 'addons', 3, 0, 'Minimal HUD')).toBe('Minimal HUD');
+    expect(resolveImportedVariantLabel('Pack', 'addons', 3, 0, 'Minimal HUD')).toBe('Pack: Minimal HUD');
+  });
+});
+
+describe('suggestVariantGroupName', () => {
+  it('offers the first row name when the files are not known to be different mods', () => {
+    expect(suggestVariantGroupName([{ name: ' skin gold ' }, { name: 'skin silver' }])).toBe('skin gold');
+    expect(
+      suggestVariantGroupName([
+        { name: 'Royal Abrams', imprintTitle: 'Royal Abrams' },
+        { name: 'Royal Abrams', imprintTitle: 'royal abrams' },
+        { name: 'extra' },
+      ])
+    ).toBe('Royal Abrams');
+  });
+
+  it('offers nothing when the imprints name different mods', () => {
+    expect(
+      suggestVariantGroupName([
+        { name: 'Minimal HUD', imprintTitle: 'Minimal HUD' },
+        { name: 'Brighter lighting', imprintTitle: 'Brighter lighting' },
+      ])
+    ).toBe('');
+    expect(suggestVariantGroupName([])).toBe('');
+  });
+});
+
+describe('planLocalImport', () => {
+  const ids = () => {
+    let next = 0;
+    return () => `group-${++next}`;
+  };
+
+  it('leaves a lone VPK standalone and unlabelled', () => {
+    expect(planLocalImport([{ seed: 'pak01_dir' }], 'My mod', undefined, undefined, ids())).toEqual([
+      { modName: 'My mod', localGroupId: undefined, variantLabel: undefined },
+    ]);
+  });
+
+  it('groups an archive without imprints as variants named after their folders', () => {
+    expect(
+      planLocalImport([{ seed: 'gold' }, { seed: 'no_beard' }], 'Skin', undefined, undefined, ids())
+    ).toEqual([
+      { modName: 'Skin', localGroupId: 'group-1', variantLabel: 'Gold' },
+      { modName: 'Skin', localGroupId: 'group-1', variantLabel: 'No Beard' },
+    ]);
+  });
+
+  it('keeps an archive of one imprinted mod as variants', () => {
+    const plan = planLocalImport(
+      [
+        { seed: 'pak01_dir', imprint: { title: 'Royal Abrams', gamebananaId: 7, variantLabel: 'Gold' } },
+        { seed: 'pak02_dir', imprint: { title: 'Royal Abrams', gamebananaId: 7 } },
+      ],
+      'royal',
+      undefined,
+      undefined,
+      ids()
+    );
+    expect(plan).toEqual([
+      { modName: 'royal', localGroupId: 'group-1', variantLabel: 'Gold' },
+      { modName: 'royal', localGroupId: 'group-1', variantLabel: 'Pak02 Dir' },
+    ]);
+  });
+
+  it('imports an archive whose imprints name different mods as those mods', () => {
+    const plan = planLocalImport(
+      [
+        { seed: 'addons', imprint: { title: 'Minimal HUD' } },
+        { seed: 'addons', imprint: { title: 'Brighter lighting', gamebananaId: 12 } },
+        { seed: 'addons' },
+      ],
+      'Comp pack',
+      undefined,
+      undefined,
+      ids()
+    );
+    expect(plan).toEqual([
+      { modName: 'Minimal HUD' },
+      { modName: 'Brighter lighting' },
+      { modName: 'Comp pack: Addons' },
+    ]);
+  });
+
+  it('still groups files of one mod inside a pack', () => {
+    const plan = planLocalImport(
+      [
+        { seed: 'pak01_dir', imprint: { title: 'Royal Abrams', gamebananaId: 7, variantLabel: 'Gold' } },
+        { seed: 'pak02_dir', imprint: { title: 'Minimal HUD' } },
+        { seed: 'pak03_dir', imprint: { title: 'Royal Abrams', gamebananaId: 7 } },
+      ],
+      'Comp pack',
+      undefined,
+      undefined,
+      ids()
+    );
+    expect(plan).toEqual([
+      { modName: 'Royal Abrams', localGroupId: 'group-1', variantLabel: 'Gold' },
+      { modName: 'Minimal HUD' },
+      { modName: 'Royal Abrams', localGroupId: 'group-1', variantLabel: 'Pak03 Dir' },
+    ]);
+  });
+
+  it('joins an existing group whatever the imprints say, labelled by imprint', () => {
+    const plan = planLocalImport(
+      [
+        { seed: 'addons', imprint: { title: 'Minimal HUD' } },
+        { seed: 'addons', imprint: { title: 'Brighter lighting' } },
+      ],
+      'Comp pack',
+      undefined,
+      'existing',
+      ids()
+    );
+    expect(plan).toEqual([
+      { modName: 'Comp pack', localGroupId: 'existing', variantLabel: 'Minimal HUD' },
+      { modName: 'Comp pack', localGroupId: 'existing', variantLabel: 'Brighter lighting' },
+    ]);
+  });
+
+  it('gives a bare VPK joining a group exactly the label the dialog sent', () => {
+    expect(planLocalImport([{ seed: 'pak01_dir' }], 'Comp pack', 'Minimal HUD', 'existing', ids())).toEqual([
+      { modName: 'Comp pack', localGroupId: 'existing', variantLabel: 'Minimal HUD' },
+    ]);
   });
 });
 
