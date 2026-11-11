@@ -1170,6 +1170,9 @@ export interface AppSettings {
   hiddenMods: HiddenMod[];
   /** Open Locker list-view hero cards expanded on first load. */
   lockerCardsExpandedByDefault: boolean;
+  /** Clicking a multi-file GameBanana card on Installed opens its mod page
+   *  instead of the file picker. */
+  installedGroupClickOpensDetails: boolean;
   /** Installing a different file of an already-enabled mod disables the
    *  prior variant (not about updates). */
   autoDisableSiblingVariants: boolean;

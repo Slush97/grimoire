@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     hiddenCreators: [],
     hiddenMods: [],
     lockerCardsExpandedByDefault: false,
+    installedGroupClickOpensDetails: false,
     autoDisableSiblingVariants: true,
     autoMatchRemainingFiles: true,
     skipModReplacementConfirmation: false,

@@ -296,6 +296,56 @@ describe('installed card menu mounting', () => {
       .some(element => element.textContent === 'requirements.manageTitle')).toBe(false);
   });
 
+  const menuItemLabels = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+    .map(element => element.textContent);
+
+  it.each(['context', 'dropdown'] as const)('opens a GameBanana group from a click and its files from the %s menu', async kind => {
+    const onOpenDetails = vi.fn();
+    const onOpenPicker = vi.fn();
+    input = { ...input, mod: { ...input.mod, gameBananaId: 1 }, onOpenDetails, group: {
+      variantCount: 2, enabledCount: 1, enabledLabels: [], onOpenPicker, onViewDetails: onOpenDetails,
+    } };
+    await act(async () => root.render(<ModCard {...input} />));
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="installed.card.viewDetailsFor"]')!.click());
+    expect(onOpenDetails).toHaveBeenCalledTimes(1);
+    expect(onOpenPicker).not.toHaveBeenCalled();
+    await openMenu(kind);
+    expect(menuItemLabels()).toEqual(expect.arrayContaining(['installed.card.viewDetails', 'installed.card.chooseFiles']));
+    const chooseFiles = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .find(element => element.textContent === 'installed.card.chooseFiles')!;
+    await act(async () => chooseFiles.click());
+    expect(onOpenPicker).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the picker from a GameBanana group click when the setting is off, and keeps View details in the menu', async () => {
+    const onViewDetails = vi.fn();
+    const onOpenPicker = vi.fn();
+    input = { ...input, mod: { ...input.mod, gameBananaId: 1 }, onOpenDetails: onOpenPicker, group: {
+      variantCount: 2, enabledCount: 1, enabledLabels: [], onOpenPicker, onViewDetails, opensPicker: true,
+    } };
+    await act(async () => root.render(<ModCard {...input} />));
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="installed.card.chooseFilesFor"]')!.click());
+    expect(onOpenPicker).toHaveBeenCalledTimes(1);
+    await openMenu('context');
+    expect(menuItemLabels()).toEqual(expect.arrayContaining(['installed.card.viewDetails', 'installed.card.chooseFiles']));
+    const viewDetails = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .find(element => element.textContent === 'installed.card.viewDetails')!;
+    await act(async () => viewDetails.click());
+    expect(onViewDetails).toHaveBeenCalledTimes(1);
+  });
+
+  it('labels a local group click as choosing files and keeps one picker entry in the menu', async () => {
+    const onOpenPicker = vi.fn();
+    input = { ...input, onOpenDetails: onOpenPicker, group: {
+      variantCount: 2, enabledCount: 1, enabledLabels: [], onOpenPicker, opensPicker: true,
+    } };
+    await act(async () => root.render(<ModCard {...input} />));
+    expect(host.querySelector('[aria-label="installed.card.chooseFilesFor"]')).not.toBeNull();
+    await openMenu('context');
+    expect(menuItemLabels()).toContain('installed.card.chooseFiles');
+    expect(menuItemLabels()).not.toContain('installed.card.viewDetails');
+  });
+
   it.each(['grid', 'compact', 'list'] as const)('shows every grouped hero and puts additional %s tags in a mouse tooltip', async viewMode => {
     const originalBounds = HTMLElement.prototype.getBoundingClientRect;
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
