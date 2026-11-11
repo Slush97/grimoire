@@ -957,6 +957,20 @@
     "shownToast": "Мод «{{name}}» снова виден в разделе «Обзор».",
     "none": "Сейчас нет скрытых модов."
   },
+  "hiddenContent": {
+    "hiddenOn": "Скрыто {{date}}",
+    "hiddenOnFrom": "Скрыто {{date}} из «{{mod}}»",
+    "uploads_one": "{{count}} загрузка",
+    "uploads_few": "{{count}} загрузки",
+    "uploads_many": "{{count}} загрузок",
+    "uploads_other": "{{count}} загрузки",
+    "byCreator": "автор: {{name}}",
+    "addNote": "Добавить заметку",
+    "editNote": "Изменить заметку",
+    "noteFor": "Заметка для {{name}}",
+    "notePlaceholder": "Почему вы это скрыли?",
+    "openMod": "Открыть {{name}}"
+  },
   "settings": {
     "header": {
       "description": "Пути к игре, параметры и обслуживание"

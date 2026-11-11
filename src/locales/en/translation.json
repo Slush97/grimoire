@@ -927,6 +927,18 @@
     "shownToast": "{{name}} is visible in Browse again.",
     "none": "No mods are hidden right now."
   },
+  "hiddenContent": {
+    "hiddenOn": "Hidden {{date}}",
+    "hiddenOnFrom": "Hidden {{date}} from {{mod}}",
+    "uploads_one": "{{count}} upload",
+    "uploads_other": "{{count}} uploads",
+    "byCreator": "by {{name}}",
+    "addNote": "Add a note",
+    "editNote": "Edit note",
+    "noteFor": "Note for {{name}}",
+    "notePlaceholder": "Why did you hide this?",
+    "openMod": "Open {{name}}"
+  },
   "settings": {
     "header": {
       "description": "Game paths, preferences, and maintenance"
