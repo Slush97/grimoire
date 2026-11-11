@@ -4,8 +4,11 @@
 import type {
     HeroAsset,
     RankAsset,
-    PlayerMMR,
-    PlayerMMRHistoryEntry,
+    PlayerRank,
+    RankedSeason,
+    RankDistributionEntry,
+    MatchScoreboard,
+    ScoreboardItem,
     PlayerHeroStats,
     PlayerHeroStat,
     PlayerMatchHistory,
@@ -23,6 +26,8 @@ import type {
     HeroStatsParams,
     BuildSearchParams,
 } from '../../../src/types/deadlock-stats'
+import { currentInterval } from '../../../src/lib/rankProgress'
+import { buildScoreboard, type RawMatchMetadata } from '../../../src/lib/matchScoreboard'
 import { GRIMOIRE_USER_AGENT } from './userAgent'
 import { statsApiRateLimiter, steamCommunityRateLimiter } from './rateLimiter'
 
@@ -123,10 +128,10 @@ async function fetchFromAPI<T>(
 }
 
 // ============================================
-// Hero Assets (assets.deadlock-api.com)
+// Hero Assets
 // ============================================
 
-const ASSETS_API_HEROES = 'https://assets.deadlock-api.com/v2/heroes'
+const ASSETS_API_HEROES = `${DEADLOCK_API_BASE}/assets/heroes`
 const HERO_ASSETS_TTL_MS = 24 * 60 * 60 * 1000
 
 interface RawHeroAsset {
@@ -185,7 +190,7 @@ export async function getHeroAssets(): Promise<HeroAsset[]> {
     return heroAssetsInflight
 }
 
-const ASSETS_API_RANKS = 'https://assets.deadlock-api.com/v2/ranks'
+const ASSETS_API_RANKS = `${DEADLOCK_API_BASE}/assets/ranks`
 
 interface RawRankAsset {
     tier: number
@@ -246,37 +251,71 @@ export async function getRankAssets(): Promise<RankAsset[]> {
 // ============================================
 
 /**
- * Get MMR for multiple players
+ * Get the rank each player held after their latest ranked match
  */
-export async function getPlayerMMR(
+export async function getPlayerRank(
     accountIds: number[],
     options?: FetchOptions
-): Promise<PlayerMMR[]> {
+): Promise<PlayerRank[]> {
     if (accountIds.length === 0) return []
     if (accountIds.length > 1000) {
         throw new Error('Maximum 1000 account IDs per request')
     }
 
-    return fetchFromAPI<PlayerMMR[]>(
-        '/players/mmr',
+    return fetchFromAPI<PlayerRank[]>(
+        '/players/rank',
         { account_ids: accountIds.join(',') },
         options
     )
 }
 
+// ============================================
+// Crosshair Share Codes
+// ============================================
+
+/** Encode crosshair settings (API field names) as the game's share code. */
+export async function encodeCrosshairShareCode(params: Record<string, number | boolean>): Promise<string> {
+    const { code } = await fetchFromAPI<{ code: string }>('/crosshair/settings/code', params)
+    return code
+}
+
+/** Decode a game share code into crosshair settings (API field names). */
+export async function decodeCrosshairShareCode(code: string): Promise<Record<string, unknown>> {
+    return fetchFromAPI<Record<string, unknown>>('/crosshair/code/settings', { code })
+}
+
+let seasonsCache: { data: RankedSeason[]; fetchedAt: number } | null = null
+
+/** Ranked seasons with their point scales, cached like the hero assets. */
+export async function getRankedSeasons(): Promise<RankedSeason[]> {
+    if (seasonsCache && Date.now() - seasonsCache.fetchedAt < HERO_ASSETS_TTL_MS) {
+        return seasonsCache.data
+    }
+    const data = await fetchFromAPI<RankedSeason[]>('/assets/ranked-seasons')
+    seasonsCache = { data, fetchedAt: Date.now() }
+    return data
+}
+
+const DISTRIBUTION_TTL_MS = 60 * 60 * 1000
+let distributionCache: { since: number; data: RankDistributionEntry[]; fetchedAt: number } | null = null
+
 /**
- * Get MMR history for a player. The API returns a flat array with one entry
- * per ranked match, oldest first.
+ * Players per badge in the current season. The endpoint allows 5 requests a
+ * minute per IP, so the result is kept for an hour.
  */
-export async function getPlayerMMRHistory(
-    accountId: number,
-    options?: FetchOptions
-): Promise<PlayerMMRHistoryEntry[]> {
-    return fetchFromAPI<PlayerMMRHistoryEntry[]>(
-        `/players/${accountId}/mmr-history`,
-        undefined,
-        options
+export async function getSeasonRankDistribution(): Promise<RankDistributionEntry[]> {
+    const interval = currentInterval(await getRankedSeasons(), Date.now() / 1000)
+    const since = interval?.start_timestamp ?? 0
+    if (distributionCache && distributionCache.since === since &&
+        Date.now() - distributionCache.fetchedAt < DISTRIBUTION_TTL_MS) {
+        return distributionCache.data
+    }
+    const data = await fetchFromAPI<RankDistributionEntry[]>(
+        '/players/rank/distribution',
+        since ? { min_unix_timestamp: since } : undefined
     )
+    distributionCache = { since, data, fetchedAt: Date.now() }
+    return data
 }
 
 /**
@@ -472,16 +511,6 @@ export async function getPlayerTeammateStats(
     return fetchFromAPI(`/players/${accountId}/mate-stats`, undefined, options)
 }
 
-/**
- * Get party stats for a player
- */
-export async function getPlayerPartyStats(
-    accountId: number,
-    options?: FetchOptions
-): Promise<unknown> {
-    return fetchFromAPI(`/players/${accountId}/party-stats`, undefined, options)
-}
-
 // ============================================
 // Match Endpoints
 // ============================================
@@ -494,6 +523,56 @@ export async function getMatchMetadata(
     options?: FetchOptions
 ): Promise<MatchMetadata> {
     return fetchFromAPI<MatchMetadata>(`/matches/${matchId}/metadata`, undefined, options)
+}
+
+interface RawUpgradeItem {
+    id: number
+    name: string
+    item_slot_type?: string | null
+    item_tier?: number | null
+    shop_image_webp?: string | null
+    shop_image?: string | null
+}
+
+let itemCatalogCache: { data: Record<number, ScoreboardItem>; fetchedAt: number } | null = null
+
+/** Shop items by id, for build icons. About 2 MB, so cached like the hero assets. */
+async function getItemCatalog(): Promise<Record<number, ScoreboardItem>> {
+    if (itemCatalogCache && Date.now() - itemCatalogCache.fetchedAt < HERO_ASSETS_TTL_MS) {
+        return itemCatalogCache.data
+    }
+    const raw = await fetchFromAPI<RawUpgradeItem[]>('/assets/items/by-type/upgrade')
+    const data: Record<number, ScoreboardItem> = {}
+    for (const i of raw) {
+        const slot = i.item_slot_type
+        data[i.id] = {
+            name: i.name,
+            slot: slot === 'weapon' || slot === 'vitality' || slot === 'spirit' ? slot : null,
+            tier: i.item_tier ?? null,
+            // The shop art the game shows. `image` is an old glyph that often
+            // belongs to a different item.
+            image: i.shop_image_webp ?? i.shop_image ?? null,
+        }
+    }
+    itemCatalogCache = { data, fetchedAt: Date.now() }
+    return data
+}
+
+/**
+ * A match's scoreboard: the metadata trimmed to what the dialog draws, plus
+ * player names and item icons. Names and icons are optional; without them
+ * the rows fall back to hero names and drop the build.
+ */
+export async function getMatchScoreboard(matchId: number): Promise<MatchScoreboard> {
+    const raw = await fetchFromAPI<RawMatchMetadata>(`/matches/${matchId}/metadata`)
+    const ids = raw.match_info.players.map((p) => p.account_id)
+    const [profiles, catalog] = await Promise.all([
+        getPlayerSteamProfiles(ids).catch(() => [] as PlayerSteamProfile[]),
+        getItemCatalog().catch(() => ({}) as Record<number, ScoreboardItem>),
+    ])
+    const names: Record<number, string> = {}
+    for (const p of profiles) if (p.persona_name) names[p.account_id] = p.persona_name
+    return buildScoreboard(raw, names, catalog)
 }
 
 /**
@@ -531,10 +610,16 @@ export async function getActiveMatches(options?: FetchOptions): Promise<ActiveMa
  */
 export async function getLeaderboard(
     region: LeaderboardRegion,
+    leaderboardId?: number,
     options?: FetchOptions
 ): Promise<LeaderboardEntry[]> {
-    // API returns { entries: [...] }, unwrap and transform
-    const response = await fetchFromAPI<LeaderboardResponse>(`/leaderboard/${region}`, undefined, options)
+    // API returns { entries: [...] }, unwrap and transform. Without an id it
+    // serves the current season's board.
+    const response = await fetchFromAPI<LeaderboardResponse>(
+        `/leaderboard/${region}`,
+        leaderboardId ? { leaderboard_id: leaderboardId } : undefined,
+        options
+    )
 
     return (response.entries || []).map(entry => ({
         ...entry,
@@ -678,11 +763,11 @@ export async function getBadgeDistribution(options?: FetchOptions): Promise<Badg
     const rankGroups: Record<number, { name: string; color: string }> = {
         1: { name: 'Initiate', color: '#9ca3af' },       // Silver
         2: { name: 'Seeker', color: '#a16207' },         // Bronze/brown
-        3: { name: 'Alchemist', color: '#fbbf24' },      // Gold
-        4: { name: 'Arcanist', color: '#22c55e' },       // Green
-        5: { name: 'Ritualist', color: '#06b6d4' },      // Cyan
-        6: { name: 'Emissary', color: '#3b82f6' },       // Blue
-        7: { name: 'Archon', color: '#8b5cf6' },         // Purple
+        3: { name: 'Acolyte', color: '#fbbf24' },        // Gold
+        4: { name: 'Sentinel', color: '#22c55e' },       // Green
+        5: { name: 'Mystic', color: '#06b6d4' },         // Cyan
+        6: { name: 'Ritualist', color: '#3b82f6' },      // Blue
+        7: { name: 'Emissary', color: '#8b5cf6' },       // Purple
         8: { name: 'Oracle', color: '#ec4899' },         // Pink
         9: { name: 'Phantom', color: '#ef4444' },        // Red
         10: { name: 'Ascendant', color: '#f97316' },     // Orange
@@ -717,13 +802,6 @@ export async function getBadgeDistribution(options?: FetchOptions): Promise<Badg
             }
         })
         .sort((a, b) => a.badge_level - b.badge_level)  // Sort by rank ascending
-}
-
-/**
- * Get MMR distribution
- */
-export async function getMMRDistribution(options?: FetchOptions): Promise<unknown> {
-    return fetchFromAPI('/players/mmr/distribution', undefined, options)
 }
 
 // ============================================
@@ -791,7 +869,7 @@ export async function getAPIInfo(options?: FetchOptions): Promise<unknown> {
 }
 
 // ============================================
-// Extended MMR Endpoints
+// Shared Filters
 // ============================================
 
 // Type alias for API params that's compatible with fetchFromAPI
@@ -810,53 +888,6 @@ export interface AnalyticsFilter {
     max_networth?: number
     account_ids?: number[]
     hero_ids?: number[]
-}
-
-/**
- * Get hero-specific MMR for players
- */
-export async function getHeroMMR(
-    accountIds: number[],
-    heroId: number,
-    options?: FetchOptions
-): Promise<unknown[]> {
-    return fetchFromAPI(
-        `/players/mmr/${heroId}`,
-        { account_ids: accountIds.join(',') },
-        options
-    )
-}
-
-/**
- * Get hero-specific MMR history for a player
- */
-export async function getHeroMMRHistory(
-    accountId: number,
-    heroId: number,
-    options?: FetchOptions
-): Promise<unknown[]> {
-    return fetchFromAPI(`/players/${accountId}/mmr-history/${heroId}`, undefined, options)
-}
-
-/**
- * Get global MMR distribution
- */
-export async function getMMRDistributionGlobal(
-    filters?: AnalyticsFilter,
-    options?: FetchOptions
-): Promise<unknown[]> {
-    return fetchFromAPI('/players/mmr/distribution', filters as APIParams, options)
-}
-
-/**
- * Get hero-specific MMR distribution
- */
-export async function getHeroMMRDistribution(
-    heroId: number,
-    filters?: AnalyticsFilter,
-    options?: FetchOptions
-): Promise<unknown[]> {
-    return fetchFromAPI(`/players/mmr/distribution/${heroId}`, filters as APIParams, options)
 }
 
 // ============================================
@@ -888,13 +919,6 @@ export interface MateStats {
     matches: number[]
 }
 
-export interface PartyStats {
-    party_size: number
-    wins: number
-    matches_played: number
-    matches: number[]
-}
-
 /**
  * Get enemy stats - win rates against specific opponents
  */
@@ -920,21 +944,6 @@ export async function getMateStats(
 ): Promise<MateStats[]> {
     return fetchFromAPI(
         `/players/${accountId}/mate-stats`,
-        filters as APIParams,
-        options
-    )
-}
-
-/**
- * Get party stats - performance by party size
- */
-export async function getPartyStats(
-    accountId: number,
-    filters?: PlayerStatsFilter,
-    options?: FetchOptions
-): Promise<PartyStats[]> {
-    return fetchFromAPI(
-        `/players/${accountId}/party-stats`,
         filters as APIParams,
         options
     )

@@ -92,7 +92,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
         : '';
 
   return (
-    <div data-foundry-hero-view className={`relative flex h-full overflow-hidden ${editingSkin ? 'flex-col bg-bg-primary' : ''}`}>
+    <div data-foundry-hero-view className={`relative flex h-full overflow-hidden ${editingSkin ? 'flex-col bg-bg-primary' : 'always-dark'}`}>
       {/* Hero render backdrop, anchored right, behind the frosted rail. */}
       <div className={editingSkin ? 'hidden' : 'hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden'}>
         {renderSrc ? (

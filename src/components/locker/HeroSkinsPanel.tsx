@@ -244,7 +244,7 @@ function LoadOrderRow({
           : `${disabled ? 'cursor-default' : 'cursor-grab'} border-hl/[0.08] bg-bg-secondary/60 hover:border-hl/[0.18] hover:bg-bg-secondary/80`
       }`}
     >
-      <GripVertical className="h-4 w-4 flex-shrink-0 text-white/40" aria-hidden />
+      <GripVertical className="h-4 w-4 flex-shrink-0 text-text-primary/40" aria-hidden />
       <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-2xs font-semibold tabular-nums text-accent">
         {position}
       </span>
@@ -259,11 +259,11 @@ function LoadOrderRow({
         />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-xs font-medium text-white" title={primary.name}>
+        <div className="truncate text-xs font-medium text-text-primary" title={primary.name}>
           {primary.name}
         </div>
         {enabledCount > 1 && (
-          <div className="text-[10px] text-white/50">{t('locker.skins.fileCount', { count: enabledCount })}</div>
+          <div className="text-[10px] text-text-primary/50">{t('locker.skins.fileCount', { count: enabledCount })}</div>
         )}
       </div>
     </div>
@@ -345,10 +345,10 @@ export function SkinLoadOrderStrip({
   if (groups.length < 2) return null;
 
   return (
-    <div className="animate-drop-in rounded-lg border border-hl/[0.08] bg-black/20 p-2.5 backdrop-blur-sm">
+    <div className="animate-drop-in rounded-lg border border-hl/[0.08] bg-shade/20 p-2.5 backdrop-blur-sm">
       <div className="mb-2 px-0.5">
-        <div className="text-xs font-semibold text-white">{t('locker.skins.loadOrder')}</div>
-        <div className="text-2xs leading-snug text-white/60">
+        <div className="text-xs font-semibold text-text-primary">{t('locker.skins.loadOrder')}</div>
+        <div className="text-2xs leading-snug text-text-primary/60">
           {hint ?? t('locker.skins.loadOrderHint')}
         </div>
       </div>

@@ -343,3 +343,36 @@ export function crosshairConvarsFromSettings(raw: Partial<CrosshairSettings>): R
     convars['citadel_crosshair_pip_border'] = String(normalizeCrosshairSettings(raw).pipBorder);
     return convars;
 }
+
+// Crosshair share codes (the game's "DL." codes) go through deadlock-api, which
+// names each setting after its convar without the citadel_crosshair_ prefix.
+// The hero-specific toggle isn't part of a code: the API's `themed` flag means
+// "use the hero's own crosshair", so a code made here always sends it off.
+const SHARE_CODE_FIELDS = CONVAR_FIELDS
+    .filter(([, field]) => field !== 'disableHeroSpecificCrosshairs')
+    .map(([convar, field]) => [convar.replace('citadel_crosshair_', ''), field] as const);
+
+/** Text that looks like a share code. Clipboard text that fails this is never sent anywhere. */
+export function isCrosshairShareCode(text: string): boolean {
+    return /^DL\.[A-Za-z0-9+/=_.-]{8,4096}$/.test(text);
+}
+
+/** Query parameters that encode these settings as a share code. */
+export function crosshairShareCodeParams(raw: Partial<CrosshairSettings>): Record<string, number | boolean> {
+    const s = normalizeCrosshairSettings(raw);
+    const params: Record<string, number | boolean> = { themed: false };
+    for (const [name, field] of SHARE_CODE_FIELDS) params[name] = s[field];
+    return params;
+}
+
+/** Settings from a decoded share code. The hero-specific toggle keeps its value from `current`. */
+export function crosshairFromShareCode(
+    decoded: Record<string, unknown>,
+    current: Partial<CrosshairSettings>
+): CrosshairSettings {
+    const next: Record<string, unknown> = { ...current };
+    for (const [name, field] of SHARE_CODE_FIELDS) {
+        if (decoded[name] !== undefined) next[field] = decoded[name];
+    }
+    return normalizeCrosshairSettings(next as Partial<CrosshairSettings>);
+}

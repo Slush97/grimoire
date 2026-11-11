@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
-import { Copy, Check, RotateCcw, Pin, Download, ZoomIn, ZoomOut } from 'lucide-react';
+import { Copy, Check, ClipboardPaste, RotateCcw, Pin, Download, Terminal, ZoomIn, ZoomOut } from 'lucide-react';
 import { useCrosshairStore } from '../stores/crosshairStore';
 import CrosshairStage from '../components/crosshair/CrosshairStage';
 import { STAGE_BACKGROUNDS, type StageBackground } from '../components/crosshair/stageBackgrounds';
@@ -36,6 +36,8 @@ function detectResolutionHeight(): number {
 export default function Crosshair() {
     const { t } = useTranslation();
     const [copied, setCopied] = useState(false);
+    const [codeCopied, setCodeCopied] = useState(false);
+    const [codePasted, setCodePasted] = useState(false);
     const [imported, setImported] = useState(false);
     const [resolution, setResolution] = useState(detectResolutionHeight);
     const [zoom, setZoom] = useState(1);
@@ -48,6 +50,8 @@ export default function Crosshair() {
         generateCommands,
         getSettings: getCrosshairSettings,
         importFromGame,
+        copyShareCode,
+        pasteShareCode,
         presets,
         activePresetId,
         loadPresets,
@@ -61,6 +65,8 @@ export default function Crosshair() {
         generateCommands: s.generateCommands,
         getSettings: s.getSettings,
         importFromGame: s.importFromGame,
+        copyShareCode: s.copyShareCode,
+        pasteShareCode: s.pasteShareCode,
         presets: s.presets,
         activePresetId: s.activePresetId,
         loadPresets: s.loadPresets,
@@ -90,6 +96,31 @@ export default function Crosshair() {
         await navigator.clipboard.writeText(commands);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const flash = (setter: (v: boolean) => void) => {
+        setter(true);
+        setTimeout(() => setter(false), 2000);
+    };
+
+    const handleCopyShareCode = async () => {
+        try {
+            await copyShareCode();
+            flash(setCodeCopied);
+        } catch (error) {
+            console.error('Failed to create crosshair share code:', error);
+            alert(t('crosshair.alert.shareCodeFailed'));
+        }
+    };
+
+    const handlePasteShareCode = async () => {
+        try {
+            if (await pasteShareCode()) flash(setCodePasted);
+            else alert(t('crosshair.alert.noShareCode'));
+        } catch (error) {
+            console.error('Failed to apply crosshair share code:', error);
+            alert(t('crosshair.alert.shareCodeFailed'));
+        }
     };
 
     const handleImportFromGame = async () => {
@@ -212,13 +243,39 @@ export default function Crosshair() {
                             )}
                         </Button>
                         <Button
-                            variant={copied ? 'success' : 'primary'}
+                            variant={copied ? 'success' : 'secondary'}
                             onClick={handleCopy}
-                            icon={copied ? Check : Copy}
+                            icon={copied ? Check : Terminal}
                             size="sm"
                             title={t('crosshair.hints.pressF7')}
                         >
                             {copied ? (
+                                <Tx k="common.status.copied" fallback="Copied" />
+                            ) : (
+                                <Tx k="crosshair.actions.copyCommands" fallback="Copy Commands" />
+                            )}
+                        </Button>
+                        <Button
+                            variant={codePasted ? 'success' : 'secondary'}
+                            onClick={handlePasteShareCode}
+                            icon={codePasted ? Check : ClipboardPaste}
+                            size="sm"
+                            title={t('crosshair.actions.pasteCodeTitle')}
+                        >
+                            {codePasted ? (
+                                <Tx k="crosshair.status.pasted" fallback="Applied" />
+                            ) : (
+                                <Tx k="crosshair.actions.pasteCode" fallback="Paste Code" />
+                            )}
+                        </Button>
+                        <Button
+                            variant={codeCopied ? 'success' : 'primary'}
+                            onClick={handleCopyShareCode}
+                            icon={codeCopied ? Check : Copy}
+                            size="sm"
+                            title={t('crosshair.actions.copyCodeTitle')}
+                        >
+                            {codeCopied ? (
                                 <Tx k="common.status.copied" fallback="Copied" />
                             ) : (
                                 <Tx k="crosshair.actions.copyCode" fallback="Copy Code" />
@@ -235,7 +292,7 @@ export default function Crosshair() {
                         gets an explicit viewport-relative one that shrinks with
                         the window instead of collapsing. From xl it goes back to
                         taking whatever the row leaves over. */}
-                    <div className="relative h-[clamp(220px,42vh,560px)] overflow-hidden rounded-sm border border-hl/5 xl:h-auto xl:min-h-[280px] xl:flex-1">
+                    <div className="always-dark relative h-[clamp(220px,42vh,560px)] overflow-hidden rounded-sm border border-hl/5 xl:h-auto xl:min-h-[280px] xl:flex-1">
                         <CrosshairStage scale={resolution / 1080} zoom={zoom} background={background} />
 
                         {/* Both overlay bars share one wrapping row so they move

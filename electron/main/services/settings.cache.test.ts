@@ -77,24 +77,24 @@ describe('settings cache', () => {
     });
 
     it('does not serve stale settings after deletion, corruption or recovery', () => {
-        writeFileSync(settingsPath(), JSON.stringify({ oledMode: true }));
-        expect(loadSettings().oledMode).toBe(true);
+        writeFileSync(settingsPath(), JSON.stringify({ theme: 'oled' }));
+        expect(loadSettings().theme).toBe('oled');
         unlinkSync(settingsPath());
-        expect(loadSettings().oledMode).toBe(false);
+        expect(loadSettings().theme).toBe('dark');
         writeFileSync(settingsPath(), '{bad json');
         const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        expect(loadSettings().oledMode).toBe(false);
-        writeFileSync(settingsPath(), JSON.stringify({ oledMode: true }));
-        expect(loadSettings().oledMode).toBe(true);
+        expect(loadSettings().theme).toBe('dark');
+        writeFileSync(settingsPath(), JSON.stringify({ theme: 'oled' }));
+        expect(loadSettings().theme).toBe('oled');
         warning.mockRestore();
     });
 
     it('reloads persisted values after a failed save', () => {
-        writeFileSync(settingsPath(), JSON.stringify({ oledMode: true }));
-        const changed = { ...loadSettings(), oledMode: false };
+        writeFileSync(settingsPath(), JSON.stringify({ theme: 'oled' }));
+        const changed = { ...loadSettings(), theme: 'dark' as const };
         vi.mocked(renameSync).mockImplementationOnce(() => { throw new Error('File locked'); });
         expect(() => saveSettings(changed)).toThrow('File locked');
-        expect(loadSettings().oledMode).toBe(true);
+        expect(loadSettings().theme).toBe('oled');
         expect(settingsReads()).toHaveLength(2);
     });
 });

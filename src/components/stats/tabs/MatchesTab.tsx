@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { Gamepad2 } from 'lucide-react'
@@ -6,6 +6,7 @@ import { Card } from '../../common/ui'
 import { usePlayerStore } from '../../../stores/stats/playerStore'
 import type { StoredMatch } from '../../../types/deadlock-stats'
 import { MatchRow } from '../primitives'
+import { MatchScoreboardDialog } from '../MatchScoreboardDialog'
 import { winRateClass } from '../format'
 
 function dayLabel(unixSeconds: number, t: TFunction, locale: string): string {
@@ -20,9 +21,19 @@ function dayLabel(unixSeconds: number, t: TFunction, locale: string): string {
     return d.toLocaleDateString(locale || undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
+const STREET_BRAWL = 4
+
 export function MatchesTab() {
     const { t, i18n } = useTranslation()
     const localMatchHistory = usePlayerStore((s) => s.playerData.data.localMatchHistory)
+    const accountId = usePlayerStore((s) => s.selectedAccountId)
+    const apiMatches = usePlayerStore((s) => s.playerData.data.matchHistory)
+    // Stored rows predate rank points, so take them from the live history.
+    const ranked = useMemo(
+        () => new Map((apiMatches?.matches ?? []).map((m) => [m.match_id, m])),
+        [apiMatches]
+    )
+    const [openMatch, setOpenMatch] = useState<number | null>(null)
 
     const groups = useMemo(() => {
         const byDay: { label: string; matches: StoredMatch[] }[] = []
@@ -86,12 +97,19 @@ export function MatchesTab() {
                                         startTime={match.start_time}
                                         netWorth={match.net_worth}
                                         damage={match.player_damage}
+                                        rankDelta={ranked.get(match.match_id)?.ranked_delta}
+                                        rankProtected={ranked.get(match.match_id)?.ranked_used_demotion_protection === true}
+                                        brawl={match.game_mode === STREET_BRAWL}
+                                        onOpen={() => setOpenMatch(match.match_id)}
                                     />
                                 ))}
                             </div>
                         </div>
                     ))}
                 </div>
+            )}
+            {openMatch !== null && (
+                <MatchScoreboardDialog matchId={openMatch} accountId={accountId} onClose={() => setOpenMatch(null)} />
             )}
         </Card>
     )
