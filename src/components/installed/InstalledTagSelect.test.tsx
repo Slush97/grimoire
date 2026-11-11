@@ -41,23 +41,35 @@ describe('Installed tag dropdown', () => {
   });
   afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-  it.each([false, true])('clears an active tag with either click (excluded=%s)', excluded => {
+  it.each([[false, false], [true, false], [true, true]])('clears an active tag (excluded=%s, right-click=%s)', (excluded, right) => {
     const click = (right: boolean) => act(() => {
       if (right) option('HUD').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       else option('HUD').click();
     });
-    for (const right of [false, true]) {
-      click(excluded);
-      expect(option('HUD').getAttribute('aria-selected')).toBe('true');
-      expect(option('HUD').querySelector(excluded ? '.lucide-minus' : '.lucide-plus')).not.toBeNull();
-      expect(option('HUD').querySelector(excluded ? '.bg-state-danger' : '.bg-state-success')).not.toBeNull();
-      expect(option('HUD').getAttribute('aria-label')).toBe('installed.tags.clearFilter:HUD');
-      expect(trigger().className).toContain('border-accent/40');
-      click(right);
-      expect(option('HUD').getAttribute('aria-selected')).toBe('false');
-      expect(option('HUD').querySelector('.lucide-plus,.lucide-minus')).toBeNull();
-      expect(trigger().getAttribute('aria-expanded')).toBe('true');
-    }
+    click(excluded);
+    expect(option('HUD').getAttribute('aria-selected')).toBe('true');
+    expect(option('HUD').querySelector(excluded ? '.lucide-minus' : '.lucide-plus')).not.toBeNull();
+    expect(option('HUD').querySelector(excluded ? '.bg-state-danger' : '.bg-state-success')).not.toBeNull();
+    expect(option('HUD').getAttribute('aria-label')).toBe('installed.tags.clearFilter:HUD');
+    expect(trigger().className).toContain('border-accent/40');
+    click(right);
+    expect(option('HUD').getAttribute('aria-selected')).toBe('false');
+    expect(option('HUD').querySelector('.lucide-plus,.lucide-minus')).toBeNull();
+    expect(trigger().getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('converts an included tag to excluded on right-click, but left-click clears an excluded tag', () => {
+    act(() => { option('HUD').click(); option('Favorites').click(); });
+    act(() => option('HUD').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    expect(option('HUD').getAttribute('aria-selected')).toBe('true');
+    expect(option('HUD').querySelector('.lucide-minus')).not.toBeNull();
+    expect(option('HUD').querySelector('.lucide-plus')).toBeNull();
+    expect(option('Favorites').querySelector('.lucide-plus')).not.toBeNull();
+    act(() => option('HUD').click());
+    expect(option('HUD').getAttribute('aria-selected')).toBe('false');
+    expect(option('HUD').querySelector('.lucide-plus,.lucide-minus')).toBeNull();
+    expect(option('Favorites').querySelector('.lucide-plus')).not.toBeNull();
+    expect(trigger().getAttribute('aria-expanded')).toBe('true');
   });
 
   it('searches normally, then creates from the same input without hiding rows in edit mode', async () => {

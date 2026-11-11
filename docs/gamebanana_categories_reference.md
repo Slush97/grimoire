@@ -151,8 +151,9 @@ Selected heroes use the shared overlapping stack capped at 60px, with consistent
 larger selections use five hero icons and an overflow urn. Its tooltip lists every selected hero.
 Its Tags selector includes tags on left-click (green plus) and excludes them on
 right-click (red minus). A card must match an included tag when any are selected,
-and must not match any excluded tag. Either click clears a tag that is already
-included or excluded. The trigger shows a single tag as `+ HUD` or `- HUD`.
+and must not match any excluded tag. Right-clicking an included tag switches it
+to excluded; right-clicking an excluded tag clears it. Left-clicking either kind
+of selected tag clears it. The trigger shows a single tag as `+ HUD` or `- HUD`.
 Multiple selections show separate counts, such as `+2/-1 Tags`, with empty sides
 and their separator omitted.
 The selector's search can be switched to edit mode to create, rename, or delete

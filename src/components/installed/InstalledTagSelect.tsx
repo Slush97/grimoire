@@ -66,9 +66,8 @@ export function InstalledTagSelect({ options, included, excluded, onInclude, onE
   };
   const toggleFilter = (key: string, exclude = false) => {
     if (editing || busyRef.current) return;
-    if (included.includes(key)) onInclude(key);
-    else if (excluded.includes(key)) onExclude(key);
-    else (exclude ? onExclude : onInclude)(key);
+    if (exclude || excluded.includes(key)) onExclude(key);
+    else onInclude(key);
   };
 
   return <DropdownSelect value="" values={selected} active={selected.length > 0} displayLabel={displayLabel}
