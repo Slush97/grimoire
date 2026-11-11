@@ -1053,6 +1053,8 @@
       "accentNamed": "Акцентный цвет: {{name}}",
       "pickCustomColor": "Выбрать свой цвет",
       "accentCustom": "Свой акцент",
+      "yourColor": "Использовать свой цвет {{color}}",
+      "removeYourColor": "Удалить {{color}}",
       "selectedColorPreview": "Превью выбранного цвета",
       "customAccent": "Свой акцентный цвет",
       "theme": {
@@ -1099,6 +1101,8 @@
         "description": "Подкрашивает фон приложения светом из верхнего левого и нижнего правого углов.",
         "none": "Без свечения",
         "custom": "Своё свечение",
+        "yourGlow": "Использовать своё свечение {{number}}",
+        "removeYourGlow": "Удалить своё свечение {{number}}",
         "customTitle": "Своё фоновое свечение",
         "topLeft": "Сверху слева",
         "bottomRight": "Снизу справа",

@@ -7,6 +7,7 @@ import { getSettingsPath } from '../utils/paths';
 // Re-exported so existing `from './settings'` imports keep working.
 import type { AppSettings, NsfwContentMode } from '../../../src/types/mod';
 import { DEFAULT_THEME, normalizeTheme } from '../../../src/lib/theme';
+import { MAX_CUSTOM_SWATCHES } from '../../../src/lib/customSwatches';
 export type { AppSettings };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -50,6 +51,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     ignoredConflictMods: [],
     accentColor: '#f97316',
     theme: DEFAULT_THEME,
+    customAccentColors: [],
     sidebarHeroHighlight: 'Abrams',
     dateFormat: 'MM/DD/YYYY',
     language: null,
@@ -59,9 +61,38 @@ const DEFAULT_SETTINGS: AppSettings = {
     unifiedLaunchButton: false,
     sidebarTransparent: false,
     backgroundGradient: null,
+    customBackgroundGradients: [],
     verboseModTrace: false,
     forgeLocalInstallEnabled: false,
 };
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+/** The user's own accent swatches from user-editable settings.json: hex colors
+ *  only, no repeats, the newest few. */
+function normalizeCustomAccentColors(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const colors: string[] = [];
+    for (const candidate of value) {
+        if (typeof candidate !== 'string' || !HEX_COLOR.test(candidate)) continue;
+        const color = candidate.toLowerCase();
+        if (!colors.includes(color)) colors.push(color);
+    }
+    return colors.slice(-MAX_CUSTOM_SWATCHES);
+}
+
+/** Same for the user's own background glows, each a pair of hex colors. */
+function normalizeCustomBackgroundGradients(value: unknown): { from: string; to: string }[] {
+    if (!Array.isArray(value)) return [];
+    const gradients: { from: string; to: string }[] = [];
+    for (const candidate of value) {
+        const { from, to } = (candidate ?? {}) as { from?: unknown; to?: unknown };
+        if (typeof from !== 'string' || typeof to !== 'string' || !HEX_COLOR.test(from) || !HEX_COLOR.test(to)) continue;
+        const gradient = { from: from.toLowerCase(), to: to.toLowerCase() };
+        if (!gradients.some((entry) => entry.from === gradient.from && entry.to === gradient.to)) gradients.push(gradient);
+    }
+    return gradients.slice(-MAX_CUSTOM_SWATCHES);
+}
 
 /** One hidden creator/mod entry from user-editable settings.json, or null when
  *  its id or name is unusable. */
@@ -173,6 +204,8 @@ function readSettings(): AppSettings {
             updateChannel: settings.updateChannel === 'nightly' ? 'nightly' : 'stable',
             theme: normalizeTheme(settings.theme, oledMode),
             hiddenCreators: normalizeHiddenCreators(settings.hiddenCreators),
+            customAccentColors: normalizeCustomAccentColors(settings.customAccentColors),
+            customBackgroundGradients: normalizeCustomBackgroundGradients(settings.customBackgroundGradients),
             hiddenMods: normalizeHiddenMods(settings.hiddenMods),
             nsfwContentMode:
                 settings.nsfwContentMode ??
