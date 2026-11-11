@@ -410,7 +410,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   const highlight = partsExpanded ? hoveredMaterial : null;
   const highlightedPart = info?.parts.find((part) => part.material === highlight);
   return <section ref={editorRef} onPointerDownCapture={history.onPointerDownCapture} onFocusCapture={history.onFocusCapture}
-    onBlurCapture={history.onBlurCapture} onKeyDownCapture={history.onKeyDownCapture} className="@container space-y-3" aria-label={t('foundry.skin.title')}>
+    onBlurCapture={history.onBlurCapture} onKeyDownCapture={history.onKeyDownCapture} className="@container flex flex-1 flex-col gap-3" aria-label={t('foundry.skin.title')}>
     <fieldset disabled={exporting} className="flex flex-wrap items-center gap-3">
       {sourceControl}
       <IconButton size="sm" icon={Undo2} label={t('common.actions.undo')} aria-keyshortcuts="Control+Z Meta+Z" disabled={!history.canUndo} onClick={history.undo} />

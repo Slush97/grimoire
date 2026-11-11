@@ -9,7 +9,7 @@ import type { ParticleTextureInfo } from '../render/sheet';
 import type { SerializedSnapshot } from '../snapshotResource';
 
 /** Bump with any change to the bundle's shape or contents. */
-export const PARTICLE_BUNDLE_VERSION = 7;
+export const PARTICLE_BUNDLE_VERSION = 9;
 
 /** Where the game itself says a hero plays an effect, which decides how the effect is bound. */
 export type AmbientEffectSourceKind =
@@ -64,11 +64,20 @@ export interface BundleEffect {
 }
 
 export type StagedControlPoint =
-  /** On an attachment; `facing: 'model'` keeps its position but takes the model's orientation. */
-  | { cp: number; kind: 'attachment'; attachment: string; follow: boolean; facing?: 'attachment' | 'model' }
+  /**
+   * On an attachment; `facing: 'model'` keeps its position but takes the model's orientation, `'owner'`
+   * the orientation of the model the effect belongs to (a blow landing on another hero faces as the
+   * striker faces). `actor` names another staged hero's model (a timeline actor) instead of the effect's own.
+   */
+  | { cp: number; kind: 'attachment'; attachment: string; follow: boolean; facing?: 'attachment' | 'model' | 'owner'; actor?: string }
   /** On the model's origin (its feet), facing as the model faces. */
-  | { cp: number; kind: 'origin'; follow: boolean }
-  | { cp: number; kind: 'world'; position: [number, number, number]; forward: [number, number, number] };
+  | { cp: number; kind: 'origin'; follow: boolean; actor?: string }
+  | { cp: number; kind: 'world'; position: [number, number, number]; forward: [number, number, number] }
+  /**
+   * A height game code passes as a scale in a control point's x: `above` inches over an attachment of the
+   * model (in its model space, as the effect starts), divided by `per`.
+   */
+  | { cp: number; kind: 'height'; attachment: string; above: number; per: number; actor?: string };
 
 export interface BundleSystem {
   /** The definition's KV3 DATA block decoded to JSON, before any upgrade. */
@@ -88,6 +97,8 @@ export interface BundleTexture {
   mips?: string[];
   /** The compiled texture's header and sheet, as the renderer's readParticleTextureInfo reads them. */
   info: ParticleTextureInfo;
+  /** An image loaded from here instead of `file` (a live preview's own picture, as a data URL). */
+  url?: string;
 }
 
 /** A model attachment with every influence (Attachment), for the control point binding. */
@@ -117,6 +128,8 @@ export interface ParticleBundle {
   materials?: Record<string, ParticleMaterialData>;
   model: SerializedParticleModel;
   attachments: BundleAttachment[];
+  /** Other heroes a timeline stages (an attacker the hero parries), by actor id: their models and attachments. */
+  actors?: Record<string, { modelEntry: string; model: SerializedParticleModel; attachments: BundleAttachment[] }>;
   diagnostics: BundleDiagnostic[];
 }
 

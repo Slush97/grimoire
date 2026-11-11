@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Sparkles,
   Swords,
+  Zap,
   Volume2,
   Image as ImageIcon,
   type LucideIcon,
@@ -36,7 +37,7 @@ interface HeroWorkshopProps {
   onBack: () => void;
   skinSources?: HeroPoseSkinSource[];
 }
-type SectionId = 'appearance' | 'abilities' | 'voice' | 'icons';
+type SectionId = 'appearance' | 'abilities' | 'mechanics' | 'voice' | 'icons';
 
 
 /**
@@ -56,7 +57,7 @@ type SectionId = 'appearance' | 'abilities' | 'voice' | 'icons';
  */
 export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, onNavigate, skinSources }: HeroWorkshopProps) {
   const { t } = useTranslation();
-  const [section, setSection] = useFoundryDraft<SectionId>('workshop:section', z.enum(['appearance', 'abilities', 'voice', 'icons']), 'appearance');
+  const [section, setSection] = useFoundryDraft<SectionId>('workshop:section', z.enum(['appearance', 'abilities', 'mechanics', 'voice', 'icons']), 'appearance');
   const [renderStep, setRenderStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [currentHero, setCurrentHero] = useState(hero.codename);
@@ -66,12 +67,12 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
     setNameFailed(false);
   }
   const [appearanceTool, setAppearanceTool] = useFoundryDraft('workshop:appearance', z.enum(['parts', 'effects']), 'parts');
-  const [abilityTool, setAbilityTool] = useFoundryDraft('workshop:ability', z.enum(['movement', 'sounds']), 'movement');
   const linkedSkin = !!skinSources?.length;
   useEffect(() => {
     if (linkedSkin) { setSection('appearance'); setAppearanceTool('parts'); }
   }, [linkedSkin, setSection, setAppearanceTool]);
-  const editingSkin = section === 'appearance' || (section === 'abilities' && abilityTool === 'movement');
+  // Both edit on the hero model, so the section nav moves up beside the hero.
+  const editingSkin = section === 'appearance' || section === 'mechanics';
 
   // A single-hero roster so the reused browse panels are pre-scoped to this hero
   // (they each carry their own hero filter; handing them one hero pins it).
@@ -80,6 +81,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
   const sections: Array<{ id: SectionId; label: string; icon: LucideIcon }> = [
     { id: 'appearance', label: t('foundry.workshop.appearance', 'Appearance'), icon: Sparkles },
     { id: 'abilities', label: t('foundry.workshop.abilities', 'Abilities'), icon: Swords },
+    { id: 'mechanics', label: t('foundry.workshop.mechanics'), icon: Zap },
     { id: 'voice', label: t('foundry.workshop.voice', 'Voice'), icon: Volume2 },
     { id: 'icons', label: t('foundry.workshop.icons', 'Icons & Textures'), icon: ImageIcon },
   ];
@@ -182,22 +184,19 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
 
       {/* Content pane: the active section. */}
       <div className="relative z-10 min-w-0 flex-1 overflow-y-auto scrollbar-glass">
-        <div key={hero.codename} className={`space-y-4 ${editingSkin ? 'p-4' : 'p-6'}`}>
+        {/* A full height column: a section with a workbench grows it into the rest of the window */}
+        <div key={hero.codename} className={`flex min-h-full flex-col gap-4 ${editingSkin ? 'p-4' : 'p-6'}`}>
           {section === 'appearance' ? (
-            <div className="space-y-4">
+            <div className="flex flex-1 flex-col gap-4">
               <SegmentedControl value={appearanceTool} onChange={setAppearanceTool}
                 options={[{ value: 'parts', label: t('foundry.skin.title') }, { value: 'effects', label: t('foundry.skin.effects') }]} />
               {appearanceTool === 'parts' ? <SkinEditor key={hero.name} heroName={hero.name} initialSkinSources={skinSources} />
                 : <div className="max-w-3xl rounded-sm border border-border bg-bg-secondary p-4"><HeroEffectsPanel key={hero.name} heroName={hero.name} /></div>}
             </div>
           ) : section === 'abilities' ? (
-            <div className="space-y-3">
-              <SegmentedControl value={abilityTool} onChange={setAbilityTool} options={[
-                { value: 'movement', label: t('foundry.movement.title') }, { value: 'sounds', label: t('foundry.movement.sounds') },
-              ]} />
-              {abilityTool === 'movement' ? <MovementFxEditor heroName={hero.name} skinSources={skinSources} />
-                : <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" />}
-            </div>
+            <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" />
+          ) : section === 'mechanics' ? (
+            <MovementFxEditor heroName={hero.name} skinSources={skinSources} />
           ) : section === 'voice' ? (
             <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="voice" />
           ) : section === 'icons' ? (

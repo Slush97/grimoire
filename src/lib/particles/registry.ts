@@ -67,6 +67,9 @@ import { NormalLock } from './operators/normalLock';
 import { OrientTo2dDirection } from './operators/orientTo2dDirection';
 import { OscillateVector } from './operators/oscillateVector';
 import { OscillateVectorSimple } from './operators/oscillateVectorSimple';
+import { OscillateScalarSimple } from './operators/oscillateScalarSimple';
+import { RemapVelocityToVector } from './operators/remapVelocityToVector';
+import { SetChildControlPoints } from './operators/setChildControlPoints';
 import { LockToBone } from './operators/lockToBone';
 import { PositionLock } from './operators/positionLock';
 import { SnapshotRigidSkinToBones } from './operators/snapshotRigidSkinToBones';
@@ -90,6 +93,7 @@ import type { ParticleDefinitionParser } from './parser';
 import { RemapSpeedtoCP } from './preEmission/remapSpeedtoCP';
 import { SetControlPointFieldToScalarExpression } from './preEmission/setControlPointFieldToScalarExpression';
 import { SetControlPointOrientation } from './preEmission/setControlPointOrientation';
+import { SetControlPointRotation } from './preEmission/setControlPointRotation';
 import { SetControlPointToVectorExpression } from './preEmission/setControlPointToVectorExpression';
 import { SetParentControlPointsToChildCP } from './preEmission/setParentControlPointsToChildCP';
 import { SetSingleControlPointPosition } from './preEmission/setSingleControlPointPosition';
@@ -106,6 +110,7 @@ const PORTED: Record<FunctionKind, Readonly<Record<string, Factory>>> = {
     C_OP_SetControlPointPositions: (parse) => new SetControlPointPositions(parse),
     C_OP_SetControlPointFieldToScalarExpression: (parse) => new SetControlPointFieldToScalarExpression(parse),
     C_OP_SetControlPointOrientation: (parse) => new SetControlPointOrientation(parse),
+    C_OP_SetControlPointRotation: (parse) => new SetControlPointRotation(parse),
     C_OP_StopAfterCPDuration: (parse) => new StopAfterDuration(parse),
     C_OP_RemapSpeedtoCP: (parse) => new RemapSpeedtoCP(parse),
     C_OP_SetControlPointToVectorExpression: (parse) => new SetControlPointToVectorExpression(parse),
@@ -170,6 +175,9 @@ const PORTED: Record<FunctionKind, Readonly<Record<string, Factory>>> = {
     C_OP_Noise: (parse) => new Noise(parse),
     C_OP_OscillateVector: (parse) => new OscillateVector(parse),
     C_OP_OscillateVectorSimple: (parse) => new OscillateVectorSimple(parse),
+    C_OP_OscillateScalarSimple: (parse) => new OscillateScalarSimple(parse),
+    C_OP_RemapVelocityToVector: (parse) => new RemapVelocityToVector(parse),
+    C_OP_SetChildControlPoints: (parse) => new SetChildControlPoints(parse),
     C_OP_DistanceToTransform: (parse) => new DistanceToTransform(parse),
     C_OP_BasicMovement: (parse) => new BasicMovement(parse),
     C_OP_ColorInterpolate: (parse) => new ColorInterpolate(parse),

@@ -38,6 +38,16 @@ describe('movement playback', () => {
       ['standing', paths[0]], ['punch', paths[1]],
     ]);
   });
+
+  it('selects the parry and its success clip', () => {
+    const paths = ['models/heroes_staging/lash_v2/clips/weapon_stand_idle.vnmclip_c',
+      'models/heroes_staging/lash_v2/clips/parry.vnmclip_c',
+      'models/heroes_staging/lash_v2/clips/parry_success.vnmclip_c',
+      'models/heroes_staging/lash_v2/clips/parry_in_air.vnmclip_c'];
+    expect(selectMovementClips(paths, 'models/heroes_wip/lash/lash.vmdl_c')).toEqual([
+      ['standing', paths[0]], ['parry', paths[1]], ['parrySuccess', paths[2]],
+    ]);
+  });
   it('discovers prefixed Mina clips and a dash outside Rem\'s idle directory', () => {
     const mina = ['weapon_stand_idle', 'melee_start', 'melee_hit', 'dash_air_forward']
       .map(name => `models/heroes_wip/vampirebat/clips/vampirebat_${name}.vnmclip_c`);

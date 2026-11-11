@@ -14,8 +14,9 @@
 // - Models are drawn in their bind pose: whether a model would be posed (m_bAnimated, the posing below
 //   full alpha) is decided as VRF decides it, and the rate input evaluated, but no skeleton is posed.
 // - A model's own materials are drawn only when the source supplies them, as the override is.
-// - As in VRF, m_MaterialVars are not applied (model materials are shared by name), cloth is not
-//   simulated, and models that draw only into the bloom or water effects passes are not drawn.
+// - Cloth is not simulated, and models that draw only into the bloom or water effects passes are not
+//   drawn, as in VRF. Unlike VRF, m_MaterialVars are applied: each particle's node has its own
+//   materials, so the render attributes it sets reach the materials' dynamic expressions.
 
 import * as THREE from 'three';
 import type { ParticleCollection } from '../collection';
@@ -34,6 +35,8 @@ import type { ParticleRendererContext } from './context';
 import { ParticleModelType, RenderModelSubModelFieldType } from './enums';
 import { ParticleFunctionRenderer } from './functionRenderer';
 import { ModelMaterial } from './modelMaterial';
+import { stringToken } from './vfxEval';
+import { isScalarField, isVectorField } from '../fields';
 import { type ParticleMaterialData, type ParticleModelMesh, particleResourceKey } from './particleModels';
 import { eulerAnglesToRotationMatrixRadians } from './renderSprites';
 import type { RenderView } from './view';
@@ -169,6 +172,10 @@ class ModelNode {
     for (const material of this.materials) material.setTint(tint, alpha);
   }
 
+  setRenderAttributes(lookup: (token: number) => number[] | undefined): void {
+    for (const material of this.materials) material.setRenderAttributes(lookup);
+  }
+
   set visible(value: boolean) {
     this.group.visible = value;
   }
@@ -255,6 +262,7 @@ export class RenderModels extends ParticleFunctionRenderer {
   private readonly overrideMaterial: string | null;
   private readonly overrideTranslucentMaterials: boolean;
   private readonly renderFilter: NumberProvider;
+  private readonly materialVars: { token: number; field: number; scale: number }[] = [];
 
 
   private readonly animated: boolean;
@@ -351,8 +359,17 @@ export class RenderModels extends ParticleFunctionRenderer {
     this.posedWhenNotAnimated = !doNotDrawInParticlePass
       && (drawInterleaved || this.onlyRenderInEffectsBloomPass || this.onlyRenderInEffectsWaterPass || RenderModels.scalesWithControlPointView(parse));
 
+    // m_MaterialVars: a render attribute per entry, a particle field times m_flScale, or m_flScale alone
+    // when the entry names no field
+    for (const entry of getObjectArray(parse.data, 'm_MaterialVars')) {
+      const name = getString(entry, 'm_strVariable', '');
+      if (name === '') continue;
+      const field = typeof entry.m_nVariableField === 'number' ? entry.m_nVariableField : -1;
+      this.materialVars.push({ token: stringToken(name), field, scale: typeof entry.m_flScale === 'number' ? entry.m_flScale : 1 });
+    }
+
     // m_szRenderAttribute's dynamic combo, m_bDisableShadows and m_bAcceptsDecals have no counterpart
-    // in the three.js materials. TODO (as VRF): m_MaterialVars set material attributes per particle.
+    // in the three.js materials.
   }
 
   private static modelFlags(model: ParticleModelMesh): number {
@@ -494,6 +511,7 @@ export class RenderModels extends ParticleFunctionRenderer {
 
         node.transform = this.particleTransform(at(positions), at(normals), pitches[i], yaws[i], rolls[i], node, rotation, scale, offset, scales.roll);
         node.setTint(this.suppressTint ? [1, 1, 1] : [tintBytes[0] / 255, tintBytes[1] / 255, tintBytes[2] / 255], alpha);
+        if (this.materialVars.length > 0) node.setRenderAttributes(this.renderAttributes(current, i));
         node.visible = renderFilters[i] >= 1;
       }
 
@@ -589,6 +607,19 @@ export class RenderModels extends ParticleFunctionRenderer {
     }
 
     return index;
+  }
+
+  /** The render attributes m_MaterialVars set for one particle, looked up by StringToken. */
+  private renderAttributes(current: ParticleCollection['currentSpan'], index: number): (token: number) => number[] | undefined {
+    const values = new Map<number, number[]>();
+    for (const { token, field, scale } of this.materialVars) {
+      if (field < 0) values.set(token, [scale]);
+      else if (isVectorField(field)) {
+        const vectors = current.readVectors(field);
+        values.set(token, [vectors[index * 3] * scale, vectors[index * 3 + 1] * scale, vectors[index * 3 + 2] * scale]);
+      } else if (isScalarField(field)) values.set(token, [current.readFloats(field)[index] * scale]);
+    }
+    return (token) => values.get(token);
   }
 
   private takeNode(model: number): PoolEntry {

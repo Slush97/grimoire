@@ -179,6 +179,7 @@
     "workshop": {
       "appearance": "Внешний вид",
       "abilities": "Умения",
+      "mechanics": "Механики",
       "voice": "Голос",
       "icons": "Иконки и текстуры",
       "back": "Все герои",
@@ -518,8 +519,6 @@
       "keepAvailable": "Оставить доступные детали"
     },
     "movement": {
-      "title": "Эффекты движения",
-      "sounds": "Игровые звуки",
       "dash": "Шлейфы рывка",
       "heavy-melee": "Тяжёлый удар",
       "globalHint": "Применяется ко всем героям.",
@@ -530,7 +529,6 @@
       "upload": "Выбрать изображение",
       "originalTrail": "Оригинальный шлейф",
       "imageTrail": "Эмодзи / картинка",
-      "updating": "Обновление эффекта…",
       "replay": "Повторить эффект",
       "loop": "Зациклить",
       "export": "Экспорт VPK",
@@ -545,7 +543,24 @@
       "brightness": "Яркость",
       "illuminated": "Подсветка",
       "outline": "Контур изображения",
-      "outlineColor": "Цвет контура"
+      "outlineColor": "Цвет контура",
+      "parry": "Парирование",
+      "shieldImage": "Символ щита",
+      "stunImage": "Значок оглушения",
+      "originalSymbol": "Оригинал",
+      "effectFinish": "Оформление",
+      "parrySounds": "Звуки",
+      "parrySound": "Парирование",
+      "parrySuccessSound": "Успешное парирование",
+      "parts": "Части парирования",
+      "part": {
+        "shield": "Щит",
+        "catch": "Отражение",
+        "stun": "Оглушение"
+      },
+      "linkParts": "Один цвет для всех частей",
+      "unlinkParts": "Свой цвет для каждой части",
+      "keepOriginal": "Оставить оригинал"
     }
   },
   "autoexec": {
@@ -2027,7 +2042,9 @@
       "nextFile": "Следующий файл",
       "pin": "Закрепить",
       "resize": "Изменить размер",
-      "unavailable": "Для этого файла нет 3D-превью"
+      "unavailable": "Для этого файла нет 3D-превью",
+      "clips": "Анимации",
+      "allClips": "Все"
     },
     "card": {
       "soundPreview": "Превью звука",

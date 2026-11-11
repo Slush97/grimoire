@@ -333,6 +333,11 @@ export async function exportSoulModel(metaKey: string, cacheKey: string, entry?:
   return window.electronAPI.exportSoulModel(metaKey, cacheKey, entry, options);
 }
 
+/** An animation mod's clips on its hero's stock model, for the Installed preview. Null when it has none to play. */
+export async function exportAnimationModPreview(metaKey: string): Promise<{ heroName: string; key: string; clips: string[]; meshGroup: string | null } | null> {
+  return window.electronAPI.exportAnimationModPreview(metaKey);
+}
+
 /** Whether a hero's posed 3D still exists for the given active skin stack (+ mtime, key). */
 export async function getHeroPoseInfo(
   heroName: string,
@@ -355,9 +360,10 @@ export async function exportHeroPose(
  *  stack (+ mtime, key). Mirrors getHeroPoseInfo for the rigged variant. */
 export async function getRiggedHeroPose(
   heroName: string,
-  skinSources?: HeroPoseSkinSource[]
+  skinSources?: HeroPoseSkinSource[],
+  meshGroup?: string
 ): Promise<HeroPoseInfo> {
-  return window.electronAPI.getRiggedHeroPose(heroName, skinSources);
+  return window.electronAPI.getRiggedHeroPose(heroName, skinSources, meshGroup);
 }
 
 /** Generate a hero's RIGGED glb via the bundled vpkmerge exporter (no --pose,
@@ -366,9 +372,10 @@ export async function getRiggedHeroPose(
 export async function exportRiggedHeroPose(
   heroName: string,
   skinSources?: HeroPoseSkinSource[],
-  fallbackSkinMetaKey?: string
+  fallbackSkinMetaKey?: string,
+  meshGroup?: string
 ): Promise<HeroPoseInfo> {
-  return window.electronAPI.exportRiggedHeroPose(heroName, skinSources, fallbackSkinMetaKey);
+  return window.electronAPI.exportRiggedHeroPose(heroName, skinSources, fallbackSkinMetaKey, meshGroup);
 }
 
 /** Whether a hero's ambient FX descriptor bundle is cached/current. */

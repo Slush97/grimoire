@@ -216,7 +216,7 @@ function loadDefinitions(system: string, out: Record<string, KVObject> = {}): Re
 
 function collectTextures(value: KVValue | undefined, out: Set<string>): void {
   if (typeof value === 'string') {
-    if (/^materials\/.+\.vtex$/.test(value)) {
+    if (/^[a-zA-Z0-9_]+\/.+\.vtex$/.test(value)) {
       out.add(value);
     }
   } else if (Array.isArray(value)) {
