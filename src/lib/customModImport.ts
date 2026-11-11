@@ -103,6 +103,37 @@ export interface ImprintNaming {
 
 const sameText = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
 
+const MAX_IMPRINT_TEXT_LENGTH = 120;
+
+/**
+ * Imprint text is whatever the VPK's author wrote, and it names mods the user
+ * never sees typed. Control, bidi and zero-width characters go (bidi overrides
+ * can disguise a name), whitespace collapses, the length is capped, and nothing
+ * left means absent.
+ */
+export function cleanImprintText(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const cleaned = value
+    .replace(/[\u{200b}-\u{200f}\u{202a}-\u{202e}\u{2066}-\u{2069}\u{feff}]/gu, '')
+    .replace(/[\p{Cc}\s]+/gu, ' ')
+    .trim()
+    .slice(0, MAX_IMPRINT_TEXT_LENGTH)
+    .replace(/[\ud800-\udbff]$/, '')
+    .trimEnd();
+  return cleaned || undefined;
+}
+
+export function cleanImprintNaming<T extends { title?: string; author?: string; variantLabel?: string }>(
+  summary: T,
+): T {
+  return {
+    ...summary,
+    title: cleanImprintText(summary.title),
+    author: cleanImprintText(summary.author),
+    variantLabel: cleanImprintText(summary.variantLabel),
+  };
+}
+
 /**
  * The label an imprint gives one member of a variant group. The title is the
  * label when it tells the member apart: no other member carries it and it is
@@ -164,6 +195,8 @@ export function resolveImportedVariantLabel(
 export interface LocalImportMember {
   /** The member's folder inside the archive, else its file name stem. */
   seed?: string;
+  /** The member's file name stem: what tells apart members sharing a folder. */
+  stem?: string;
   imprint?: ImprintNaming | null;
 }
 
@@ -171,6 +204,9 @@ export interface PlannedLocalImport {
   modName: string;
   localGroupId?: string;
   variantLabel?: string;
+  /** A pack member that carries its own GameBanana id: it loads its own art
+   *  instead of taking the thumbnail picked for the archive. */
+  ownThumbnail?: boolean;
 }
 
 function imprintIdentity(imprint: ImprintNaming | null | undefined): string | undefined {
@@ -219,15 +255,23 @@ export function planLocalImport(
     }));
   }
 
+  const folderLabels = members.map((member, index) =>
+    member.seed ? deriveVariantLabel(member.seed) : `Variant ${index + 1}`,
+  );
   const groups = new Map<string, { name: string; localGroupId: string }>();
   return members.map((member, index) => {
-    const fileLabel = member.seed ? deriveVariantLabel(member.seed) : `Variant ${index + 1}`;
+    // Members sharing a folder would all read the same, so tell them apart by file.
+    const sharesFolder = folderLabels.some(
+      (label, peer) => peer !== index && sameText(label, folderLabels[index]),
+    );
+    const fileLabel = sharesFolder && member.stem ? deriveVariantLabel(member.stem) : folderLabels[index];
     const identity = identities[index];
     if (!identity) return { modName: `${name}: ${fileLabel}` };
 
+    const ownThumbnail = imprints[index]?.gamebananaId ? true : undefined;
     const peers = imprints.filter((_, peer) => identities[peer] === identity);
     const title = peers.find((peer) => peer?.title?.trim())?.title?.trim() || `${name}: ${fileLabel}`;
-    if (peers.length === 1) return { modName: title };
+    if (peers.length === 1) return { modName: title, ownThumbnail };
 
     let group = groups.get(identity);
     if (!group) {
@@ -238,6 +282,7 @@ export function planLocalImport(
       modName: group.name,
       localGroupId: group.localGroupId,
       variantLabel: imprintVariantLabel(member.imprint, peers, group.name) || fileLabel,
+      ownThumbnail,
     };
   });
 }

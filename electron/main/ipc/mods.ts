@@ -82,7 +82,7 @@ import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport
 import { getMainWindow } from '../index';
 import { planLocalVariantGroup, resolveLocalVariantGroupProfile, type LocalVariantGroupProfile } from '../services/localVariantGroup';
 import { refreshEmbedAfterMetadataChange, toLocalVariantGroupMember } from '../services/modReplacement';
-import { planLocalImport } from '../../../src/lib/customModImport';
+import { cleanImprintNaming, planLocalImport } from '../../../src/lib/customModImport';
 import type { ImportCustomModArgs, ImportCustomModsBatchArgs, ImportCustomModsBatchResult, ImportCustomModResult, ImportCustomModsProgress, ImportSoulContainerGlbArgs, LocalVariantGroupTarget, PreviewSoulContainerGlbArgs, SetLocalVariantGroupResult, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
 import type { AbilitySoundClassification, AddMergeSourcesResult, DeleteModEntry, ModSwapPlacement, DeleteModsResult, MergeSourceReplacement, ReplaceMergeSourcesResult, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
@@ -1203,6 +1203,7 @@ async function importCustomModSource(
                 // GameBanana multi-variant downloads are labelled too, falling
                 // back to the VPK filename stem.
                 seed: source.archiveFolder || localSourceFileStem(source.fileName),
+                stem: localSourceFileStem(source.fileName),
                 // The dialog already read a bare VPK's imprint and sends the
                 // label the user saw, so only archive members are read here.
                 imprint: isVpk ? null : readImprintSummary(source.path),
@@ -1233,10 +1234,12 @@ async function importCustomModSource(
             // Grouped members all carry the SAME name (the card title comes from
             // the group's primary) and are told apart by their variant label
             // instead of the old "(N)" suffix.
-            const { modName: stampedName, localGroupId, variantLabel } = plan[i];
+            const { modName: stampedName, localGroupId, variantLabel, ownThumbnail } = plan[i];
             await setModMetadataWithHash(destMetaKey, {
                 modName: stampedName,
-                thumbnailUrl: thumbnailDataUrl,
+                // A pack member with its own GameBanana id leaves the thumbnail
+                // empty so the post-import fetch below loads its own art.
+                thumbnailUrl: ownThumbnail ? undefined : thumbnailDataUrl,
                 nsfw: !!nsfw,
                 sourceFileName: localSourceFileStem(sourceVpks[i].fileName),
                 localGroupId,
@@ -2054,11 +2057,17 @@ ipcMain.handle('peek-imprint', async (_, filePath: string): Promise<PeekImprintR
     };
 });
 
+type ImprintSummary = Omit<PeekImprintResult, 'thumbnailUrl'> & { section?: string };
+
 /** What a VPK's embed says about itself: the import dialog's recognition note,
- *  and the names an imported archive member gets. Read-only. */
-function readImprintSummary(
-    filePath: string
-): (Omit<PeekImprintResult, 'thumbnailUrl'> & { section?: string }) | null {
+ *  and the names an imported archive member gets. Read-only. The text is the
+ *  file author's, so it is cleaned here, before anything can name a mod. */
+function readImprintSummary(filePath: string): ImprintSummary | null {
+    const summary = readEmbeddedImprintSummary(filePath);
+    return summary && cleanImprintNaming(summary);
+}
+
+function readEmbeddedImprintSummary(filePath: string): ImprintSummary | null {
     if (!filePath || !filePath.toLowerCase().endsWith('.vpk') || !existsSync(filePath)) {
         return null;
     }
