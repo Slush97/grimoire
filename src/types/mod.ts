@@ -1,3 +1,5 @@
+import type { AppTheme } from '../lib/theme';
+
 export interface MergedModSource {
   /** Filename of the source VPK after the merge: typically in `.disabled/`
    *  because mergeMods disables sources to free their priority slots. May
@@ -1257,8 +1259,8 @@ export interface AppSettings {
   /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
    *  focus rings throughout the app. */
   accentColor: string;
-  /** Use true black for the app canvas and near-black neutral surfaces. */
-  oledMode: boolean;
+  /** Surface palette: the default dark, true-black OLED, or light. */
+  theme: AppTheme;
   /** Hero render used as the active sidebar highlight background.
    *  @deprecated Superseded by `appearanceBackgrounds.activeTab`. Kept as a
    *  legacy compat read so existing installs keep their chosen highlight; the

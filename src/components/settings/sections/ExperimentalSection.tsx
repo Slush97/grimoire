@@ -153,7 +153,7 @@ export default function ExperimentalSection() {
         />
         {settings?.devMode && settings?.devDeadlockPath && (
           <div className="mt-2 space-y-3">
-            <div className="text-xs font-mono bg-black/30 p-2 rounded-sm text-text-secondary break-all">
+            <div className="text-xs font-mono bg-shade/30 p-2 rounded-sm text-text-secondary break-all">
               {settings.devDeadlockPath}
             </div>
             <div className="space-y-2">

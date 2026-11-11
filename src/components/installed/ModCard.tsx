@@ -1339,7 +1339,7 @@ export function ModCard({
         >
           <span className={toggleTrackClasses} aria-hidden>
             <span
-              className={`absolute top-[2px] left-[2px] h-5 w-5 rounded-full bg-text-primary shadow-sm transition-transform duration-200 ${
+              className={`absolute top-[2px] left-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
                 mod.enabled ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
@@ -1447,7 +1447,7 @@ export function ModCard({
         )}
         {(() => {
         const overlayBadges = (
-          <div className="pointer-events-none absolute inset-x-2 top-2 z-10 flex items-start justify-between gap-2">
+          <div className="always-dark pointer-events-none absolute inset-x-2 top-2 z-10 flex items-start justify-between gap-2">
             {mod.enabled && !selectMode && !selectionPreview && (
               mod.priorityMod ? (
                 <div className="pointer-events-auto flex h-5 shrink-0 items-start">

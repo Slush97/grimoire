@@ -195,7 +195,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                         </div>
 
                         {localPath && isValidPath && (
-                            <div className="text-xs font-mono bg-black/30 p-2 rounded text-text-secondary break-all ml-7">
+                            <div className="text-xs font-mono bg-shade/30 p-2 rounded text-text-secondary break-all ml-7">
                                 {localPath}
                             </div>
                         )}

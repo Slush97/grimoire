@@ -195,7 +195,7 @@ export default function MergedContentsModal({
             </div>
             <div className="flex-1 min-w-0 space-y-1 text-sm">
               <div className="flex flex-wrap items-center gap-2">
-                <Tag className="border-hl/20 text-white/90" icon={Layers}>
+                <Tag className="border-hl/20 text-text-primary/90" icon={Layers}>
                   {t('mergedContents.merged', { count: merged.sources.length })}
                 </Tag>
                 <span className="text-text-secondary text-xs">{t('mergedContents.created', { date: createdLabel })}</span>

@@ -6,6 +6,7 @@ import { getSettingsPath } from '../utils/paths';
 // erased at build, so no renderer code is pulled into the main bundle).
 // Re-exported so existing `from './settings'` imports keep working.
 import type { AppSettings, NsfwContentMode } from '../../../src/types/mod';
+import { DEFAULT_THEME, normalizeTheme } from '../../../src/lib/theme';
 export type { AppSettings };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -48,7 +49,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     ignoredConflictFilesGlobal: [],
     ignoredConflictMods: [],
     accentColor: '#f97316',
-    oledMode: false,
+    theme: DEFAULT_THEME,
     sidebarHeroHighlight: 'Abrams',
     dateFormat: 'MM/DD/YYYY',
     language: null,
@@ -121,6 +122,11 @@ function migrateNsfwContentMode(
     return (browseMode ?? 'show') === 'show' && blur === false ? 'show' : 'blur';
 }
 
+/** The OLED toggle that `theme` replaced. */
+interface LegacyThemeSettings {
+    oledMode?: boolean;
+}
+
 interface SettingsCacheEntry {
     path: string;
     mtimeMs: number;
@@ -158,12 +164,14 @@ function readSettings(): AppSettings {
             hideNsfwPreviews,
             browseNsfwContentMode,
             installedHideNsfwPreviews,
+            oledMode,
             ...settings
-        } = JSON.parse(content) as Partial<AppSettings> & LegacyNsfwSettings;
+        } = JSON.parse(content) as Partial<AppSettings> & LegacyNsfwSettings & LegacyThemeSettings;
         const normalized: AppSettings = {
             ...DEFAULT_SETTINGS,
             ...settings,
             updateChannel: settings.updateChannel === 'nightly' ? 'nightly' : 'stable',
+            theme: normalizeTheme(settings.theme, oledMode),
             hiddenCreators: normalizeHiddenCreators(settings.hiddenCreators),
             hiddenMods: normalizeHiddenMods(settings.hiddenMods),
             nsfwContentMode:

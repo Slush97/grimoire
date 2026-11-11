@@ -69,7 +69,7 @@ export function baseSettings(fakeGame) {
     language: 'en',
     zoomFactor: 1,
     accentColor: '#f97316',
-    oledMode: false,
+    theme: 'dark',
     nsfwContentMode: 'blur',
     autoCheckAppUpdates: false,
     autoCheckModUpdates: false,
