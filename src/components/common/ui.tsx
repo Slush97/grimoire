@@ -1,5 +1,5 @@
 import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, Loader2, X, type LucideIcon } from 'lucide-react';
+import { Archive, Check, Loader2, X, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Tx from '../translation/Tx';
 import { ContentFilterContext, useContentFilter } from './contentFilter';
@@ -134,9 +134,9 @@ export function Tag({
 
 export function ArchivedTag({ className = '' }: { className?: string }) {
     return (
-        <span className={`flex-shrink-0 text-[10px] uppercase tracking-wide bg-bg-primary text-text-secondary rounded px-1.5 py-0.5 border border-border ${className}`}>
+        <Tag variant="overlay" icon={Archive} className={`flex-shrink-0 uppercase tracking-wide ${className}`}>
             <Tx k="common.status.archived" fallback="Archived" />
-        </span>
+        </Tag>
     );
 }
 

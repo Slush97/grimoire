@@ -373,7 +373,7 @@ export default function VariantPickerModal({
                     <div className="flex items-center gap-3">
                         <CheckboxMark checked={isActive} />
                         <div className="min-w-0 flex-1">
-                            <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex min-w-0 items-center gap-1">
                             {showVariantHeroes && heroes.length > 0 && (
                                 <HeroIconStack heroes={heroes} maxVisible={4} iconSize={16} maxWidth={32} />
                             )}
@@ -409,6 +409,7 @@ export default function VariantPickerModal({
                                     {hasUpdate && (
                                         <Tag
                                             tone="update"
+                                            variant="overlay"
                                             icon={Download}
                                             title={t('variantPicker.updateAvailable')}
                                             className="flex-shrink-0 uppercase tracking-wide"
