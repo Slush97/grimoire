@@ -12,7 +12,7 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 describe('Installed filter menu', () => {
   let host: HTMLDivElement;
   let root: Root;
-  const changed = { source: vi.fn(), status: vi.fn(), hero: vi.fn(), sort: vi.fn(), view: vi.fn(), reset: vi.fn(), manage: vi.fn() };
+  const changed = { source: vi.fn(), status: vi.fn(), hero: vi.fn(), sort: vi.fn(), view: vi.fn(), reset: vi.fn(), manage: vi.fn(), tagOrder: vi.fn(), resetTagOrder: vi.fn() };
   const heroes = ['Abrams', 'Haze', 'Baba', 'Bebop', 'Calico', 'Drifter', 'Dynamo', 'Ivy', 'Paradox'];
   function Harness({ emptyLists = false, selectedHeroes = [] }: { emptyLists?: boolean; selectedHeroes?: string[] } = {}) {
     const [sort, setSort] = useState<InstalledSortMode>('priority');
@@ -33,6 +33,7 @@ describe('Installed filter menu', () => {
       onHeroChange={next => { changed.hero(next); setHero(next); }}
       tagFilter={tags} tagOptions={[{ key: 'hud', label: 'HUD', count: 3 }]} onTagChange={setTags}
       excludedTagFilter={excluded} onExcludedTagChange={setExcluded} onCreateTag={vi.fn()} onRenameTag={vi.fn()} onDeleteTag={vi.fn()}
+      tagOrder={['hud']} onTagOrderChange={changed.tagOrder} onResetTagOrder={changed.resetTagOrder}
       listFilter={lists} listOptions={emptyLists ? [] : [{ key: 'empty', label: 'Empty list', count: 0 }]} onListChange={setLists}
       onManageLists={changed.manage}
       active={view !== 'all' || sourceSel.length !== 2 || statusSel.length !== 2 || hero.length > 0 || tags.length > 0 || excluded.length > 0 || lists.length > 0}
@@ -58,6 +59,19 @@ describe('Installed filter menu', () => {
     act(() => trigger().click());
   });
   afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it.each([false, true])('confirms a tag-order reset before applying it (confirm=%s)', async confirm => {
+    await act(async () => panel().querySelector<HTMLButtonElement>('[aria-label="installed.filters.tags"]')!.click());
+    const edit = document.querySelector<HTMLButtonElement>('[aria-label="installed.tags.edit"]')!;
+    await act(async () => edit.click());
+    await act(async () => edit.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    expect(trigger().getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('h2')?.textContent).toBe('installed.tags.resetOrderTitle');
+    expect(changed.resetTagOrder).not.toHaveBeenCalled();
+    await act(async () => button(confirm ? 'common.actions.reset' : 'common.actions.cancel').click());
+    expect(changed.resetTagOrder).toHaveBeenCalledTimes(confirm ? 1 : 0);
+    expect(changed.reset).not.toHaveBeenCalled();
+  });
 
   it('preserves empty Source and Status selections and separates keyboard focus from selection', () => {
     act(() => tabs('source')[0].click());

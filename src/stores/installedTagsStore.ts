@@ -7,7 +7,16 @@ import { createStableKeyMigrationPlan, migrateMemberships } from '../lib/stableK
 export type InstalledCustomTag = ModList;
 type TagMod = Pick<Mod, 'id' | 'gameBananaId' | 'sha256' | 'localGroupId' | 'sourceSection'>;
 export const EMPTY_CUSTOM_TAGS: readonly InstalledCustomTag[] = [];
+export const EMPTY_TAG_ORDER: readonly string[] = [];
 const storageKey = (scope: string) => `installedCustomTags:${scope}`;
+const orderStorageKey = (scope: string) => `installedTagOrder:${scope}`;
+
+function readTagOrder(scope: string): readonly string[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(orderStorageKey(scope)) ?? '[]');
+    return Array.isArray(value) ? [...new Set(value.filter((key): key is string => typeof key === 'string' && key.length > 0))] : EMPTY_TAG_ORDER;
+  } catch { return EMPTY_TAG_ORDER; }
+}
 
 export function customTagMemberKey(mod: TagMod): string {
   const key = modPreferenceKey(mod);
@@ -21,7 +30,10 @@ export function customTagsForMods(tags: readonly InstalledCustomTag[], mods: rea
 
 interface InstalledTagsState {
   byScope: Readonly<Record<string, readonly InstalledCustomTag[]>>;
+  orderByScope: Readonly<Record<string, readonly string[]>>;
   load: (scope: string) => void;
+  setOrder: (scope: string, keys: readonly string[]) => void;
+  reorder: (scope: string, keys: readonly string[]) => void;
   create: (scope: string, name: string) => boolean;
   rename: (scope: string, id: string, name: string) => boolean;
   remove: (scope: string, id: string) => void;
@@ -38,14 +50,32 @@ export const useInstalledTagsStore = create<InstalledTagsState>((set, get) => {
   };
   return {
     byScope: {},
+    orderByScope: {},
     load: scope => {
-      if (!get().byScope[scope]) set(state => ({ byScope: { ...state.byScope, [scope]: readStoredModLists(storageKey(scope)) } }));
+      if (get().byScope[scope] && get().orderByScope[scope]) return;
+      const tags = get().byScope[scope] ?? readStoredModLists(storageKey(scope));
+      const order = get().orderByScope[scope] ?? readTagOrder(scope);
+      set(state => ({ byScope: { ...state.byScope, [scope]: tags }, orderByScope: { ...state.orderByScope, [scope]: order } }));
+    },
+    setOrder: (scope, keys) => {
+      const next = [...new Set(keys)];
+      try { localStorage.setItem(orderStorageKey(scope), JSON.stringify(next)); } catch { /* Keep the preference usable in memory. */ }
+      set(state => ({ orderByScope: { ...state.orderByScope, [scope]: next } }));
+    },
+    reorder: (scope, keys) => {
+      const next = [...new Set(keys)];
+      const visible = new Set(next);
+      let index = 0;
+      const previous = get().orderByScope[scope] ?? readTagOrder(scope);
+      const order = previous.map(key => visible.has(key) ? next[index++] : key);
+      get().setOrder(scope, [...order, ...next.slice(index)]);
     },
     create: (scope, name) => {
       const tags = read(scope);
       const result = createList(tags, name);
       if (!result.id || tags.some(tag => tag.id === result.id)) return false;
       save(scope, result.lists);
+      get().setOrder(scope, [`custom:${result.id}`, ...(get().orderByScope[scope] ?? readTagOrder(scope))]);
       return true;
     },
     rename: (scope, id, name) => {
@@ -53,7 +83,11 @@ export const useInstalledTagsStore = create<InstalledTagsState>((set, get) => {
       if (result.applied) save(scope, result.lists);
       return result.applied;
     },
-    remove: (scope, id) => save(scope, deleteList(read(scope), id)),
+    remove: (scope, id) => {
+      save(scope, deleteList(read(scope), id));
+      const order = get().orderByScope[scope] ?? readTagOrder(scope);
+      if (order.includes(`custom:${id}`)) get().setOrder(scope, order.filter(key => key !== `custom:${id}`));
+    },
     toggle: (scope, id, mod) => save(scope, toggleListMembership(read(scope), id, customTagMemberKey(mod))),
     regroup: (scope, before, after) => {
       const tags = read(scope);

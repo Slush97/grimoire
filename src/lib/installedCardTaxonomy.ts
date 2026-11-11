@@ -25,6 +25,32 @@ export interface InstalledCardTaxonomy {
   globalType?: GlobalModType;
 }
 
+/** Unranked tags keep their existing hierarchy and follow explicitly ranked tags. */
+export function sortInstalledTags<T extends { key: string }>(tags: readonly T[], order: readonly string[]): T[] {
+  const ranks = new Map(order.map((key, index) => [key, index]));
+  return [...tags].sort((a, b) => (ranks.get(a.key) ?? order.length) - (ranks.get(b.key) ?? order.length));
+}
+
+/** Match the cards' deepest-first hierarchy without translating tag identities. */
+export function defaultInstalledTagOrder(
+  tags: readonly { key: string; custom?: boolean }[],
+  pathsByModel: InstalledTaxonomyContext['pathsByModel'],
+): string[] {
+  const depths = new Map<string, number>();
+  for (const paths of Object.values(pathsByModel ?? {})) {
+    for (const path of paths?.values() ?? []) {
+      path.forEach((category, index) => {
+        const key = `tag:${normalizeCategoryLabel(category.name).toLowerCase()}`;
+        depths.set(key, Math.max(depths.get(key) ?? -1, index));
+      });
+    }
+  }
+  return [...tags].sort((a, b) =>
+    Number(!!b.custom) - Number(!!a.custom)
+    || (depths.get(b.key) ?? -1) - (depths.get(a.key) ?? -1),
+  ).map(tag => tag.key);
+}
+
 function uniqueLabels(labels: readonly string[]): string[] {
   const unique = new Map<string, string>();
   for (const raw of labels) {

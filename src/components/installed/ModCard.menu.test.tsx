@@ -36,7 +36,7 @@ describe('installed card menu mounting', () => {
     useRequirementsStore.getState().finishToggle();
     useRequirementsStore.setState({ snapshots: {} });
     useCategoryStore.setState({ heroByCategoryId: new Map(), heroNames: [], pathsByModel: {} });
-    useInstalledTagsStore.setState({ byScope: {} });
+    useInstalledTagsStore.setState({ byScope: {}, orderByScope: {} });
     host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);
@@ -147,6 +147,24 @@ describe('installed card menu mounting', () => {
     expect(host.querySelector('[data-fitting-tags]')?.textContent).toContain('Saved mods');
     expect(input.onToggle).not.toHaveBeenCalled();
     expect(input.onTagLocker).not.toHaveBeenCalled();
+  });
+
+  it('updates the visible card tag order from shared priorities without changing mod state', async () => {
+    const settings = { deadlockPath: '/game', devMode: false } as AppSettings;
+    useAppStore.setState({ settings });
+    const scope = getInstallationScope(settings)!;
+    useCategoryStore.setState({ pathsByModel: { ModCategory: buildCategoryPaths([
+      { id: 1, name: 'Root label', itemCount: 1, children: [{ id: 2, name: 'Deep label', itemCount: 1 }] },
+    ]) } });
+    useInstalledTagsStore.setState({ byScope: { [scope]: [{ id: 'favorite', name: 'Favorites', keys: ['Mod:gamebanana:17'] }] } });
+    input = { ...input, mod: { ...input.mod, gameBananaId: 17, categoryId: 2 } };
+    await act(async () => root.render(<ModCard {...input} />));
+    const labels = () => [...host.querySelector('[data-fitting-tags]')!.children]
+      .filter(node => node.getAttribute('aria-hidden') !== 'true').map(node => node.textContent);
+    expect(labels()).toEqual(['Favorites', 'Deep label', 'Root label']);
+    await act(async () => useInstalledTagsStore.getState().setOrder(scope, ['tag:root label', 'custom:favorite', 'tag:deep label']));
+    expect(labels()).toEqual(['Root label', 'Favorites', 'Deep label']);
+    expect(input.onToggle).not.toHaveBeenCalled();
   });
 
   it.each(['grid', 'compact', 'list'] as const)('places repair icons before hero and category tags in %s cards', async viewMode => {

@@ -54,7 +54,7 @@ import { useModUpdatesStore } from '../stores/modUpdatesStore';
 import { useModUpdateCheckStore } from '../stores/modUpdateCheckStore';
 import { useCategoryStore } from '../stores/categoryStore';
 import { categoryModelForSection } from '../lib/categoryPaths';
-import type { InstalledTaxonomyContext } from '../lib/installedCardTaxonomy';
+import { defaultInstalledTagOrder, type InstalledTaxonomyContext } from '../lib/installedCardTaxonomy';
 import { getActiveDeadlockPath, getInstallationScope, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
 import { getConflicts, openModsFolder, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
@@ -148,7 +148,7 @@ import { useShiftKey } from '../components/installed/useShiftKey';
 import { HeroTagLabel } from '../components/installed/chips';
 import { InstalledFilterMenu } from '../components/installed/InstalledFilterMenu';
 import { sortInstalledEntries, type InstalledSortMode } from '../lib/installedSort';
-import { EMPTY_CUSTOM_TAGS, customTagsForMods, useInstalledTagsStore } from '../stores/installedTagsStore';
+import { EMPTY_CUSTOM_TAGS, EMPTY_TAG_ORDER, customTagsForMods, useInstalledTagsStore } from '../stores/installedTagsStore';
 import { InstalledOptionsMenu } from '../components/installed/InstalledOptionsMenu';
 import { InstalledIssuesButton, InstalledIssuesModal } from '../components/installed/InstalledIssuesModal';
 import { useInstalledIssuesStore } from '../stores/installedIssuesStore';
@@ -705,6 +705,7 @@ export default function Installed() {
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const tagScope = getInstallationScope(settings);
   const customTags = useInstalledTagsStore(state => tagScope ? state.byScope[tagScope] ?? EMPTY_CUSTOM_TAGS : EMPTY_CUSTOM_TAGS);
+  const savedTagOrder = useInstalledTagsStore(state => tagScope ? state.orderByScope[tagScope] ?? EMPTY_TAG_ORDER : EMPTY_TAG_ORDER);
   useEffect(() => { if (tagScope) useInstalledTagsStore.getState().load(tagScope); }, [tagScope]);
   const [disabledFavorites, setDisabledFavorites] = useState(readStoredDisabledFavorites);
   const [disabledOrder, setDisabledOrder] = useState(readStoredDisabledOrder);
@@ -3008,6 +3009,8 @@ export default function Installed() {
   const tagOptions = Array.from(tagOptionMap.entries())
     .map(([key, { label, count, custom }]) => ({ key, label: custom ? label : gameBananaCategoryLabel(label, t), count, custom }))
     .sort((a, b) => a.label.localeCompare(b.label));
+  const defaultTagOrder = defaultInstalledTagOrder(tagOptions, pathsByModel);
+  const tagOrder = [...savedTagOrder, ...defaultTagOrder.filter(key => !savedTagOrder.includes(key))];
   const createCustomTag = (name: string) => {
     if (!tagScope || tagOptions.some(tag => tag.label.toLocaleLowerCase() === name.trim().slice(0, 80).toLocaleLowerCase())) return false;
     return useInstalledTagsStore.getState().create(tagScope, name);
@@ -3638,6 +3641,8 @@ export default function Installed() {
               statusSel={statusSel} onStatusChange={setStatusSel} statusCounts={{ enabled: enabledCount, disabled: disabledCount }}
               heroFilter={heroFilter} onHeroChange={setHeroFilter} heroOptions={heroOptions}
               tagFilter={tagFilter} onTagChange={setTagFilter} excludedTagFilter={excludedTagFilter} onExcludedTagChange={setExcludedTagFilter} tagOptions={tagOptions}
+              tagOrder={tagOrder} onTagOrderChange={keys => { if (tagScope) useInstalledTagsStore.getState().reorder(tagScope, keys); }}
+              onResetTagOrder={() => { if (tagScope) useInstalledTagsStore.getState().setOrder(tagScope, defaultInstalledTagOrder(tagOptions, pathsByModel)); }}
               onCreateTag={createCustomTag} onRenameTag={renameCustomTag} onDeleteTag={deleteCustomTag}
               listFilter={listFilter} onListChange={setListFilter} listOptions={listFilterOptions}
               onManageLists={() => setManagingLists(true)} active={filtersActive || listsView}

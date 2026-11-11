@@ -12,7 +12,7 @@ import { modRequirementRefs, requirementKey } from '../../lib/modRequirements';
 import { modRestoreKey } from '../../lib/soloRestore';
 import { useModBackupsStore } from '../../stores/modBackupsStore';
 import { useCategoryStore } from '../../stores/categoryStore';
-import { EMPTY_CUSTOM_TAGS, customTagsForMods, useInstalledTagsStore } from '../../stores/installedTagsStore';
+import { EMPTY_CUSTOM_TAGS, EMPTY_TAG_ORDER, customTagsForMods, useInstalledTagsStore } from '../../stores/installedTagsStore';
 import { getInstallationScope } from '../../lib/appSettings';
 import { getModBackupIdentity } from '../../lib/modBackupIdentity';
 import { restoreModBackup, revealModInFolder } from '../../lib/api';
@@ -25,7 +25,7 @@ import { RevealImage } from '../common/RevealImage';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import PriorityEditor from '../PriorityEditor';
 import { getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel } from '../../lib/lockerUtils';
-import { getInstalledGroupTaxonomy } from '../../lib/installedCardTaxonomy';
+import { getInstalledGroupTaxonomy, sortInstalledTags } from '../../lib/installedCardTaxonomy';
 import { formatRelativeDate, formatAbsoluteDate } from '../../lib/dates';
 import { formatBytes } from '../../lib/formatBytes';
 import { shakeElement } from '../../lib/shakeElement';
@@ -768,9 +768,14 @@ export function ModCard({
   const tagScope = useAppStore(state => getInstallationScope(state.settings));
   const revealNsfwOnHover = useAppStore(state => state.settings?.revealNsfwOnHover ?? false);
   const customTags = useInstalledTagsStore(state => tagScope ? state.byScope[tagScope] ?? EMPTY_CUSTOM_TAGS : EMPTY_CUSTOM_TAGS);
+  const tagOrder = useInstalledTagsStore(state => tagScope ? state.orderByScope[tagScope] ?? EMPTY_TAG_ORDER : EMPTY_TAG_ORDER);
   const assignedCustomTags = customTagsForMods(customTags, group?.variants ?? [mod]);
   const baseTaxonomy = getInstalledGroupTaxonomy(mod, group?.variants ?? [mod], taxonomyContext);
-  const cardTaxonomy = { ...baseTaxonomy, tags: [...new Set([...baseTaxonomy.tags, ...assignedCustomTags.map(tag => tag.name)])] };
+  const cardTags = sortInstalledTags([
+    ...assignedCustomTags.sort((a, b) => a.name.localeCompare(b.name)).map(tag => ({ key: `custom:${tag.id}`, label: tag.name })),
+    ...baseTaxonomy.tags.map(label => ({ key: `tag:${label.toLowerCase()}`, label })),
+  ], tagOrder);
+  const cardTaxonomy = { ...baseTaxonomy, tags: [...new Set(cardTags.map(tag => tag.label))] };
   const tagHeroNames = heroNames.length ? heroNames : HERO_NAMES_SORTED;
   const restoreBackup = async (backupId: string) => {
     if (backupBusy) return;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildCategoryPaths } from './categoryPaths';
-import { getInstalledCardTaxonomy, getInstalledGroupTaxonomy, installedTaxonomyTags, type InstalledTaxonomyContext } from './installedCardTaxonomy';
+import { defaultInstalledTagOrder, sortInstalledTags, getInstalledCardTaxonomy, getInstalledGroupTaxonomy, installedTaxonomyTags, type InstalledTaxonomyContext } from './installedCardTaxonomy';
 
 const context: InstalledTaxonomyContext = {
   heroNames: ['Solomon', 'Haze', 'Wraith'],
@@ -16,6 +16,12 @@ const context: InstalledTaxonomyContext = {
 };
 
 describe('getInstalledCardTaxonomy', () => {
+  it('defaults custom tags first, retains the category hierarchy, and allows manual priorities to override both', () => {
+    const tags = [{ key: 'tag:skins' }, { key: 'custom:favorites', custom: true }, { key: 'tag:faithful/vanilla+' }];
+    expect(defaultInstalledTagOrder(tags, context.pathsByModel)).toEqual(['custom:favorites', 'tag:faithful/vanilla+', 'tag:skins']);
+    expect(sortInstalledTags(tags, ['tag:skins', 'custom:favorites']).map(tag => tag.key)).toEqual(['tag:skins', 'custom:favorites', 'tag:faithful/vanilla+']);
+    expect(sortInstalledTags(tags, []).map(tag => tag.key)).toEqual(tags.map(tag => tag.key));
+  });
   it('keeps every non-hero ancestor and the corrected leaf with one hero icon', () => {
     expect(getInstalledCardTaxonomy({ gameBananaId: 1, categoryId: 3, categoryName: 'Old leaf name' }, context)).toEqual({
       heroNames: ['Solomon'], categoryLabels: ['Skins', 'Faithful/Vanilla+'], categoryLabel: 'Faithful/Vanilla+', globalType: undefined,

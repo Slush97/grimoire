@@ -7,6 +7,7 @@ import { Button, MultiSelectSegments } from '../common/ui';
 import { FilterCheckList, type FilterCheckOption } from './FilterCheckList';
 import { InstalledTagSelect, type InstalledTagOption, type InstalledTagSelectProps } from './InstalledTagSelect';
 import { HeroIconStack } from './chips';
+import { ConfirmModal } from '../common/PageComponents';
 import type { InstalledSortMode } from '../../lib/installedSort';
 import type { InstalledListView } from '../../lib/installedListGroups';
 
@@ -35,6 +36,9 @@ export interface InstalledFilterMenuProps {
   onCreateTag: InstalledTagSelectProps['onCreate'];
   onRenameTag: InstalledTagSelectProps['onRename'];
   onDeleteTag: InstalledTagSelectProps['onDelete'];
+  tagOrder: readonly string[];
+  onTagOrderChange: (keys: string[]) => void;
+  onResetTagOrder: () => void;
   listFilter: readonly string[];
   onListChange: (values: string[]) => void;
   listOptions: readonly FilterCheckOption[];
@@ -53,10 +57,12 @@ export function InstalledFilterMenu({
   statusSel, onStatusChange, statusCounts, heroFilter, onHeroChange, heroOptions,
   tagFilter, onTagChange, tagOptions, listFilter, onListChange, listOptions,
   excludedTagFilter, onExcludedTagChange, onCreateTag, onRenameTag, onDeleteTag,
+  tagOrder, onTagOrderChange, onResetTagOrder,
   onManageLists, active, onReset,
 }: InstalledFilterMenuProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [resetTagOrderOpen, setResetTagOrderOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
   const sortName = useId();
   const close = useCallback(() => setOpen(false), []);
@@ -134,6 +140,7 @@ export function InstalledFilterMenu({
               className="text-xs text-text-secondary hover:text-accent cursor-pointer">{t('common.actions.clear')}</button>}
           </div>
           <InstalledTagSelect options={tagOptions} included={tagFilter} excluded={excludedTagFilter}
+            order={tagOrder} onOrderChange={onTagOrderChange} onResetOrder={() => { close(); setResetTagOrderOpen(true); }}
             onInclude={key => { onTagChange(toggleValue(tagFilter, key)); onExcludedTagChange(excludedTagFilter.filter(value => value !== key)); }}
             onExclude={key => { onExcludedTagChange(toggleValue(excludedTagFilter, key)); onTagChange(tagFilter.filter(value => value !== key)); }}
             onCreate={onCreateTag} onRename={onRenameTag} onDelete={onDeleteTag} />
@@ -151,5 +158,9 @@ export function InstalledFilterMenu({
         </FilterCheckList>
       </div>
     </AnchoredPopover>
+    <ConfirmModal isOpen={resetTagOrderOpen} onCancel={() => setResetTagOrderOpen(false)}
+      onConfirm={() => { onResetTagOrder(); setResetTagOrderOpen(false); }}
+      title={t('installed.tags.resetOrderTitle')} message={t('installed.tags.resetOrderMessage')}
+      confirmLabel={t('common.actions.reset')} />
   </div>;
 }

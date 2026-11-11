@@ -118,7 +118,7 @@ Installed cards and filter facets share `installedCardTaxonomy.ts` and the categ
 
 - The Tags filter includes every non-hero ancestor and leaf label, plus the existing Sounds/Wip section tags. Heroes have their separate filter.
 - Installed cards use 22px hero icons in a stack capped at 66px. Earlier heroes overlap in front of later heroes. Up to six hero icons are visible; from seven heroes onward, five icons and a shadowed Soul Urn represent the group. The urn shares the overlapping slots and always sits behind every hero. The stack's mouse tooltip lists every hero separated by commas. The reusable 64px urn asset keeps its original colors; only this overflow treatment darkens it with CSS.
-- Card category tags run from the representative file's leaf toward its ancestors, with deeper categories before parents and custom fallback labels last. Their single 22px-high line fits as many tags as the available width allows, reserving the measured width of a `+n` chip whose mouse tooltip lists the remaining labels. Filter tag sets and counts are unchanged.
+- Card category tags default to the representative file's leaf before its ancestors, with deeper categories before parents and custom fallback labels last. A saved tag priority overrides this ordering across Installed cards. Their single 22px-high line fits as many tags as the available width allows, reserving the measured width of a `+n` chip whose mouse tooltip lists the remaining labels. Filter tag sets and counts are unchanged.
 - Grouped variants contribute their combined categories and hero identities, with each group counted once per filter option.
 - CameraOff, FileWarning, and requirements indicators share one overlapping stack before the hero stack and category tags in every Installed layout. Each 16px icon is centered in a 22px slot, with their shared stack currently capped at 110px. Severity colors and detailed tooltips are retained. Other warning badges keep their existing placement. Merged-source updates use the normal orange Update tag without an extra hover effect; source counts and replacement details remain in its tooltip.
 - When variant hero sets differ, the installed variant picker shows each file's own hero icons using the shared overlapping stack. Up to four 16px icons overlap within 32px; more heroes use three hero icons and the overflow urn, with a tooltip listing every hero. It omits these repeated icons when all files target the same heroes, and never adds category text to the variant rows.
@@ -155,11 +155,23 @@ and must not match any excluded tag. Right-clicking an included tag switches it
 to excluded; right-clicking an excluded tag clears it. Left-clicking either kind
 of selected tag clears it. The trigger shows a single tag as `+ HUD` or `- HUD`.
 Multiple selections show separate counts, such as `+2/-1 Tags`, with empty sides
-and their separator omitted.
+and their separator omitted. Built-in names are darker in edit mode to distinguish
+them from editable custom names.
 The selector's search can be switched to edit mode to create, rename, or delete
 custom tags. The edit toggle sits beside the input; renaming uses that same input
 and Enter to save, with an X to cancel.
-Custom tags appear first during editing. GameBanana categories and
+Edit mode lists built-in and custom tags together by priority. The leading number
+ends in a dot when idle; clicking it selects a digits-only field, saved with Enter
+or on leaving the field. Hovering a tag reveals up/down arrows directly before
+the number in reserved space. Position 1 has the highest priority and appears
+first on mod cards. New custom tags start at position 1. Defaults place custom
+tags first and retain the existing deepest-first category hierarchy below them;
+manual priorities can place custom tags anywhere. Right-clicking the active Edit Tags
+button asks for confirmation before restoring that hierarchy and placing custom
+tags first. Cancelling leaves the order intact. Reordering preserves saved slots
+for temporarily absent tags. Priorities persist separately per
+installation and normal/developer mode, using stable raw tag keys so translation
+or custom-tag renaming does not change their positions. Category names and
 local General classifications remain read-only. Assign custom tags through the
 card's Custom Tags submenu. These user preferences reuse the list catalogue
 operations and are saved separately per installation and normal/developer mode.
