@@ -991,6 +991,20 @@
     "shownToast": "Мод «{{name}}» снова виден в разделе «Обзор».",
     "none": "Сейчас нет скрытых модов."
   },
+  "hiddenContent": {
+    "hiddenOn": "Скрыто {{date}}",
+    "hiddenOnFrom": "Скрыто {{date}} из «{{mod}}»",
+    "uploads_one": "{{count}} загрузка",
+    "uploads_few": "{{count}} загрузки",
+    "uploads_many": "{{count}} загрузок",
+    "uploads_other": "{{count}} загрузки",
+    "byCreator": "автор: {{name}}",
+    "addNote": "Добавить заметку",
+    "editNote": "Изменить заметку",
+    "noteFor": "Заметка для {{name}}",
+    "notePlaceholder": "Почему вы это скрыли?",
+    "openMod": "Открыть {{name}}"
+  },
   "settings": {
     "header": {
       "description": "Пути к игре, параметры и обслуживание"
@@ -1087,10 +1101,15 @@
       "accentNamed": "Акцентный цвет: {{name}}",
       "pickCustomColor": "Выбрать свой цвет",
       "accentCustom": "Свой акцент",
+      "yourColor": "Использовать свой цвет {{color}}",
+      "removeYourColor": "Удалить {{color}}",
       "selectedColorPreview": "Превью выбранного цвета",
       "customAccent": "Свой акцентный цвет",
-      "oled": {
-        "title": "Режим OLED"
+      "theme": {
+        "title": "Тема",
+        "dark": "Тёмная",
+        "oled": "OLED",
+        "light": "Светлая"
       },
       "launchButtons": {
         "combine": "Объединить кнопки запуска",
@@ -1130,6 +1149,8 @@
         "description": "Подкрашивает фон приложения светом из верхнего левого и нижнего правого углов.",
         "none": "Без свечения",
         "custom": "Своё свечение",
+        "yourGlow": "Использовать своё свечение {{number}}",
+        "removeYourGlow": "Удалить своё свечение {{number}}",
         "customTitle": "Своё фоновое свечение",
         "topLeft": "Сверху слева",
         "bottomRight": "Снизу справа",

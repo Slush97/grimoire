@@ -5,7 +5,9 @@ import { getSettingsPath } from '../utils/paths';
 // AppSettings is single-sourced in src/types/mod.ts (type-only import:
 // erased at build, so no renderer code is pulled into the main bundle).
 // Re-exported so existing `from './settings'` imports keep working.
-import type { AppSettings, NsfwContentMode } from '../../../src/types/mod';
+import { HIDDEN_NOTE_MAX_LENGTH, type AppSettings, type NsfwContentMode } from '../../../src/types/mod';
+import { DEFAULT_THEME, normalizeTheme } from '../../../src/lib/theme';
+import { MAX_CUSTOM_SWATCHES } from '../../../src/lib/customSwatches';
 export type { AppSettings };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -22,6 +24,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     hiddenCreators: [],
     hiddenMods: [],
     lockerCardsExpandedByDefault: false,
+    installedGroupClickOpensDetails: false,
     autoDisableSiblingVariants: true,
     autoMatchRemainingFiles: true,
     skipModReplacementConfirmation: false,
@@ -47,7 +50,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     ignoredConflictFilesGlobal: [],
     ignoredConflictMods: [],
     accentColor: '#f97316',
-    oledMode: false,
+    theme: DEFAULT_THEME,
+    customAccentColors: [],
     sidebarHeroHighlight: 'Abrams',
     dateFormat: 'MM/DD/YYYY',
     language: null,
@@ -57,19 +61,53 @@ const DEFAULT_SETTINGS: AppSettings = {
     unifiedLaunchButton: false,
     sidebarTransparent: false,
     backgroundGradient: null,
+    customBackgroundGradients: [],
     verboseModTrace: false,
     forgeLocalInstallEnabled: false,
 };
 
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+/** The user's own accent swatches from user-editable settings.json: hex colors
+ *  only, no repeats, the newest few. */
+function normalizeCustomAccentColors(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const colors: string[] = [];
+    for (const candidate of value) {
+        if (typeof candidate !== 'string' || !HEX_COLOR.test(candidate)) continue;
+        const color = candidate.toLowerCase();
+        if (!colors.includes(color)) colors.push(color);
+    }
+    return colors.slice(-MAX_CUSTOM_SWATCHES);
+}
+
+/** Same for the user's own background glows, each a pair of hex colors. */
+function normalizeCustomBackgroundGradients(value: unknown): { from: string; to: string }[] {
+    if (!Array.isArray(value)) return [];
+    const gradients: { from: string; to: string }[] = [];
+    for (const candidate of value) {
+        const { from, to } = (candidate ?? {}) as { from?: unknown; to?: unknown };
+        if (typeof from !== 'string' || typeof to !== 'string' || !HEX_COLOR.test(from) || !HEX_COLOR.test(to)) continue;
+        const gradient = { from: from.toLowerCase(), to: to.toLowerCase() };
+        if (!gradients.some((entry) => entry.from === gradient.from && entry.to === gradient.to)) gradients.push(gradient);
+    }
+    return gradients.slice(-MAX_CUSTOM_SWATCHES);
+}
+
 /** One hidden creator/mod entry from user-editable settings.json, or null when
  *  its id or name is unusable. */
-function parseHiddenEntry(candidate: unknown): { id: number; name: string } | null {
+function parseHiddenEntry(candidate: unknown): { id: number; name: string; hiddenAt?: number; note?: string } | null {
     if (!candidate || typeof candidate !== 'object') return null;
-    const { id, name } = candidate as { id?: unknown; name?: unknown };
+    const { id, name, hiddenAt, note } = candidate as { id?: unknown; name?: unknown; hiddenAt?: unknown; note?: unknown };
     if (!Number.isSafeInteger(id) || (id as number) <= 0 || typeof name !== 'string') return null;
     const trimmedName = name.trim();
     if (!trimmedName) return null;
-    return { id: id as number, name: trimmedName.slice(0, 200) };
+    const entry: { id: number; name: string; hiddenAt?: number; note?: string } = { id: id as number, name: trimmedName.slice(0, 200) };
+    // Both are optional reminders: a bad value drops the reminder, never the entry.
+    if (Number.isSafeInteger(hiddenAt) && (hiddenAt as number) > 0) entry.hiddenAt = hiddenAt as number;
+    const trimmedNote = typeof note === 'string' ? note.trim().slice(0, HIDDEN_NOTE_MAX_LENGTH) : '';
+    if (trimmedNote) entry.note = trimmedNote;
+    return entry;
 }
 
 /** Normalize settings.json data into a small, deterministic creator list.
@@ -81,7 +119,11 @@ function normalizeHiddenCreators(value: unknown): AppSettings['hiddenCreators'] 
     const byId = new Map<number, AppSettings['hiddenCreators'][number]>();
     for (const candidate of value) {
         const entry = parseHiddenEntry(candidate);
-        if (entry) byId.set(entry.id, entry);
+        if (!entry) continue;
+        const fromMod = parseHiddenEntry((candidate as { fromMod?: unknown }).fromMod);
+        const section = (candidate as { fromMod?: { section?: unknown } }).fromMod?.section;
+        byId.set(entry.id, fromMod && typeof section === 'string' && HIDDEN_MOD_SECTIONS.has(section)
+            ? { ...entry, fromMod: { id: fromMod.id, name: fromMod.name, section } } : entry);
     }
     return [...byId.values()];
 }
@@ -118,6 +160,11 @@ function migrateNsfwContentMode(
 ): NsfwContentMode {
     if (browseMode === 'hide') return 'hide';
     return (browseMode ?? 'show') === 'show' && blur === false ? 'show' : 'blur';
+}
+
+/** The OLED toggle that `theme` replaced. */
+interface LegacyThemeSettings {
+    oledMode?: boolean;
 }
 
 interface SettingsCacheEntry {
@@ -157,13 +204,17 @@ function readSettings(): AppSettings {
             hideNsfwPreviews,
             browseNsfwContentMode,
             installedHideNsfwPreviews,
+            oledMode,
             ...settings
-        } = JSON.parse(content) as Partial<AppSettings> & LegacyNsfwSettings;
+        } = JSON.parse(content) as Partial<AppSettings> & LegacyNsfwSettings & LegacyThemeSettings;
         const normalized: AppSettings = {
             ...DEFAULT_SETTINGS,
             ...settings,
             updateChannel: settings.updateChannel === 'nightly' ? 'nightly' : 'stable',
+            theme: normalizeTheme(settings.theme, oledMode),
             hiddenCreators: normalizeHiddenCreators(settings.hiddenCreators),
+            customAccentColors: normalizeCustomAccentColors(settings.customAccentColors),
+            customBackgroundGradients: normalizeCustomBackgroundGradients(settings.customBackgroundGradients),
             hiddenMods: normalizeHiddenMods(settings.hiddenMods),
             nsfwContentMode:
                 settings.nsfwContentMode ??

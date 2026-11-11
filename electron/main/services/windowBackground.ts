@@ -1,14 +1,17 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, nativeTheme } from 'electron';
 import { loadSettings } from './settings';
-import { windowBackgroundColor } from '../../../src/lib/oledMode';
+import { nativeThemeSource, windowBackgroundColor } from '../../../src/lib/theme';
 
 /**
- * Repaint every window's native background to match the saved OLED setting.
- * Called after any settings save, like syncForgeBridgeWithSettings; new
- * windows get the color at construction via windowBackgroundColor.
+ * Match the OS chrome (title bar, native menus) and every window's native
+ * background to the saved theme. Called after any settings save, like
+ * syncForgeBridgeWithSettings; new windows get both at construction.
  */
 export function syncWindowBackgroundWithSettings(): void {
-    const color = windowBackgroundColor(loadSettings().oledMode);
+    const { theme } = loadSettings();
+    const source = nativeThemeSource(theme);
+    if (nativeTheme.themeSource !== source) nativeTheme.themeSource = source;
+    const color = windowBackgroundColor(theme);
     for (const window of BrowserWindow.getAllWindows()) {
         window.setBackgroundColor(color);
     }

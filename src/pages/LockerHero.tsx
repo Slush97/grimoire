@@ -394,13 +394,7 @@ export function LockerHeroView({
             maskImage: 'linear-gradient(to right, black 0%, black 26%, transparent 60%)',
           }}
         />
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              'linear-gradient(to right, var(--color-bg-secondary) 0%, rgba(26,26,26,0.95) 40%, rgba(26,26,26,0.75) 58%, rgba(26,26,26,0.4) 74%, rgba(26,26,26,0.15) 87%, transparent 97%)',
-          }}
-        />
+        <div className="locker-hero-glass absolute inset-0" />
       </div>
 
       {/* Left sidebar: hero identity + section nav, formatted like the Global
@@ -434,14 +428,14 @@ export function LockerHeroView({
             hero name (issue #208). */}
         <HeroNavigation {...navigation}>
           {hideHeroName && backdropImage ? null : nameFailed ? (
-            <h2 className="truncate text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+            <h2 className="truncate text-2xl font-bold text-text-primary drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] light:drop-shadow-none">
               {hero.name}
             </h2>
           ) : (
             <img
               src={getHeroNamePath(hero.name)}
               alt={hero.name}
-              className="h-8 w-auto max-w-full object-contain"
+              className="h-8 w-auto max-w-full object-contain light:invert"
               onError={() => setNameFailed(true)}
             />
           )}
@@ -465,9 +459,9 @@ export function LockerHeroView({
                       : 'border-transparent hover:bg-hl/10 cursor-pointer'
                 }`}
               >
-                <Icon className="h-4 w-4 flex-shrink-0 text-white/80" />
-                <span className="flex-1 truncate text-sm font-medium text-white">{label}</span>
-                {count !== null && <span className="text-xs text-white/50">{count}</span>}
+                <Icon className="h-4 w-4 flex-shrink-0 text-text-primary/80" />
+                <span className="flex-1 truncate text-sm font-medium text-text-primary">{label}</span>
+                {count !== null && <span className="text-xs text-text-primary/50">{count}</span>}
               </button>
             );
           })}
@@ -496,10 +490,10 @@ export function LockerHeroView({
         <div className="space-y-4 p-6">
           {contentHeading && (
             <div className="flex items-baseline gap-2">
-              <h3 className="text-base font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+              <h3 className="text-base font-semibold text-text-primary drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] light:drop-shadow-none">
                 {contentHeading.title}
               </h3>
-              <span className="text-xs text-white/60">{contentHeading.count}</span>
+              <span className="text-xs text-text-primary/60">{contentHeading.count}</span>
             </div>
           )}
           {selectionPanel}

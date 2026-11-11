@@ -1,4 +1,5 @@
 import type { ProfileShuffle } from '../../src/lib/profileShuffle';
+import { themeFromArguments } from '../../src/lib/theme';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { ChooseModUpdateReplacementArgs, ModUpdateState, StartModUpdatesArgs } from '../../src/types/modUpdates';
 import type {
@@ -99,9 +100,9 @@ import type {
 contextBridge.exposeInMainWorld('electronAPI', {
     platform: process.platform,
 
-    // Saved OLED setting, forwarded by main via additionalArguments so the
-    // renderer can theme itself before the settings IPC round-trip resolves.
-    initialOledMode: process.argv.includes('--grimoire-oled'),
+    // Saved theme, forwarded by main via additionalArguments so the renderer
+    // can theme itself before the settings IPC round-trip resolves.
+    initialTheme: themeFromArguments(process.argv),
 
     // Settings
     detectDeadlock: () => ipcRenderer.invoke('detect-deadlock'),
@@ -714,6 +715,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     isSyncInProgress: () => ipcRenderer.invoke('is-sync-in-progress'),
     searchLocalMods: (options: SearchLocalModsOptions) => ipcRenderer.invoke('search-local-mods', options),
     getCachedMod: (id: number, section?: string) => ipcRenderer.invoke('get-cached-mod', id, section),
+    getHiddenContentPreviews: (creatorIds: number[], mods: Array<{ id: number; section: string }>) =>
+        ipcRenderer.invoke('get-hidden-content-previews', creatorIds, mods),
     getLocalModCount: (section?: string) => ipcRenderer.invoke('get-local-mod-count', section),
     getLocalCategories: (section?: string) => ipcRenderer.invoke('get-local-categories', section),
     getSectionStats: () => ipcRenderer.invoke('get-section-stats'),
