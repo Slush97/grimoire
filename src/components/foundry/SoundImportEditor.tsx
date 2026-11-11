@@ -70,9 +70,10 @@ function rmsOf(buffer: AudioBuffer, startSample: number, endSample: number): num
     return count ? Math.sqrt(sum / count) : 0;
 }
 
-/** Read a Tailwind theme color var, falling back to a literal for canvas use. */
-function themeColor(varName: string, fallback: string): string {
-    const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+/** Read a Tailwind theme color var as `el` sees it (an `always-dark` ancestor
+ *  overrides the root's tokens), falling back to a literal for canvas use. */
+function themeColor(el: Element, varName: string, fallback: string): string {
+    const v = getComputedStyle(el).getPropertyValue(varName).trim();
     return v || fallback;
 }
 
@@ -293,8 +294,8 @@ export function SoundImportEditor({ file, targetClipPath, onChange, initialEdits
         g.scale(dpr, dpr);
         g.clearRect(0, 0, w, h);
 
-        const accent = themeColor('--color-accent', '#b07a3c');
-        const muted = themeColor('--color-text-secondary', '#9a8a72');
+        const accent = themeColor(canvas, '--color-accent', '#b07a3c');
+        const muted = themeColor(canvas, '--color-text-secondary', '#9a8a72');
         const mid = h / 2;
         const sx = durationMs ? (startMs / durationMs) * w : 0;
         const ex = durationMs ? (endMs / durationMs) * w : w;

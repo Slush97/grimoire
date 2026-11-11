@@ -11,6 +11,7 @@ import {
   sameGradient,
   type BackgroundGradient,
 } from '../../lib/backgroundGradient';
+import { normalizeHex } from '../../lib/accentColor';
 import { applyCustomSwatch, customSwatches, removeCustomSwatch, sameSwatches } from '../../lib/customSwatches';
 import RemovableSwatch from './RemovableSwatch';
 import { Button, ModalHeader, SegmentedControl } from '../common/ui';
@@ -88,7 +89,9 @@ export default function BackgroundGradientPicker() {
   const select = async (gradient: BackgroundGradient | null) => {
     applyBackgroundGradient(gradient);
     if (settings) {
-      await saveSettings({ ...settings, backgroundGradient: gradient });
+      // A custom glow from before swatches existed is only derived while it is
+      // active, so store the derived list or leaving it would lose it.
+      await saveSettings({ ...settings, backgroundGradient: gradient, customBackgroundGradients: custom });
     }
   };
 
@@ -111,11 +114,12 @@ export default function BackgroundGradientPicker() {
 
   const commit = useCallback(async () => {
     setPickerOpen(false);
-    applyBackgroundGradient(draft);
+    const gradient = { from: normalizeHex(draft.from), to: normalizeHex(draft.to) };
+    applyBackgroundGradient(gradient);
     if (!settings) return;
-    const next = applyCustomSwatch(custom, saved, draft, BACKGROUND_SWATCH_RULES);
-    if (sameGradient(draft, saved) && sameSwatches(next, settings.customBackgroundGradients ?? [], BACKGROUND_SWATCH_RULES)) return;
-    await saveSettings({ ...settings, backgroundGradient: draft, customBackgroundGradients: next });
+    const next = applyCustomSwatch(custom, saved, gradient, BACKGROUND_SWATCH_RULES);
+    if (sameGradient(gradient, saved) && sameSwatches(next, settings.customBackgroundGradients ?? [], BACKGROUND_SWATCH_RULES)) return;
+    await saveSettings({ ...settings, backgroundGradient: gradient, customBackgroundGradients: next });
   }, [draft, saved, settings, saveSettings, custom]);
 
   const removeCustom = async (gradient: BackgroundGradient) => {

@@ -3,7 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { Check, Pipette } from 'lucide-react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import { useAppStore } from '../../stores/appStore';
-import { ACCENT_PRESETS, ACCENT_SWATCH_RULES, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../../lib/accentColor';
+import {
+  ACCENT_PRESETS,
+  ACCENT_SWATCH_RULES,
+  DEFAULT_ACCENT_COLOR,
+  accentForeground,
+  applyAccentColor,
+  normalizeHex,
+} from '../../lib/accentColor';
 import { applyCustomSwatch, customSwatches, removeCustomSwatch, sameSwatches } from '../../lib/customSwatches';
 import RemovableSwatch from './RemovableSwatch';
 import { Button, ModalHeader } from '../common/ui';
@@ -29,28 +36,17 @@ export default function AccentColorPicker() {
   const [customPickerOpen, setCustomPickerOpen] = useState(false);
   const [customDraft, setCustomDraft] = useState<string | null>(null);
 
-  const handleAccentChange = async (color: string) => {
-    // Apply optimistically so the UI re-themes the moment the swatch is
-    // clicked, even before the settings round-trip finishes. The store push
-    // in saveSettings re-triggers Layout's effect, but doing it here too
-    // avoids a perceptible flash on slower disks.
-    applyAccentColor(color);
-    if (settings) {
-      await saveSettings({ ...settings, accentColor: color });
-    }
-  };
+  const current = normalizeHex(settings?.accentColor ?? DEFAULT_ACCENT_COLOR);
+  const custom = customSwatches(settings?.customAccentColors, current, ACCENT_SWATCH_RULES);
 
   const handleCustomDraft = (color: string) => {
     applyAccentColor(color);
     setCustomDraft(color);
   };
 
-  const current = (settings?.accentColor ?? DEFAULT_ACCENT_COLOR).toLowerCase();
-  const custom = customSwatches(settings?.customAccentColors, current, ACCENT_SWATCH_RULES);
-
   const commitCustomDraft = useCallback(async () => {
     setCustomPickerOpen(false);
-    const color = customDraft?.toLowerCase();
+    const color = customDraft ? normalizeHex(customDraft) : null;
     setCustomDraft(null);
     if (!color || !settings) return;
     const next = applyCustomSwatch(custom, current, color, ACCENT_SWATCH_RULES);
@@ -65,6 +61,19 @@ export default function AccentColorPicker() {
     const accentColor = color === current ? DEFAULT_ACCENT_COLOR : settings.accentColor;
     applyAccentColor(accentColor);
     await saveSettings({ ...settings, accentColor, customAccentColors: next });
+  };
+
+  const handleAccentChange = async (color: string) => {
+    // Apply optimistically so the UI re-themes the moment the swatch is
+    // clicked, even before the settings round-trip finishes. The store push
+    // in saveSettings re-triggers Layout's effect, but doing it here too
+    // avoids a perceptible flash on slower disks.
+    applyAccentColor(color);
+    if (settings) {
+      // A custom color from before swatches existed is only derived while it
+      // is active, so store the derived list or leaving it would lose it.
+      await saveSettings({ ...settings, accentColor: color, customAccentColors: custom });
+    }
   };
 
   const openCustomPicker = () => {
@@ -110,7 +119,7 @@ export default function AccentColorPicker() {
               className={`${SWATCH_BASE} ${isActive ? 'border-hl/40' : 'border-hl/10 hover:border-hl/30'}`}
               style={{ backgroundColor: preset.color }}
             >
-              {isActive && <Check className="w-4 h-4 text-black/70 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)]" />}
+              {isActive && <Check className="w-4 h-4" style={{ color: accentForeground(preset.color) }} />}
             </button>
           );
         })}
@@ -133,7 +142,7 @@ export default function AccentColorPicker() {
                 className={`${SWATCH_BASE} ${isActive ? 'border-hl/40' : 'border-hl/10 hover:border-hl/30'}`}
                 style={{ backgroundColor: color }}
               >
-                {isActive && <Check className="w-4 h-4 text-black/70 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)]" />}
+                {isActive && <Check className="w-4 h-4" style={{ color: accentForeground(color) }} />}
               </button>
             </RemovableSwatch>
           );

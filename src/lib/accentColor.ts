@@ -35,6 +35,18 @@ export const ACCENT_SWATCH_RULES: SwatchRules<string> = {
   isPreset: (color) => ACCENT_PRESETS.some((preset) => sameColor(preset.color, color)),
 };
 
+/**
+ * Lowercase `#rrggbb` for a picked color. react-colorful's hex input emits the
+ * three-digit shorthand as soon as three digits are typed, but the settings
+ * normalizer in the main process, `darken` and `accentForeground` all want six.
+ * Anything that is not a hex color comes back lowercased and otherwise as is.
+ */
+export function normalizeHex(hex: string): string {
+  const color = hex.trim().toLowerCase();
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(color);
+  return short ? `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}` : color;
+}
+
 function darken(hex: string, amount = 0.12): string {
   const m = hex.replace('#', '').match(/.{2}/g);
   if (!m) return hex;
@@ -66,11 +78,11 @@ export function accentForeground(hex: string): string {
  * already wired to `--color-accent` updates without rerendering.
  */
 export function applyAccentColor(color: string | null | undefined): void {
-  const base = color || DEFAULT_ACCENT_COLOR;
+  const base = normalizeHex(color || DEFAULT_ACCENT_COLOR);
   // Prefer the preset's curated hover (slightly darker, same saturation).
   // For ad-hoc/custom hex values, fall back to a 12% darken so hover states
   // still have visible feedback.
-  const preset = ACCENT_PRESETS.find((p) => p.color.toLowerCase() === base.toLowerCase());
+  const preset = ACCENT_PRESETS.find((p) => p.color.toLowerCase() === base);
   const hover = preset ? preset.hover : darken(base);
   const root = document.documentElement;
   root.style.setProperty('--color-accent', base);

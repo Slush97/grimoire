@@ -818,7 +818,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           </div>
         ) : queuePosition ? (
           <div
-            className="flex items-center justify-center bg-accent text-bg-primary rounded-full font-bold ring-1 ring-border shadow-md w-8 h-8 text-xs"
+            className="flex items-center justify-center bg-accent text-accent-foreground rounded-full font-bold ring-1 ring-border shadow-md w-8 h-8 text-xs"
             title={t('browse.card.queuedNumber', { position: queuePosition })}
           >
             {queuePosition}

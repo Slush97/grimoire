@@ -208,11 +208,11 @@
   --color-hl: #1c1b19;
   --color-shade: rgb(28 27 25 / 0.2);
   --color-mod-title: #262421;
-  --color-state-success: #15803d;
-  --color-state-warning: #a16207;
-  --color-state-danger: #dc2626;
-  --color-state-info: #2563eb;
-  --color-state-update: #ea580c;
+  --color-state-success: #166534;
+  --color-state-warning: #854d0e;
+  --color-state-danger: #b91c1c;
+  --color-state-info: #1d4ed8;
+  --color-state-update: #c2410c;
 }
 
 /* Raw Tailwind palette colors still in use (the debt `pnpm ui:check` tracks)

@@ -128,8 +128,8 @@ export default function ModThumbnail({
       </div>
       {resolvedBlur && (
         <div data-nsfw-overlay className="absolute inset-0 flex flex-col items-center justify-center bg-bg-primary/40">
-          <EyeOff className="w-4 h-4 text-white/70" />
-          <span className="text-[9px] text-white/70 mt-0.5">{t('modThumbnail.nsfw')}</span>
+          <EyeOff className="w-4 h-4 text-text-primary/70" />
+          <span className="text-[9px] text-text-primary/70 mt-0.5">{t('modThumbnail.nsfw')}</span>
         </div>
       )}
     </div>
@@ -207,8 +207,8 @@ function MergedCollage({ sources, alt, className, shouldBlur, enableImageContext
       </div>
       {shouldBlur && (
         <div data-nsfw-overlay className="absolute inset-0 flex flex-col items-center justify-center bg-bg-primary/40 pointer-events-none">
-          <EyeOff className="w-4 h-4 text-white/70" />
-          <span className="text-[9px] text-white/70 mt-0.5">{t('modThumbnail.nsfw')}</span>
+          <EyeOff className="w-4 h-4 text-text-primary/70" />
+          <span className="text-[9px] text-text-primary/70 mt-0.5">{t('modThumbnail.nsfw')}</span>
         </div>
       )}
     </div>

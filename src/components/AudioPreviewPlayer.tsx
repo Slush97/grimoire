@@ -215,7 +215,7 @@ export default function AudioPreviewPlayer({
                 title={isPlaying ? t('audioPreview.pause') : t('audioPreview.play')}
             >
                 {isLoading ? (
-                    <div className={`animate-spin rounded-full border-2 border-white border-t-transparent ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
+                    <div className={`animate-spin rounded-full border-2 border-text-primary border-t-transparent ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
                 ) : isPlaying ? (
                     <Pause className={compact ? 'w-4 h-4' : 'w-5 h-5'} fill="currentColor" />
                 ) : (

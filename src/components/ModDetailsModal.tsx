@@ -753,7 +753,7 @@ function ModDetailsModal({
       case 'refactor':
         return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
       case 'removal':
-        return 'bg-zinc-500/15 text-zinc-300 border-zinc-500/40';
+        return 'bg-zinc-500/15 text-zinc-300 light:text-text-secondary border-zinc-500/40';
       case 'suggestion':
         return 'bg-violet-500/15 text-violet-300 border-violet-500/30';
       default:
