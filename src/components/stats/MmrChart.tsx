@@ -258,7 +258,7 @@ export const MmrChart = memo(function MmrChart({ history, snapshots, height = 22
                     className={`px-2.5 py-1 rounded-sm text-xs transition-colors cursor-pointer ${
                         range === r.key
                             ? 'bg-accent/15 text-accent border border-accent/40'
-                            : 'text-text-secondary border border-transparent hover:text-white hover:bg-hl/5'
+                            : 'text-text-secondary border border-transparent hover:text-text-primary hover:bg-hl/5'
                     }`}
                 >
                     {r.key === 'all' ? t('stats.mmrChart.all') : t('stats.mmrChart.rangeDays', { days: r.days })}

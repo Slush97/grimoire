@@ -50,7 +50,7 @@ Read `docs/ui-conventions.md` before any renderer UI work. The short version:
 
 - Reuse the primitives in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageComponents.tsx`, `Modal.tsx`, `menu.tsx`, `ToastStack.tsx`) before writing markup.
 - Colors come from the tokens in `src/index.css` `@theme`, never raw hex or raw Tailwind palette colors.
-- **The accent color is user-chosen at runtime** (`src/lib/accentColor.ts` rewrites `--color-accent*`; OLED mode swaps the surface tokens). Orange `#f97316` is only the default. Always use `accent`/`accent-hover`/`accent-foreground` utilities and never design around a specific hue.
+- **The accent color is user-chosen at runtime** (`src/lib/accentColor.ts` rewrites `--color-accent*`), and so is the theme: dark, OLED or light (`src/lib/theme.ts`; each swaps the surface and ink tokens). Orange `#f97316` is only the default. Always use `accent`/`accent-hover`/`accent-foreground` utilities and never design around a specific hue.
 - The z-index ladder is documented at the top of `src/index.css`. Don't invent new z values.
 
 ## i18n

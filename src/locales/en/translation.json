@@ -1036,10 +1036,15 @@
       "accentNamed": "Use {{name}} accent color",
       "pickCustomColor": "Pick custom color",
       "accentCustom": "Custom accent",
+      "yourColor": "Use your color {{color}}",
+      "removeYourColor": "Remove {{color}}",
       "selectedColorPreview": "Selected color preview",
       "customAccent": "Custom Accent",
-      "oled": {
-        "title": "OLED mode"
+      "theme": {
+        "title": "Theme",
+        "dark": "Dark",
+        "oled": "OLED",
+        "light": "Light"
       },
       "launchButtons": {
         "combine": "Combine launch buttons",
@@ -1079,6 +1084,8 @@
         "description": "Tint the app background with light bleeding in from the top-left and bottom-right corners.",
         "none": "No glow",
         "custom": "Custom glow",
+        "yourGlow": "Use your glow {{number}}",
+        "removeYourGlow": "Remove your glow {{number}}",
         "customTitle": "Custom background glow",
         "topLeft": "Top left",
         "bottomRight": "Bottom right",
@@ -1109,6 +1116,7 @@
     },
     "preferences": {
       "expandLocker": "Expand Locker cards by default",
+      "groupClickOpensDetails": "Open the mod page when clicking a multi-file mod",
       "switchVariants": "Switch variants instead of stacking them",
       "autoMatchRemainingFiles": "Match remaining update files automatically",
       "skipModReplacementConfirmation": "Skip file replacement confirmation",
@@ -1266,6 +1274,7 @@
     },
     "toggles": {
       "expandLocker": "Start Locker list view with hero cards expanded.",
+      "groupClickOpensDetails": "Clicking a mod with more than one file on Installed opens its GameBanana page. Off opens the file picker.",
       "switchVariants": "Installing a new variant disables the old one. Off keeps both active. Updates always replace the old file.",
       "autoMatchRemainingFiles": "After matching names and descriptions, pair one unmatched installed file with one remaining new upload. This can replace a different variant. Turn off to choose these replacements yourself.",
       "skipModReplacementConfirmation": "Replace files without showing the confirmation dialog. Turn off to ask again.",
@@ -1877,6 +1886,7 @@
       "addVariant": "Add variant",
       "ungroupVariants": "Ungroup variants",
       "viewDetails": "View details",
+      "chooseFiles": "Choose files",
       "viewAuthorPage": "View author's page",
       "fixUnknownMatch": "Fix unknown match",
       "disableMod": "Disable mod",
@@ -1896,6 +1906,7 @@
       "staleSourcesTitle_other": "{{count}} merged sources have newer versions on GameBanana. Unmerge to update them.",
       "noFilesEnabled": "No files enabled",
       "variantStatusTitle": "{{labels}} - click card to choose files",
+      "variantFilesTitle": "{{labels}} (right-click the card to choose files)",
       "revealInFolder": "Reveal in folder",
       "soloLaunch": "Start with only this enabled",
       "openDoorStuck": "Open in Door Stuck",

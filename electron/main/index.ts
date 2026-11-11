@@ -1,6 +1,6 @@
 import { app, BrowserWindow, shell, session, protocol, nativeTheme, screen } from 'electron';
 import { cleanupExpiredModBackups } from './services/modBackups';
-import { windowBackgroundColor } from '../../src/lib/oledMode';
+import { THEME_ARGUMENT_PREFIX, nativeThemeSource, windowBackgroundColor } from '../../src/lib/theme';
 import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { setDefaultAutoSelectFamilyAttemptTimeout } from 'net';
@@ -29,9 +29,10 @@ protocol.registerSchemesAsPrivileged([
     },
 ]);
 
-// The app is dark-only, so pin Chromium and the OS chrome to dark regardless
-// of the system theme. On Windows this stops the native frame/menus rendering
-// light, and it makes prefers-color-scheme report dark in the renderer.
+// Pin Chromium and the OS chrome to dark regardless of the system theme. On
+// Windows this stops the native frame/menus rendering light, and it makes
+// prefers-color-scheme report dark in the renderer. Only the app's own light
+// theme turns them light: createWindow does that once settings can be read.
 nativeTheme.themeSource = 'dark';
 
 // Initialize the file logger before anything else so console.* calls in IPC
@@ -250,6 +251,7 @@ async function runStartupMetadataMaintenance(): Promise<void> {
 
 function createWindow(): void {
     const settings = loadSettings();
+    nativeTheme.themeSource = nativeThemeSource(settings.theme);
     const displays = screen.getAllDisplays();
     const initial = resolveInitialBounds(settings.windowBounds, displays.map((d) => d.workArea));
     // One line per launch so a "window is invisible" report can be read off the
@@ -275,9 +277,9 @@ function createWindow(): void {
         minHeight: MIN_WINDOW_HEIGHT,
         title: 'Grimoire',
         show: false, // Don't show until ready to prevent white flash
-        backgroundColor: windowBackgroundColor(settings.oledMode),
-        // Standard native frame on every platform. themeSource is forced to
-        // 'dark' above, so Windows draws its title bar dark; the previous
+        backgroundColor: windowBackgroundColor(settings.theme),
+        // Standard native frame on every platform. themeSource follows the
+        // app theme, so Windows draws its title bar to match; the previous
         // hidden-titleBar + overlay approach put the OS window controls on
         // top of the renderer, where they collided with in-app controls and
         // page-level overlays.
@@ -286,10 +288,10 @@ function createWindow(): void {
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
-            // Lets the renderer apply the OLED theme before its first paint,
+            // Lets the renderer apply the saved theme before its first paint,
             // instead of waiting on the async settings IPC (which flashed the
             // default grey canvas). Read in the preload via process.argv.
-            additionalArguments: settings.oledMode ? ['--grimoire-oled'] : [],
+            additionalArguments: [`${THEME_ARGUMENT_PREFIX}${settings.theme}`],
         },
     });
 

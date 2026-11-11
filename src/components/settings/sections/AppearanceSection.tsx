@@ -2,12 +2,13 @@ import { FilterItem, FilterDivider } from '../../common/FilteredContent';
 import { Languages, Palette } from 'lucide-react';
 import { useAppStore } from '../../../stores/appStore';
 import { formatDateParts } from '../../../lib/dateFormat';
-import { Card, Toggle } from '../../common/ui';
+import { Card } from '../../common/ui';
 import Tx from '../../translation/Tx';
 import AccentColorPicker from '../AccentColorPicker';
 import BackgroundGradientPicker from '../BackgroundGradientPicker';
 import AppearanceArtSection from '../AppearanceArtSection';
 import LanguageSelector from '../LanguageSelector';
+import ThemePicker from '../ThemePicker';
 
 // Everything that changes how the app looks and reads. The card is a single
 // stacked list (accent, background, launcher chrome) rather than a header
@@ -31,11 +32,7 @@ export default function AppearanceSection() {
   return (
     <>
       <Card id="settings-appearance-settings-sections-appearance-card" title={<Tx k="settings.sections.appearance" fallback="Appearance" />} icon={Palette}>
-        <Toggle id="settings-appearance-settings-appearance-oled-title-toggle"
-          checked={settings?.oledMode ?? false}
-          onChange={(checked) => settings && void saveSettings({ ...settings, oledMode: checked })}
-          label={<Tx k="settings.appearance.oled.title" fallback="OLED mode" />}
-        />
+        <FilterItem id="settings-theme"><ThemePicker /></FilterItem>
 
         <FilterDivider className="my-5 h-px bg-hl/5" />
 

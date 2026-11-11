@@ -235,7 +235,7 @@ export default function Crosshair() {
                         gets an explicit viewport-relative one that shrinks with
                         the window instead of collapsing. From xl it goes back to
                         taking whatever the row leaves over. */}
-                    <div className="relative h-[clamp(220px,42vh,560px)] overflow-hidden rounded-sm border border-hl/5 xl:h-auto xl:min-h-[280px] xl:flex-1">
+                    <div className="always-dark relative h-[clamp(220px,42vh,560px)] overflow-hidden rounded-sm border border-hl/5 xl:h-auto xl:min-h-[280px] xl:flex-1">
                         <CrosshairStage scale={resolution / 1080} zoom={zoom} background={background} />
 
                         {/* Both overlay bars share one wrapping row so they move

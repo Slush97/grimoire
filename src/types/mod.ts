@@ -1,3 +1,5 @@
+import type { AppTheme } from '../lib/theme';
+
 export interface MergedModSource {
   /** Filename of the source VPK after the merge: typically in `.disabled/`
    *  because mergeMods disables sources to free their priority slots. May
@@ -1182,6 +1184,9 @@ export interface AppSettings {
   hiddenMods: HiddenMod[];
   /** Open Locker list-view hero cards expanded on first load. */
   lockerCardsExpandedByDefault: boolean;
+  /** Clicking a multi-file GameBanana card on Installed opens its mod page
+   *  instead of the file picker. */
+  installedGroupClickOpensDetails: boolean;
   /** Installing a different file of an already-enabled mod disables the
    *  prior variant (not about updates). */
   autoDisableSiblingVariants: boolean;
@@ -1268,8 +1273,11 @@ export interface AppSettings {
   /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
    *  focus rings throughout the app. */
   accentColor: string;
-  /** Use true black for the app canvas and near-black neutral surfaces. */
-  oledMode: boolean;
+  /** Surface palette: the default dark, true-black OLED, or light. */
+  theme: AppTheme;
+  /** Accent colors the user picked themselves, kept as swatches beside the
+   *  presets (oldest first, at most MAX_CUSTOM_SWATCHES). */
+  customAccentColors?: string[];
   /** Hero render used as the active sidebar highlight background.
    *  @deprecated Superseded by `appearanceBackgrounds.activeTab`. Kept as a
    *  legacy compat read so existing installs keep their chosen highlight; the
@@ -1286,6 +1294,9 @@ export interface AppSettings {
    *  (top-left, bottom-right) rather than a preset id, so a custom pick and a
    *  preset are the same shape. Null/absent leaves the flat background. */
   backgroundGradient?: { from: string; to: string } | null;
+  /** Background glows the user made themselves, kept as swatches beside the
+   *  presets (oldest first, at most MAX_CUSTOM_SWATCHES). */
+  customBackgroundGradients?: { from: string; to: string }[];
   /** Drop the sidebar's own panel background so it sits flush with the page
    *  background instead of reading as a separate dark grey column. The divider,
    *  nav art, and launch buttons are unaffected. Off by default. */
