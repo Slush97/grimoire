@@ -326,7 +326,9 @@ function riggedClothFile(key: string): string {
  * to the extras schema (model resolution, index offsets, ...).
  */
 // v17: opt into marked authored outline/jitter geometry.
-const POSE_PIPELINE_VERSION = '17';
+// v18: the alt albedo (g_tAltColor_Reveal) ships with materials that reveal it, and a
+// skin whose VPK spells its root directory as an empty string exports at all.
+const POSE_PIPELINE_VERSION = '18';
 const POSE_CACHE_VERSION = `${POSE_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 /**
@@ -400,7 +402,8 @@ function versionFile(key: string): string {
 // 34: movement clips export in parts of eight (movement.glb, movement-2.glb) and add the medium knockdown.
 // 35: and the flinch a heavy melee's target plays.
 // 36: the parry clips are the ones the hero's parry graph plays (Mina's parry_to_idle), not found by name
-const RIGGED_PIPELINE_VERSION = '36';
+// 37: same alt albedo and empty root directory changes as POSE_PIPELINE_VERSION v18.
+const RIGGED_PIPELINE_VERSION = '37';
 /** `workshop motions` takes at most eight clips, so the standing actions are exported in parts of eight. */
 const MOTIONS_PER_PART = 8;
 /** The standing action bundle's parts: `movement.glb`, then `movement-2.glb` and on. */

@@ -7,11 +7,13 @@
  * uniform instead of freezing it to the static fallback (10, in inferno's case).
  *
  * Scope is deliberately Tier 1 only: float literals, `time()` (the elapsed seconds,
- * also accepted bare as `time`), the unary math builtins
- * (sin/cos/frac/abs/floor/saturate), `+ - * /`, unary minus, and parentheses.
- * Anything outside that grammar - `$attribute` reads, vector constructors
- * (`float2/3/4`), comparisons, ternaries - returns null so the caller falls back to
- * the static value. No `eval()`; a tiny recursive-descent parser.
+ * also accepted bare as `time`), the math builtins
+ * (sin/cos/frac/abs/floor/saturate, min/max, clamp, smoothstep), `+ - * /`, unary
+ * minus, and parentheses. A `$attribute` read resolves only through the table the
+ * caller passes: the engine sets those per entity, so a caller has to say what the
+ * previewed entity would report. Anything else - an attribute outside the table,
+ * vector constructors (`float2/3/4`), comparisons, ternaries - returns null so the
+ * caller falls back to the static value. No `eval()`; a tiny recursive-descent parser.
  */
 
 type Fn = (t: number) => number;
@@ -23,6 +25,20 @@ const BUILTINS1: Record<string, (x: number) => number> = {
   floor: Math.floor,
   frac: (x) => x - Math.floor(x),
   saturate: (x) => Math.max(0, Math.min(1, x)),
+};
+
+/** Builtins with a fixed argument count above one, in the engine's argument order. */
+const BUILTINS_N: Record<string, { arity: number; fn: (...args: number[]) => number }> = {
+  min: { arity: 2, fn: Math.min },
+  max: { arity: 2, fn: Math.max },
+  clamp: { arity: 3, fn: (x, lo, hi) => Math.max(lo, Math.min(hi, x)) },
+  smoothstep: {
+    arity: 3,
+    fn: (edge0, edge1, x) => {
+      const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+      return t * t * (3 - 2 * t);
+    },
+  },
 };
 
 function tokenize(src: string): string[] {
@@ -40,8 +56,8 @@ function tokenize(src: string): string[] {
       while (j < src.length && /[0-9.]/.test(src[j])) j++;
       out.push(src.slice(i, j));
       i = j;
-    } else if (/[a-zA-Z_]/.test(c)) {
-      let j = i;
+    } else if (/[a-zA-Z_$]/.test(c)) {
+      let j = i + 1;
       while (j < src.length && /[a-zA-Z0-9_]/.test(src[j])) j++;
       out.push(src.slice(i, j));
       i = j;
@@ -53,8 +69,9 @@ function tokenize(src: string): string[] {
 }
 
 /** Compile a Tier-1 scalar source string into `(t) => number`, or null if it uses
- *  anything outside the supported grammar. */
-export function compileScalarExpr(source: string): Fn | null {
+ *  anything outside the supported grammar. `attributes` maps `$name` reads to the
+ *  value the previewed entity reports; a read outside it is unsupported. */
+export function compileScalarExpr(source: string, attributes?: Readonly<Record<string, number>>): Fn | null {
   let toks: string[];
   try {
     toks = tokenize(source);
@@ -115,6 +132,12 @@ export function compileScalarExpr(source: string): Fn | null {
       if (!Number.isFinite(n)) throw new Error(`bad number ${tok}`);
       return () => n;
     }
+    if (tok.startsWith('$')) {
+      eat();
+      const value = attributes && Object.hasOwn(attributes, tok) ? attributes[tok] : undefined;
+      if (value === undefined) throw new Error(`unsupported attribute ${tok}`);
+      return () => value;
+    }
     if (/^[a-zA-Z_]/.test(tok)) {
       eat();
       if (tok === 'time') {
@@ -130,6 +153,18 @@ export function compileScalarExpr(source: string): Fn | null {
         const arg = parseExpr();
         expect(')');
         return (t) => fn1(arg(t));
+      }
+      const fnN = BUILTINS_N[tok];
+      if (fnN && peek() === '(') {
+        eat();
+        const args = [parseExpr()];
+        while (peek() === ',') {
+          eat();
+          args.push(parseExpr());
+        }
+        expect(')');
+        if (args.length !== fnN.arity) throw new Error(`${tok} takes ${fnN.arity} arguments`);
+        return (t) => fnN.fn(...args.map((arg) => arg(t)));
       }
       throw new Error(`unsupported identifier ${tok}`);
     }
