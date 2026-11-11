@@ -33,6 +33,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     activeProfileId: null,
     confirmProfileUpdate: true,
     promptOptionalRequirements: false,
+    cycleTagFilters: false,
     experimentalStats: false,
     experimentalCrosshair: false,
     experimentalSocial: false,

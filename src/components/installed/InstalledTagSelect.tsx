@@ -29,12 +29,13 @@ export interface InstalledTagSelectProps {
   onRename: (key: string, name: string) => TagEditResult;
   onDelete: (key: string) => void | Promise<void>;
   order: readonly string[];
+  cycleFilters?: boolean;
   onOrderChange: (keys: string[]) => void;
   onResetOrder: () => void;
 }
 
 /** Tag-specific editing uses the shared selector's search and action row. */
-export function InstalledTagSelect({ options, included, excluded, onInclude, onExclude, onCreate, onRename, onDelete, order, onOrderChange, onResetOrder }: InstalledTagSelectProps) {
+export function InstalledTagSelect({ options, included, excluded, onInclude, onExclude, onCreate, onRename, onDelete, order, onOrderChange, onResetOrder, cycleFilters = false }: InstalledTagSelectProps) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -113,6 +114,14 @@ export function InstalledTagSelect({ options, included, excluded, onInclude, onE
   };
   const toggleFilter = (key: string, exclude = false) => {
     if (editing || busyRef.current) return;
+    if (cycleFilters) {
+      if (exclude) {
+        if (included.includes(key)) onInclude(key);
+        else if (excluded.includes(key)) onExclude(key);
+      } else if (included.includes(key) || excluded.includes(key)) onExclude(key);
+      else onInclude(key);
+      return;
+    }
     if (exclude || excluded.includes(key)) onExclude(key);
     else onInclude(key);
   };
@@ -122,7 +131,8 @@ export function InstalledTagSelect({ options, included, excluded, onInclude, onE
     ariaLabel={t('installed.filters.tags')} onChange={key => toggleFilter(key)}
     onOptionContextMenu={editing ? undefined : key => toggleFilter(key, true)}
     options={orderedOptions.map(option => ({ value: option.key, label: option.label, disabled: editing || busy,
-      ariaLabel: editing ? option.label : t(selected.includes(option.key) ? 'installed.tags.clearFilter' : 'installed.tags.includeHint', { name: option.label }) }))}
+      ariaLabel: editing ? option.label : t(cycleFilters && included.includes(option.key) ? 'installed.tags.excludeHint'
+        : selected.includes(option.key) ? 'installed.tags.clearFilter' : 'installed.tags.includeHint', { name: option.label }) }))}
     search={{ ariaLabel: renaming ? t('installed.tags.renameLabel') : editing ? t('installed.tags.create') : t('installed.filters.tags'),
       placeholder: editing ? t('installed.tags.createPlaceholder') : t('browse.filters.filterPlaceholder'),
       value: query, onChange: changeQuery, inputRef, disabled: busy,

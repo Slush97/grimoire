@@ -1105,6 +1105,7 @@
       "enableAfterDownload": "Enable mods after download",
       "confirmProfileUpdate": "Confirm before updating a profile",
       "promptOptionalRequirements": "Prompt for optional requirements",
+      "cycleTagFilters": "Cycle tag filters",
       "discordRpc": "Discord Rich Presence",
       "contributeMatchData": "Contribute match data to deadlock-api.com",
       "saltsContributed_one": "{{count}} match key contributed.",
@@ -1262,6 +1263,7 @@
       "enableAfterDownload": "Enable mods as soon as they finish downloading. Stays disabled if no slot is free.",
       "confirmProfileUpdate": "Confirm before overwriting a profile's saved mods. Off overwrites immediately.",
       "promptOptionalRequirements": "Show the requirements dialog when enabling a mod with optional or recommended requirements too.",
+      "cycleTagFilters": "Left-click Installed tags to cycle through included, excluded, and unselected. Right-click clears a selected tag.",
       "discordRpc": "Show your current Grimoire activity on your Discord profile. Talks only to your local Discord app and sends nothing to Grimoire.",
       "contributeSalts": "Share the replay keys Steam already caches for matches you view in-game. Sends only the match id, server cluster, two download keys, and a fixed \"grimoire\" client tag: no account id, no player name, nothing about you or your mods.",
       "fixUnknown": "Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries.",
@@ -2051,6 +2053,7 @@
       "duplicateName": "A tag with this name already exists.",
       "failed": "Could not update tags: {{error}}",
       "includeHint": "Include {{name}}",
+      "excludeHint": "Exclude {{name}}",
       "clearFilter": "Clear {{name}} filter"
     },
     "sort": {

@@ -154,6 +154,9 @@ right-click (red minus). A card must match an included tag when any are selected
 and must not match any excluded tag. Right-clicking an included tag switches it
 to excluded; right-clicking an excluded tag clears it. Left-clicking either kind
 of selected tag clears it. The trigger shows a single tag as `+ HUD` or `- HUD`.
+The off-by-default Cycle tag filters preference instead makes left-click cycle
+through unselected, included, excluded, and back to unselected. Right-click clears
+a selected tag without changing unselected tags in this mode.
 Multiple selections show separate counts, such as `+2/-1 Tags`, with empty sides
 and their separator omitted. Built-in names are darker in edit mode to distinguish
 them from editable custom names.

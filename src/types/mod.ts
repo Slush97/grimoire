@@ -1197,6 +1197,8 @@ export interface AppSettings {
   confirmProfileUpdate: boolean;
   /** Show the enable confirmation for optional and recommended requirements too. */
   promptOptionalRequirements: boolean;
+  /** Cycle Installed tag filters through included, excluded, and unselected. */
+  cycleTagFilters: boolean;
   experimentalStats: boolean;
   experimentalCrosshair: boolean;
   /** Grimoire Social: Discover page + publish/account UI. */

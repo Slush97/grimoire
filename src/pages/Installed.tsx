@@ -3636,6 +3636,7 @@ export default function Installed() {
               aria-label={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultiple')}
               title={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultipleHint')} />
             <InstalledFilterMenu sortMode={sortMode} onSortModeChange={setSortMode}
+              cycleTagFilters={settings?.cycleTagFilters ?? false}
               view={listPreferences.view} onViewChange={setListView}
               sourceSel={sourceSel} onSourceChange={setSourceSel} sourceCounts={{ gamebanana: gbCount, local: localCount }}
               statusSel={statusSel} onStatusChange={setStatusSel} statusCounts={{ enabled: enabledCount, disabled: disabledCount }}

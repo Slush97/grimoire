@@ -37,6 +37,7 @@ export interface InstalledFilterMenuProps {
   onRenameTag: InstalledTagSelectProps['onRename'];
   onDeleteTag: InstalledTagSelectProps['onDelete'];
   tagOrder: readonly string[];
+  cycleTagFilters?: boolean;
   onTagOrderChange: (keys: string[]) => void;
   onResetTagOrder: () => void;
   listFilter: readonly string[];
@@ -57,7 +58,7 @@ export function InstalledFilterMenu({
   statusSel, onStatusChange, statusCounts, heroFilter, onHeroChange, heroOptions,
   tagFilter, onTagChange, tagOptions, listFilter, onListChange, listOptions,
   excludedTagFilter, onExcludedTagChange, onCreateTag, onRenameTag, onDeleteTag,
-  tagOrder, onTagOrderChange, onResetTagOrder,
+  tagOrder, onTagOrderChange, onResetTagOrder, cycleTagFilters,
   onManageLists, active, onReset,
 }: InstalledFilterMenuProps) {
   const { t } = useTranslation();
@@ -140,6 +141,7 @@ export function InstalledFilterMenu({
               className="text-xs text-text-secondary hover:text-accent cursor-pointer">{t('common.actions.clear')}</button>}
           </div>
           <InstalledTagSelect options={tagOptions} included={tagFilter} excluded={excludedTagFilter}
+            cycleFilters={cycleTagFilters}
             order={tagOrder} onOrderChange={onTagOrderChange} onResetOrder={() => { close(); setResetTagOrderOpen(true); }}
             onInclude={key => { onTagChange(toggleValue(tagFilter, key)); onExcludedTagChange(excludedTagFilter.filter(value => value !== key)); }}
             onExclude={key => { onExcludedTagChange(toggleValue(excludedTagFilter, key)); onTagChange(tagFilter.filter(value => value !== key)); }}

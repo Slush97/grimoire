@@ -13,11 +13,11 @@ describe('Installed tag dropdown', () => {
   let root: Root;
   const create = vi.fn(), rename = vi.fn(), remove = vi.fn(), resetOrder = vi.fn();
   const startingOptions: InstalledTagOption[] = [{ key: 'hud', label: 'HUD', count: 5 }, { key: 'custom:fav', label: 'Favorites', count: 2, custom: true }];
-  function Harness({ options = startingOptions }: { options?: InstalledTagOption[] }) {
+  function Harness({ options = startingOptions, cycleFilters = false }: { options?: InstalledTagOption[]; cycleFilters?: boolean }) {
     const [included, setIncluded] = useState<string[]>([]);
     const [excluded, setExcluded] = useState<string[]>([]);
     const [order, setOrder] = useState(options.map(option => option.key));
-    return <InstalledTagSelect options={options} included={included} excluded={excluded}
+    return <InstalledTagSelect options={options} included={included} excluded={excluded} cycleFilters={cycleFilters}
       onInclude={key => { setIncluded(previous => previous.includes(key) ? previous.filter(value => value !== key) : [...previous, key]); setExcluded(previous => previous.filter(value => value !== key)); }}
       onExclude={key => { setExcluded(previous => previous.includes(key) ? previous.filter(value => value !== key) : [...previous, key]); setIncluded(previous => previous.filter(value => value !== key)); }}
       onCreate={create} onRename={rename} onDelete={remove} order={order} onOrderChange={setOrder} onResetOrder={resetOrder} />;
@@ -57,6 +57,37 @@ describe('Installed tag dropdown', () => {
     expect(option('HUD').getAttribute('aria-selected')).toBe('false');
     expect(option('HUD').querySelector('.lucide-plus,.lucide-minus')).toBeNull();
     expect(trigger().getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('cycles left-clicks through included, excluded, and unselected when enabled', () => {
+    act(() => root.render(<Harness cycleFilters />));
+    act(() => option('Favorites').click());
+    for (let cycle = 0; cycle < 2; cycle++) {
+      act(() => option('HUD').click());
+      expect(option('HUD').querySelector('.lucide-plus')).not.toBeNull();
+      expect(option('HUD').getAttribute('aria-label')).toBe('installed.tags.excludeHint:HUD');
+      act(() => option('HUD').click());
+      expect(option('HUD').querySelector('.lucide-minus')).not.toBeNull();
+      expect(option('HUD').getAttribute('aria-label')).toBe('installed.tags.clearFilter:HUD');
+      act(() => option('HUD').click());
+      expect(option('HUD').getAttribute('aria-selected')).toBe('false');
+      expect(option('Favorites').querySelector('.lucide-plus')).not.toBeNull();
+    }
+  });
+
+  it('clears either selection with right-click and leaves unselected tags alone in cycling mode', () => {
+    act(() => root.render(<Harness cycleFilters />));
+    const rightClick = () => act(() => option('HUD').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    rightClick();
+    expect(option('HUD').getAttribute('aria-selected')).toBe('false');
+    act(() => option('HUD').click());
+    rightClick();
+    expect(option('HUD').getAttribute('aria-selected')).toBe('false');
+    act(() => option('HUD').click());
+    act(() => option('HUD').click());
+    expect(option('HUD').querySelector('.lucide-minus')).not.toBeNull();
+    rightClick();
+    expect(option('HUD').getAttribute('aria-selected')).toBe('false');
   });
 
   it('converts an included tag to excluded on right-click, but left-click clears an excluded tag', () => {
