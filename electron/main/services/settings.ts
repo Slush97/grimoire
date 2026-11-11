@@ -6,6 +6,7 @@ import { getSettingsPath } from '../utils/paths';
 // erased at build, so no renderer code is pulled into the main bundle).
 // Re-exported so existing `from './settings'` imports keep working.
 import type { AppSettings, NsfwContentMode } from '../../../src/types/mod';
+import { DEFAULT_THEME, normalizeTheme } from '../../../src/lib/theme';
 import { MAX_CUSTOM_SWATCHES } from '../../../src/lib/customSwatches';
 export type { AppSettings };
 
@@ -23,6 +24,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     hiddenCreators: [],
     hiddenMods: [],
     lockerCardsExpandedByDefault: false,
+    installedGroupClickOpensDetails: false,
     autoDisableSiblingVariants: true,
     autoMatchRemainingFiles: true,
     skipModReplacementConfirmation: false,
@@ -48,8 +50,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     ignoredConflictFilesGlobal: [],
     ignoredConflictMods: [],
     accentColor: '#f97316',
+    theme: DEFAULT_THEME,
     customAccentColors: [],
-    oledMode: false,
     sidebarHeroHighlight: 'Abrams',
     dateFormat: 'MM/DD/YYYY',
     language: null,
@@ -151,6 +153,11 @@ function migrateNsfwContentMode(
     return (browseMode ?? 'show') === 'show' && blur === false ? 'show' : 'blur';
 }
 
+/** The OLED toggle that `theme` replaced. */
+interface LegacyThemeSettings {
+    oledMode?: boolean;
+}
+
 interface SettingsCacheEntry {
     path: string;
     mtimeMs: number;
@@ -188,12 +195,14 @@ function readSettings(): AppSettings {
             hideNsfwPreviews,
             browseNsfwContentMode,
             installedHideNsfwPreviews,
+            oledMode,
             ...settings
-        } = JSON.parse(content) as Partial<AppSettings> & LegacyNsfwSettings;
+        } = JSON.parse(content) as Partial<AppSettings> & LegacyNsfwSettings & LegacyThemeSettings;
         const normalized: AppSettings = {
             ...DEFAULT_SETTINGS,
             ...settings,
             updateChannel: settings.updateChannel === 'nightly' ? 'nightly' : 'stable',
+            theme: normalizeTheme(settings.theme, oledMode),
             hiddenCreators: normalizeHiddenCreators(settings.hiddenCreators),
             customAccentColors: normalizeCustomAccentColors(settings.customAccentColors),
             customBackgroundGradients: normalizeCustomBackgroundGradients(settings.customBackgroundGradients),

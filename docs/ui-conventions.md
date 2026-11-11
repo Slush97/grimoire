@@ -4,7 +4,7 @@ How Grimoire looks and how to build it. Read this before touching renderer UI.
 
 ## The look
 
-A dark, quiet workshop with one strong accent and a few deliberate serif moments. Deadlock's own look is art deco occult noir, so lean sharp and restrained, not glowy. When in doubt, remove decoration rather than add it.
+A quiet workshop with one strong accent and a few deliberate serif moments. Dark by default, with a true-black OLED theme and a light theme (warm paper, not pure white) in Settings > Appearance. Deadlock's own look is art deco occult noir, so lean sharp and restrained, not glowy. When in doubt, remove decoration rather than add it.
 
 Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageComponents.tsx`, `Modal.tsx`, `menu.tsx`, `ToastStack.tsx`, `Skeleton.tsx`). Tokens live in `src/index.css` under `@theme`.
 
@@ -20,13 +20,22 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
 ## Color
 
 - **Surfaces:** `bg-bg-primary` (app), `bg-bg-secondary` (cards, panels), `bg-bg-tertiary` (inputs, raised), `bg-bg-sunken` (recessed), `border-border`.
-- **Tints:** translucent hover fills, hairlines and bevels use `hl/N` (`bg-hl/5`, `border-hl/10`), never `white/N`. `hl` is white today; a light theme flips it.
+- **Tints:** translucent hover fills, hairlines and bevels use `hl/N` (`bg-hl/5`, `border-hl/10`), never `white/N`. `hl` is white on the dark themes and dark ink on the light one.
+- **Wells:** a translucent recess on a token surface (code chip, inset footer) uses `shade/N` (`bg-shade/30`), never `black/N`. `shade` is black on the dark themes and a much weaker ink on the light one.
 - **Text:** `text-text-primary`, `text-text-secondary`, `text-text-tertiary`. Prefer them over `text-white` (literal white stays only over imagery).
 - **Accent** is user-chosen at runtime (`src/lib/accentColor.ts`); orange is only the default. It means three things: the primary action, selected, focused. Never decoration. Design against the token, never a hue.
 - **Mod updates** use fixed orange `state-update`, independent of the accent. Use `Tag tone="update"` and `Button variant="update"` for update indicators and actions.
 - **State** (`state-success | state-warning | state-danger | state-info`) only for real states: an error, a warning, a finished download. Not for "Active", "Valid" or "Configured" chips; plain text says those.
 - **Brand** (`brand-discord | brand-kofi`) only for the brand's own buttons.
 - No raw hex, no raw Tailwind palette colors (`red-500`, `zinc-300`). Add a token if something is genuinely new and reusable.
+
+## Themes
+
+`src/lib/theme.ts` names the themes and `applyTheme()` puts `data-theme` on the root; each theme is a block of token values in `src/index.css`. Build against the tokens and a surface works in all three.
+
+- **Over imagery, stay dark.** Art and thumbnails sit under a dark scrim with white text in every theme, so literal `black/N` and `text-white` are right there and nowhere else. If such a region also holds token-colored children (a tag, a button, secondary text), put `always-dark` on it: in the light theme it restores the dark tokens for that subtree. The Locker hero and Global views, hero cards, 3D viewports, the crosshair stage and overlay tags do this.
+- **Check both.** Look at new UI in dark and in light before calling it done. A color that only works on near-black is the usual miss.
+- `light:` is a variant for the rare utility only the light theme needs (`light:invert` on a white-only icon). Reach for a token first.
 
 ## Shape and space
 

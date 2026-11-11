@@ -5,7 +5,7 @@
 // custom pick is the same shape as a preset, and one renderer covers both the
 // real layer and the little preview tiles in Settings.
 
-import { BACKGROUND_BASE } from './oledMode';
+import { BACKGROUND_BASE } from './theme';
 import type { SwatchRules } from './customSwatches';
 
 export interface BackgroundGradient {
