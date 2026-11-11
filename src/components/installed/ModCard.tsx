@@ -8,7 +8,7 @@ import { MenuCheckboxItem, MenuContent, MenuItem, MenuLabel, MenuRadioGroup, Men
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
 import { useRequirementsStore } from '../../stores/requirementsStore';
-import { modRequirementRefs } from '../../lib/modRequirements';
+import { modRequirementRefs, requirementKey } from '../../lib/modRequirements';
 import { modRestoreKey } from '../../lib/soloRestore';
 import { useModBackupsStore } from '../../stores/modBackupsStore';
 import { useCategoryStore } from '../../stores/categoryStore';
@@ -750,6 +750,11 @@ export function ModCard({
 }: ModCardProps) {
   const { t } = useTranslation();
   const pointerInside = useRef(false);
+  const hasRequirements = useRequirementsStore(state => (group?.variants ?? [mod]).some(variant =>
+    !!variant.skinEdit?.sources.length || modRequirementRefs(variant).some(ref => {
+      const snapshot = state.snapshots[requirementKey(ref)];
+      return snapshot?.status === 'loaded' && snapshot.items.length > 0;
+    })));
   const cardRef = useRef<HTMLDivElement>(null);
   const backups = useModBackupsStore((state) => state.backups);
   const backupIdentity = getModBackupIdentity(mod, mod.fileName, mod.name);
@@ -1039,7 +1044,7 @@ export function ModCard({
           {t('installed.card.viewDetails')}
         </MenuItem>
       )}
-      {(modRequirementRefs(mod).length > 0 || !!mod.skinEdit?.sources.length) && (
+      {hasRequirements && (
         <MenuItem icon={Link2} onSelect={() => {
           const mods = useAppStore.getState().mods;
           const owner = mods.find(candidate => candidate.id === mod.id);

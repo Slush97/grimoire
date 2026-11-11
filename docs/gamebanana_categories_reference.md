@@ -92,7 +92,9 @@ choice for later enables in the same opening, including a swap's first variant.
 Closing and reopening the picker resets that choice. Cancelling a requirements
 prompt does not save a choice, and disable confirmations still apply individually.
 
-**View requirements** in a mod's context menu opens the same list with
+**View requirements** appears in a mod's context menu only when it has declared
+requirements, including optional entries and locally generated skin dependencies.
+It opens the same list with
 **Disable all** and **Enable all** actions. It also lists enabled mods that require
 this mod, marking them as **Requires this mod**. The requirements icon also opens it.
 Required dependency problems on an enabled mod use a yellow icon; disabled mods

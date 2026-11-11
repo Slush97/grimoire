@@ -277,6 +277,8 @@ describe('installed card menu mounting', () => {
 
   it.each(['context', 'dropdown'] as const)('opens requirement management from the %s menu', async kind => {
     input = { ...input, mod: { ...input.mod, gameBananaId: 1 } };
+    useRequirementsStore.getState().remember({ id: 1, section: 'Mod' }, { status: 'loaded', checkedAt: Date.now(),
+      items: [{ name: 'Optional effects', importance: 'optional', state: 'on' }] });
     useAppStore.setState({ mods: [input.mod as Mod] });
     vi.spyOn(useRequirementsStore.getState(), 'load').mockResolvedValue();
     await act(async () => root.render(<ModCard {...input} />));
@@ -294,6 +296,27 @@ describe('installed card menu mounting', () => {
     await openMenu('context');
     expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
       .some(element => element.textContent === 'requirements.manageTitle')).toBe(false);
+  });
+
+  it.each(['loaded', 'unavailable', 'missing'] as const)('omits requirement management when GameBanana requirements are %s without declared items', async status => {
+    input = { ...input, mod: { ...input.mod, gameBananaId: 1 } };
+    if (status !== 'missing') useRequirementsStore.getState().remember({ id: 1, section: 'Mod' },
+      status === 'loaded' ? { status, checkedAt: Date.now(), items: [] } : { status, checkedAt: Date.now() });
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu('context');
+    expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .some(element => element.textContent === 'requirements.manageTitle')).toBe(false);
+  });
+
+  it('shows requirement management when declared requirements arrive after the card mounts', async () => {
+    input = { ...input, mod: { ...input.mod, gameBananaId: 1 } };
+    await act(async () => root.render(<ModCard {...input} />));
+    await act(async () => useRequirementsStore.getState().remember({ id: 1, section: 'Mod' }, {
+      status: 'loaded', checkedAt: Date.now(), items: [{ name: 'Required effects', importance: 'required', state: 'on' }],
+    }));
+    await openMenu('dropdown');
+    expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .some(element => element.textContent === 'requirements.manageTitle')).toBe(true);
   });
 
   it.each(['grid', 'compact', 'list'] as const)('shows every grouped hero and puts additional %s tags in a mouse tooltip', async viewMode => {
