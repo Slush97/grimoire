@@ -87,10 +87,24 @@ describe('mod safety authorization', () => {
         await expect(approveVpkSafety(candidate, 'a'.repeat(64))).rejects.toThrow('MOD_SAFETY_CHANGED');
         await expect(fs.stat(join(h.userData, 'mod-safety-trust.json'))).rejects.toThrow();
     });
-    it('cannot approve an unreadable archive inline', async () => {
-        h.reports.push({ ...script(), verdict: 'blocked' });
-        await expect(approveVpkSafety(candidate, 'a'.repeat(64))).rejects.toThrow('MOD_SAFETY_BLOCKED');
+    it('cannot enable an unreadable archive that has no fingerprint', async () => {
+        h.reports.push({ ...script(''), verdict: 'blocked' });
+        await expect(approveVpkSafety(candidate, 'a'.repeat(64))).rejects.toThrow('MOD_SAFETY_CHANGED');
         await expect(fs.stat(join(h.userData, 'mod-safety-trust.json'))).rejects.toThrow();
+    });
+    it('enables an unreadable archive anyway, for those bytes only', async () => {
+        const unread: ModSafetyReport = { ...script(), verdict: 'blocked', findings: [{ entry: 'test.vpk', reason: 'unreadable-archive' }] };
+        h.reports.push(unread, unread, { ...unread, fingerprint: 'b'.repeat(64) });
+        expect(await approveVpkSafety(candidate, 'a'.repeat(64))).toBe(false);
+        await assertVpkSafety(candidate, { prompt: false });
+        await expect(assertVpkSafety(candidate, { prompt: false })).rejects.toThrow('MOD_SAFETY_BLOCKED');
+    });
+    it('keeps enabling unread bytes apart from allowing a version that reads', async () => {
+        const unread: ModSafetyReport = { ...script(), verdict: 'blocked', findings: [{ entry: 'test.vpk', reason: 'unreadable-archive' }] };
+        h.reports.push(unread, script());
+        await approveVpkSafety(candidate, 'a'.repeat(64));
+        // A scanner that later reads the same bytes asks again, with what it found.
+        await expect(assertVpkSafety(candidate, { prompt: false })).rejects.toThrow('MOD_SAFETY_TRUST_REQUIRED');
     });
     it('persists explicit consent and scans again before using it', async () => {
         h.reports.push(script(), script(), script());
@@ -143,13 +157,39 @@ describe('mod safety authorization', () => {
         expect(await result).toContain('MOD_SAFETY_CHANGED');
         await expect(fs.stat(join(h.userData, 'mod-safety-trust.json'))).rejects.toThrow();
     });
-    it('cannot override an unreadable archive with a forged positive response', async () => {
-        h.reports.push({ ...script(), verdict: 'blocked', findings: [{ entry: 'test.vpk', reason: 'unreadable-archive' }] });
+    it('cannot override an unreadable archive that has no fingerprint with a forged positive response', async () => {
+        h.reports.push({ ...script(''), verdict: 'blocked', findings: [{ entry: 'test.vpk', reason: 'unreadable-archive' }] });
         const result = assertVpkSafety(candidate).catch(e => String(e));
         const p = await prompt();
         expect(p.canTrust).toBe(false);
         respondToModSafety(p.id, true);
         expect(await result).toContain('MOD_SAFETY_BLOCKED');
+        await expect(fs.stat(join(h.userData, 'mod-safety-trust.json'))).rejects.toThrow();
+    });
+    it('lets the waiting operation through when the user enables an unreadable archive anyway', async () => {
+        const unread: ModSafetyReport = { ...script(), verdict: 'blocked', findings: [{ entry: 'test.vpk', reason: 'unreadable-archive' }] };
+        h.reports.push(unread, unread, unread);
+        const result = assertVpkSafety(candidate, { name: 'Odd Skin' });
+        const p = await prompt();
+        expect(p.canTrust).toBe(true);
+        respondToModSafety(p.id, true);
+        await result;
+        await assertVpkSafety(candidate, { prompt: false });
+    });
+    it('keeps an unreadable archive disabled when the user declines', async () => {
+        const unread: ModSafetyReport = { ...script(), verdict: 'blocked', findings: [{ entry: 'test.vpk', reason: 'unreadable-archive' }] };
+        h.reports.push(unread);
+        const result = assertVpkSafety(candidate).catch(e => String(e));
+        respondToModSafety((await prompt()).id, false);
+        expect(await result).toContain('MOD_SAFETY_BLOCKED');
+        await expect(fs.stat(join(h.userData, 'mod-safety-trust.json'))).rejects.toThrow();
+    });
+    it('rejects an unreadable archive that became readable during the confirmation', async () => {
+        const unread: ModSafetyReport = { ...script(), verdict: 'blocked', findings: [{ entry: 'test.vpk', reason: 'unreadable-archive' }] };
+        h.reports.push(unread, script());
+        const result = assertVpkSafety(candidate).catch(e => String(e));
+        respondToModSafety((await prompt()).id, true);
+        expect(await result).toContain('MOD_SAFETY_CHANGED');
         await expect(fs.stat(join(h.userData, 'mod-safety-trust.json'))).rejects.toThrow();
     });
     it('does not let persisted trust override an archive read error', async () => {
