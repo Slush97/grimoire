@@ -1097,6 +1097,7 @@
     },
     "preferences": {
       "expandLocker": "Expand Locker cards by default",
+      "groupClickOpensDetails": "Open the mod page when clicking a multi-file mod",
       "switchVariants": "Switch variants instead of stacking them",
       "autoMatchRemainingFiles": "Match remaining update files automatically",
       "skipModReplacementConfirmation": "Skip file replacement confirmation",
@@ -1254,6 +1255,7 @@
     },
     "toggles": {
       "expandLocker": "Start Locker list view with hero cards expanded.",
+      "groupClickOpensDetails": "Clicking a mod with more than one file on Installed opens its GameBanana page. Off opens the file picker.",
       "switchVariants": "Installing a new variant disables the old one. Off keeps both active. Updates always replace the old file.",
       "autoMatchRemainingFiles": "After matching names and descriptions, pair one unmatched installed file with one remaining new upload. This can replace a different variant. Turn off to choose these replacements yourself.",
       "skipModReplacementConfirmation": "Replace files without showing the confirmation dialog. Turn off to ask again.",
@@ -1884,6 +1886,7 @@
       "staleSourcesTitle_one": "{{count}} merged source has a newer version on GameBanana. Unmerge to update it.",
       "staleSourcesTitle_other": "{{count}} merged sources have newer versions on GameBanana. Unmerge to update them.",
       "noFilesEnabled": "No files enabled",
+      "variantStatusTitle": "{{labels}} - click card to choose files",
       "variantFilesTitle": "{{labels}} (right-click the card to choose files)",
       "revealInFolder": "Reveal in folder",
       "soloLaunch": "Start with only this enabled",

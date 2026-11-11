@@ -281,6 +281,7 @@ interface InstalledEntryCardProps {
   viewMode: ViewMode;
   hideNsfwPreviews: boolean;
   soundVolume: number;
+  groupClickOpensDetails: boolean;
   conflicts: ModConflict[];
   updateAvailable: boolean;
   staleSourceCount: number;
@@ -351,6 +352,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   viewMode,
   hideNsfwPreviews,
   soundVolume,
+  groupClickOpensDetails,
   conflicts,
   updateAvailable,
   staleSourceCount,
@@ -492,9 +494,10 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   // Group entry. Stand-in `mod` is the primary so the card visuals look
   // right; the `group` prop tells ModCard to swap filename for file
   // selection metadata and offer the file picker in the card menu. A click
-  // opens the GameBanana page like a single file's card does. A local group
-  // has no page, so its click opens the picker instead.
-  const groupOpensPicker = !entry.gameBananaId;
+  // opens the picker, or the GameBanana page when the setting is on. A local
+  // group's primary can carry GameBanana metadata, so the group key decides.
+  const hasDetailsPage = !entry.groupKey.startsWith('local:') && !!entry.gameBananaId;
+  const groupOpensPicker = !(groupClickOpensDetails && hasDetailsPage);
   const safetyTarget = entry.variants.find(v => v.safety?.report.verdict === 'blocked' || v.safety?.report.verdict === 'incomplete')
     ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust' && !v.safety.trusted)
     ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust');
@@ -583,6 +586,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
           variant.fileName
         ),
         onOpenPicker: () => onOpenPicker(entry.groupKey),
+        onViewDetails: hasDetailsPage ? () => onOpenGroupDetails(entry) : undefined,
         opensPicker: groupOpensPicker,
       }}
     />
@@ -892,6 +896,7 @@ export default function Installed() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location, mods, navigate]);
   const installedHideNsfwPreviews = shouldBlurNsfw(settings);
+  const groupClickOpensDetails = settings?.installedGroupClickOpensDetails ?? false;
   // Disabled-section sort, deliberately separate from the top-bar sort above.
   // That one spans both sections and turns the whole page read-only (a sorted
   // enabled list no longer maps to load order). The disabled library is a
@@ -3432,6 +3437,7 @@ export default function Installed() {
     viewMode,
     hideNsfwPreviews: installedHideNsfwPreviews,
     soundVolume,
+    groupClickOpensDetails,
     conflicts: entryConflicts.get(entry.key) ?? EMPTY_CONFLICTS,
     updateAvailable:
       entry.kind === 'single'

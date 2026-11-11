@@ -177,8 +177,9 @@ interface ModCardProps {
     enabledCount: number;
     enabledLabels: string[];
     onOpenPicker: () => void;
-    /** `onOpenDetails` opens the picker rather than a details page (a local
-     *  group has no GameBanana page), so the menu skips its "View details". */
+    /** Opens the group's GameBanana page. Absent for a local group. */
+    onViewDetails?: () => void;
+    /** `onOpenDetails` (the card click) opens the picker, not a details page. */
     opensPicker?: boolean;
   };
 }
@@ -824,9 +825,11 @@ export function ModCard({
   };
   const variantStatusLabel = group ? `${group.enabledCount}/${group.variantCount}` : null;
   const enabledTitle = group?.enabledLabels.join(', ') ?? '';
-  const variantStatusTitle = group
-    ? t('installed.card.variantFilesTitle', { labels: enabledTitle || t('installed.card.noFilesEnabled') })
-    : '';
+  const variantStatusTitle = !group
+    ? ''
+    : group.opensPicker
+      ? t('installed.card.variantStatusTitle', { labels: enabledTitle || t('installed.card.noFilesEnabled') })
+      : t('installed.card.variantFilesTitle', { labels: enabledTitle || t('installed.card.noFilesEnabled') });
   const [menuBusy, setMenuBusy] = useState(false);
 
   // The menu closes on select (Radix default), so outcomes are reported by
@@ -1013,6 +1016,8 @@ export function ModCard({
   // root wrapping the card and dropdown root on the three-dot button.
   // Construct it only when Radix mounts the open menu, rather than on every
   // closed card's render.
+  // A group card's click may open the picker, so its "View details" has its own handler.
+  const viewDetails = group ? group.onViewDetails : onOpenDetails;
   const hasTopActions =
     !!onEditLocal || !!onAddVariant || !!onUngroupVariants || !!onOpenDetails || !!onViewAuthor
     || !!cardImageSource || !!group;
@@ -1036,8 +1041,8 @@ export function ModCard({
           {t('installed.card.ungroupVariants')}
         </MenuItem>
       )}
-      {onOpenDetails && !group?.opensPicker && (
-        <MenuItem icon={Info} onSelect={onOpenDetails}>
+      {viewDetails && (
+        <MenuItem icon={Info} onSelect={viewDetails}>
           {t('installed.card.viewDetails')}
         </MenuItem>
       )}
