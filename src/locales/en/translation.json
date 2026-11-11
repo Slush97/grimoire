@@ -1632,8 +1632,8 @@
       "cardSizeGridOnly": "Card size applies to grid view."
     },
     "status": {
-      "overlapCount_one": "{{count}} overlap",
-      "overlapCount_other": "{{count}} overlaps",
+      "overlapCount_one": "{{count}} Overlap",
+      "overlapCount_other": "{{count}} Overlaps",
       "enableCap": "You can have at most 990 mods enabled at once. Disable one to make room.",
       "bulkEnabling": "Enabling {{done}}/{{total}}…",
       "bulkDisabling": "Disabling {{done}}/{{total}}…",
