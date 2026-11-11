@@ -700,12 +700,14 @@ export interface SearchLocalModsOptions {
      *  null), so this is what actually scopes a local category filter. Without
      *  it the id comparison matches no rows at all. */
     categoryName?: string;
-    /** Hero's category and every descendant. Matched against the mod's
-     *  sub-category id, so it is exact. Mod section only. */
-    heroCategoryIds?: number[];
-    /** Hero name, matched as a whole word in the title. For Sound and Wip,
-     *  which have no hero categories. Ignored when `heroCategoryIds` is set. */
+    /** Matching hero branches and descendants, keyed by section because
+     *  category IDs can collide between their independent trees. */
+    heroCategoryIds?: Record<string, number[]>;
+    /** Hero name, matched in Sound/Wip titles, plus Mod titles when extended
+     *  matching is enabled. Combined with category matches using OR. */
     heroName?: string;
+    /** Include Mod title matches and hero branches outside Skins. */
+    extendedHeroMatching?: boolean;
     sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
     nsfw?: 'all' | 'sfw' | 'nsfw';
     addedWithin?: 'all' | 'today' | 'week' | 'month' | 'custom';

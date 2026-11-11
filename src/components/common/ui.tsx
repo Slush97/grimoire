@@ -153,13 +153,14 @@ export function CheckboxMark({
     indeterminate?: boolean;
     disabled?: boolean;
     className?: string;
-    tone?: 'accent' | 'success' | 'danger';
+    tone?: 'accent' | 'success' | 'danger' | 'neutral';
     icon?: LucideIcon;
     variant?: 'default' | 'menu';
 }) {
     const active = checked || indeterminate;
     const selectedStyles = tone === 'success' ? 'border-state-success bg-state-success'
-        : tone === 'danger' ? 'border-state-danger bg-state-danger' : 'border-accent bg-accent';
+        : tone === 'danger' ? 'border-state-danger bg-state-danger'
+        : tone === 'neutral' ? 'border-text-secondary bg-text-secondary' : 'border-accent bg-accent';
     return (
         <span
             aria-hidden

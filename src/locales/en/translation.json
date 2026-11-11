@@ -3373,6 +3373,8 @@
       "clearFilters": "Clear filters",
       "hero": "Hero",
       "filterByHero": "Filter by hero",
+      "extendedHeroMatching": "Extended hero matching",
+      "extendedHeroMatchingDescription": "Include hero names in titles and hero categories outside Skins.",
       "allHeroes": "All Heroes",
       "noHero": "No hero (item / UI / music)",
       "searchHeroesAria": "Search heroes",

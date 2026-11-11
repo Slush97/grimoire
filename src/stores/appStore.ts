@@ -246,6 +246,8 @@ export interface BrowseUiState {
   // doesn't resolve to any known hero" (item sounds, UI, music, etc.).
   // For Mod section it collapses to 'all' since every Skin lives under a hero.
   heroCategoryId: number | 'all' | 'none';
+  // Matching preference, independent of active filters and Clear all.
+  extendedHeroMatching: boolean;
   categoryId: number | 'all';
   // Category ids belong to their section. Remember them for this session only.
   categoryIdsBySection: Partial<Record<string, number | 'all'>>;
@@ -328,6 +330,7 @@ const DEFAULT_BROWSE_UI: BrowseUiState = {
   addedTo: '',
   onlyNsfw: false,
   heroCategoryId: 'all',
+  extendedHeroMatching: false,
   categoryId: 'all',
   categoryIdsBySection: {},
   soundNoHero: false,

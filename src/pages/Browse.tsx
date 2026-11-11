@@ -37,6 +37,7 @@ import {
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
 import { browseNsfwFilter, browseRemoteFilters, type BrowseContentMode } from '../lib/browseFilters';
+import { heroCategoryIdsForName } from '../lib/heroNames';
 import { categorySubtreeIds } from '../lib/heroFilter';
 import { categoryModelForSection } from '../lib/categoryPaths';
 import { useCategoryStore } from '../stores/categoryStore';
@@ -67,7 +68,7 @@ import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
 import { HeroSelect } from '../components/common/HeroSelect';
 import { DropdownSelect, Input } from '../components/common/forms';
 import { AnchoredPopover } from '../components/common/AnchoredPopover';
-import { Button, ViewOptionControl } from '../components/common/ui';
+import { Button, CheckboxMark, ViewOptionControl } from '../components/common/ui';
 import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
 import { checkQuickInstallRequirements } from '../stores/requirementsStore';
@@ -337,7 +338,8 @@ export default function Browse() {
   );
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
-  const { search, layout, sort, section, selectedSections, addedWithin, addedFrom, addedTo, onlyNsfw, heroCategoryId, categoryId, submitter, hiddenCreatorOverrideId } = browseUi;
+  const { search, layout, sort, section, selectedSections, addedWithin, addedFrom, addedTo, onlyNsfw, heroCategoryId, extendedHeroMatching, categoryId, submitter, hiddenCreatorOverrideId } = browseUi;
+  const heroMatchingMode = typeof heroCategoryId === 'number' && extendedHeroMatching;
   const sectionStamp = selectedSections.slice().sort().join(',');
   const combinedFeed = selectedSections.length > 1;
   // Artist mode: the grid is scoped to one submitter's mods and Browse shows an
@@ -384,7 +386,7 @@ export default function Browse() {
   // wipe loaded results or scroll position. The cache stamp encodes current
   // filters; if filters changed in between (impossible today since they only
   // change on Browse, but defensive) we ignore the stale cache.
-  const initialFilterStamp = `${browseUi.selectedSections.slice().sort().join(',')}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${browseUi.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
+  const initialFilterStamp = `${browseUi.selectedSections.slice().sort().join(',')}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${heroMatchingMode}|${nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${browseUi.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
   const initialCache = browseSession && browseSession.source && browseSession.stamp === initialFilterStamp && browseCacheIsFresh(browseSession.fetchedAt)
     ? browseSession
     : null;
@@ -433,7 +435,7 @@ export default function Browse() {
   // double effect run in dev — the second setup compares stamps and short-
   // circuits, instead of consuming a one-shot skip flag.
   const lastFetchedStampRef = useRef<string | null>(
-    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.selectedSections.slice().sort().join(',')}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${browseUi.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}` : null
+    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.selectedSections.slice().sort().join(',')}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${heroMatchingMode}|${nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${browseUi.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}` : null
   );
   // Monotonic guard for browse/search requests. Filter changes and newer
   // requests invalidate older responses so they cannot append stale pages into
@@ -735,8 +737,14 @@ export default function Browse() {
     : undefined;
   const selectedHeroName = selectedHeroNode ? canonicalHeroName(selectedHeroNode.name) : undefined;
   const selectedHeroCategoryIds = useMemo(
-    () => (selectedHeroNode ? categorySubtreeIds(selectedHeroNode) : undefined),
-    [selectedHeroNode]
+    () => {
+      if (!selectedHeroNode || !selectedHeroName) return undefined;
+      if (!heroMatchingMode) return sectionStamp.split(',').includes('Mod') ? { Mod: categorySubtreeIds(selectedHeroNode) } : {};
+      return Object.fromEntries(sectionStamp.split(',').map(selectedSection => [
+        selectedSection, heroCategoryIdsForName(categoryTrees[categoryModelForSection(selectedSection)] ?? EMPTY_CATEGORIES, selectedHeroName),
+      ]));
+    },
+    [selectedHeroNode, selectedHeroName, heroMatchingMode, sectionStamp, categoryTrees]
   );
 
   // Debounce the search input: every keystroke previously fired a full FTS5
@@ -771,7 +779,7 @@ export default function Browse() {
   // Category and hero names resolve asynchronously with their category trees.
   // Keep both in the request identity so an early id-only local query cannot
   // suppress the corrected name-based query when either tree arrives.
-  const fetchFilterStamp = `${effectiveSearch}|${sort}|${sectionStamp}|${effectiveCategoryId}|${effectiveCategoryName ?? ''}|${heroCategoryId}|${selectedHeroName ?? ''}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}|${hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
+  const fetchFilterStamp = `${effectiveSearch}|${sort}|${sectionStamp}|${effectiveCategoryId}|${effectiveCategoryName ?? ''}|${heroCategoryId}|${heroMatchingMode}|${selectedHeroName ?? ''}|${JSON.stringify(selectedHeroCategoryIds)}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}|${hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
   const browseResultsCacheRef = useRef<Map<string, BrowseResultCacheEntry>>(new Map());
   const browseScrollCacheRef = useRef<Map<string, number>>(new Map());
   const activeFetchFilterStampRef = useRef(fetchFilterStamp);
@@ -786,7 +794,7 @@ export default function Browse() {
   const fetchedAtRef = useRef(initialCache?.fetchedAt ?? 0);
   const resultSourceRef = useRef(initialCache?.source);
   const loadedSessionStampRef = useRef(initialCache?.stamp);
-  const querySessionStamp = `${sectionStamp}|${effectiveSearch}|${sort}|${categoryId}|${heroCategoryId}|${nsfw}|${addedWithin}|${addedFrom}|${addedTo}|${submitter?.id ?? ''}|${hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
+  const querySessionStamp = `${sectionStamp}|${effectiveSearch}|${sort}|${categoryId}|${heroCategoryId}|${heroMatchingMode}|${nsfw}|${addedWithin}|${addedFrom}|${addedTo}|${submitter?.id ?? ''}|${hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
   const hasMoreRef = useRef<boolean>(hasMore);
   const totalCountRef = useRef<number>(_totalCount);
   useEffect(() => {
@@ -1216,10 +1224,10 @@ export default function Browse() {
         // The cached rows have no category id, only a root category name; see
         // rootCategoryNameById. Ignored when a hero is selected.
         categoryName: effectiveCategoryName,
-        // Match assigned hero categories or a hero name in the title. Sounds
-        // and WiPs use only title matching because their category IDs differ.
-        heroCategoryIds: combinedFeed || section === 'Mod' ? selectedHeroCategoryIds : undefined,
+        // Match hero branches in each section's tree or a name in any title.
+        heroCategoryIds: selectedHeroCategoryIds,
         heroName: selectedHeroName,
+        extendedHeroMatching: heroMatchingMode,
         sortBy: sortMap[sort] || 'relevance',
         nsfw,
         addedWithin,
@@ -1314,7 +1322,7 @@ export default function Browse() {
         finishRefresh();
       }
     }
-  }, [page, effectiveSearch, section, selectedSections, combinedFeed, sort, perPage, effectiveCategoryId, effectiveCategoryName, selectedHeroName, selectedHeroCategoryIds, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp, querySessionStamp, finishRefresh]);
+  }, [page, effectiveSearch, section, selectedSections, combinedFeed, sort, perPage, effectiveCategoryId, effectiveCategoryName, selectedHeroName, selectedHeroCategoryIds, heroMatchingMode, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp, querySessionStamp, finishRefresh]);
 
   // Value-compare gate for the filter-reset: remember what filters last
   // triggered a reset; only reset when the new combination is actually
@@ -2642,6 +2650,7 @@ export default function Browse() {
                             )}
                           </div>
                           {heroOptions.length > 0 && (
+                            <div className="space-y-3">
                             <HeroSelect
                               ariaLabel={t('browse.filters.filterByHero')}
                               value={String(heroCategoryId)}
@@ -2669,6 +2678,15 @@ export default function Browse() {
                                 clearLabel: t('browse.filters.clearSearch'),
                               }}
                             />
+                            <label title={t('browse.filters.extendedHeroMatchingDescription')}
+                              className={`flex w-fit max-w-full items-center gap-2 text-xs text-text-secondary ${!hasLocalCache || localSearchFailed || submitter ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:text-text-primary'}`}>
+                              <input type="checkbox" checked={extendedHeroMatching} className="peer sr-only"
+                                onChange={event => setBrowseUi({ extendedHeroMatching: event.target.checked })}
+                                disabled={!hasLocalCache || localSearchFailed || !!submitter} />
+                              <CheckboxMark checked={extendedHeroMatching} tone="neutral" variant="menu" />
+                              <span>{t('browse.filters.extendedHeroMatching')}</span>
+                            </label>
+                            </div>
                           )}
                         </div>
                       )}

@@ -1,5 +1,6 @@
 import { HERO_NAMES, canonicalHeroName } from './lockerUtils';
-import { nameMentionsHero } from './heroFilter';
+import { categorySubtreeIds, nameMentionsHero } from './heroFilter';
+import type { GameBananaCategoryNode } from '../types/gamebanana';
 
 /** Browse's cached category roster includes heroes newer than the app's bundle. */
 export function heroNamesInText(text: string, heroNames: readonly string[] = HERO_NAMES): string[] {
@@ -19,4 +20,11 @@ export function heroNameForLabel(label?: string, heroNames: readonly string[] = 
   // Explicit aliases remain recognizable offline even if the bundled roster
   // predates their hero. Arbitrary category labels never take this fallback.
   return match ? canonicalHeroName(match) : canonical !== cleaned ? canonical : null;
+}
+
+/** Find every matching hero branch, including categories outside Skins. */
+export function heroCategoryIdsForName(tree: readonly GameBananaCategoryNode[], hero: string): number[] {
+  const canonical = canonicalHeroName(hero);
+  return tree.flatMap(node => heroNameForLabel(node.name, [canonical]) === canonical
+    ? categorySubtreeIds(node) : heroCategoryIdsForName(node.children ?? [], canonical));
 }

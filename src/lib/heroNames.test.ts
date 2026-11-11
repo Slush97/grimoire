@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { heroNameForLabel, heroNamesInText } from './heroNames';
+import { heroCategoryIdsForName, heroNameForLabel, heroNamesInText } from './heroNames';
 import { getHeroChipIconPath } from './lockerUtils';
+
+describe('heroCategoryIdsForName', () => {
+  it('finds aliases and descendants in every category while keeping other hero branches out', () => {
+    expect(heroCategoryIdsForName([
+      { id: 1, name: 'Skins', itemCount: 1, children: [{ id: 2, name: 'RatKing', itemCount: 1, children: [
+        { id: 3, name: 'Flag', itemCount: 1 },
+      ] }, { id: 4, name: 'Haze', itemCount: 1 }] },
+      { id: 5, name: 'HUD', itemCount: 1, children: [{ id: 6, name: 'Rat King', itemCount: 1, children: [
+        { id: 7, name: 'Crosshair', itemCount: 1 },
+      ] }] },
+      { id: 8, name: 'Rat King flag', itemCount: 1 },
+    ], 'Rat King')).toEqual([2, 3, 6, 7]);
+  });
+});
 
 describe('heroNameForLabel', () => {
   it('matches dynamic hero names exactly without relying on the shared roster', () => {

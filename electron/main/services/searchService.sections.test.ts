@@ -54,7 +54,7 @@ describe.skipIf(nativeSqliteUnavailable)('combined catalog search', () => {
   });
 
   it('includes hero categories and title matches across Mods, Sounds and WiPs', () => {
-    const result = searchMods({ sections: ['Mod', 'Sound', 'Wip'], heroCategoryIds: [42], heroName: 'Haze', sortBy: 'date' });
+    const result = searchMods({ sections: ['Mod', 'Sound', 'Wip'], heroCategoryIds: { Mod: [42] }, heroName: 'Haze', extendedHeroMatching: true, sortBy: 'date' });
     expect(result.mods.map((mod) => mod.id)).toEqual([5, 1, 2, 3]);
   });
 
