@@ -18,12 +18,19 @@ function isHudMod(metadata: ModMetadata, paths?: CategoryPaths): boolean {
     })) === 'hud';
 }
 
-/** Sound, WiP, and HUD payloads share the same per-file matching rules. */
-export function isModHeroDetectionEligible(metadata: ModMetadata | undefined, paths?: CategoryPaths): boolean {
-    return !!metadata && (metadata.sourceSection === 'Sound' || metadata.sourceSection === 'Wip' || isHudMod(metadata, paths));
+function isUnassignedSkin(metadata: ModMetadata, paths?: CategoryPaths): boolean {
+    if ((metadata.sourceSection ?? 'Mod') !== 'Mod') return false;
+    const path = resolveCategoryPath(paths, { id: metadata.categoryId, name: metadata.categoryName ?? '' });
+    return path.some(category => category.name.toLowerCase() === 'skins') && !categoryHeroName(path);
 }
 
-function detectionInputs(metadata: ModMetadata, kind: 'tiered' | 'local' = 'tiered'): string {
+/** Unassigned skins share the textual fallback, without inspecting VPK assets. */
+export function isModHeroDetectionEligible(metadata: ModMetadata | undefined, paths?: CategoryPaths): boolean {
+    return !!metadata && (metadata.sourceSection === 'Sound' || metadata.sourceSection === 'Wip'
+        || isHudMod(metadata, paths) || isUnassignedSkin(metadata, paths));
+}
+
+function detectionInputs(metadata: ModMetadata, kind: 'tiered' | 'local' | 'text' = 'tiered'): string {
     return JSON.stringify([
         kind,
         metadata.sourceSection,
@@ -34,7 +41,7 @@ function detectionInputs(metadata: ModMetadata, kind: 'tiered' | 'local' = 'tier
     ]);
 }
 
-function needsDetection(mod: DetectionMod, metadata: ModMetadata, kind: 'tiered' | 'local' = 'tiered'): boolean {
+function needsDetection(mod: DetectionMod, metadata: ModMetadata, kind: 'tiered' | 'local' | 'text' = 'tiered'): boolean {
     const previous = metadata.heroDetection;
     return !previous || previous.version !== MOD_HERO_DETECTION_VERSION
         || previous.size !== mod.size || previous.modifiedAt !== mod.installedAt
@@ -52,6 +59,7 @@ export function needsModHeroDetection(mod: DetectionMod, metadata: ModMetadata |
         || !isLinked(data) && !(data.lockerHeroSource === 'manual' && data.lockerHero?.trim()))) return false;
     if (data.lockerHeroSource === 'manual' && data.lockerHero?.trim()
         && !(data.globalTypeSource === 'manual' && data.globalType)) return false;
+    if (isUnassignedSkin(data, paths)) return false;
     const tiered = isModHeroDetectionEligible(data, paths);
     if (!tiered && (isLinked(data) || data.lockerHero?.trim())) return false;
     return needsDetection(mod, data, tiered ? 'tiered' : 'local');
@@ -86,22 +94,27 @@ export function heroesMentionedInFileText(texts: readonly string[]): string[] {
         .map(({ name }) => name).sort((a, b) => a.localeCompare(b));
 }
 
-/** Stop at the first matching level: paths, description, original filenames, name. */
+/** Stop at the first matching level, omitting paths for unassigned skins. */
 export function detectModHeroes(
     mod: DetectionMod & { path: string },
     metadata: ModMetadata | undefined,
     categoryPaths?: CategoryPaths,
 ): InstalledHeroDetection | undefined {
     if (!metadata || !isModHeroDetectionEligible(metadata, categoryPaths)) return undefined;
-    if (!needsDetection(mod, metadata)) return metadata.heroDetection;
-    const paths = parseVpkDirectoryCached(mod.path);
-    if (paths === null) {
-        // A transient parse failure must not become a permanent checked result.
-        invalidateVpkParseCache(mod.path);
-        return undefined;
+    const kind = isUnassignedSkin(metadata, categoryPaths) ? 'text' : 'tiered';
+    if (!needsDetection(mod, metadata, kind)) return metadata.heroDetection;
+    let heroes: string[] = [];
+    let source: InstalledHeroDetection['source'] = 'name';
+    if (kind !== 'text') {
+        const paths = parseVpkDirectoryCached(mod.path);
+        if (paths === null) {
+            // A transient parse failure must not become a permanent checked result.
+            invalidateVpkParseCache(mod.path);
+            return undefined;
+        }
+        heroes = inferHeroesFromVpkPaths(paths);
+        source = 'vpk';
     }
-    let heroes = inferHeroesFromVpkPaths(paths);
-    let source: InstalledHeroDetection['source'] = 'vpk';
     if (heroes.length === 0) {
         const textLevels: Array<{ source: InstalledHeroDetection['source']; texts: string[] }> = [
             { source: 'description', texts: [metadata.fileDescription ?? ''] },
@@ -120,7 +133,7 @@ export function detectModHeroes(
         source,
         size: mod.size,
         modifiedAt: mod.installedAt,
-        inputs: detectionInputs(metadata),
+        inputs: detectionInputs(metadata, kind),
     };
 }
 

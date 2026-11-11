@@ -178,6 +178,53 @@ describe('shared installed classification', () => {
     });
 });
 
+describe('skins without an assigned hero category', () => {
+    const paths = buildCategoryPaths([{ id: 1, name: 'Skins', itemCount: 0, children: [{ id: 2, name: 'Ivy', itemCount: 0 }] }]);
+    const skin: ModMetadata = { gameBananaId: 7, sourceSection: 'Mod', categoryId: 1, categoryName: 'Skins' };
+
+    it.each([
+        { fileDescription: 'Haze and Ivy variants', sourceFileName: 'Wraith', modName: 'Rem', heroes: ['Haze', 'Ivy'], source: 'description' },
+        { fileDescription: 'Golden outfit', sourceFileName: 'Lady_Geist-gold', modName: 'Rem', heroes: ['Lady Geist'], source: 'file' },
+        { fileDescription: '', sourceFileName: 'gold', modName: 'Haze and Wraith outfits', heroes: ['Haze', 'Wraith'], source: 'name' },
+        { fileDescription: '', sourceFileName: 'gold', modName: 'Generic outfit', heroes: [], source: 'name' },
+    ])('uses $source matching without parsing the payload: $modName', ({ heroes, source, ...labels }) => {
+        parser.read.mockReturnValue(null);
+        const metadata = { ...skin, ...labels };
+        expect(isModHeroDetectionEligible(metadata, paths)).toBe(true);
+        expect(needsModHeroDetection(mod, metadata, paths)).toBe(false);
+        expect(detectModHeroes(mod, metadata, paths)).toMatchObject({ heroes, source });
+        expect(resolveModClassification(mod, metadata, paths).lockerHeroes).toEqual(heroes);
+        expect(parser.read).not.toHaveBeenCalled();
+        expect(parser.localHero).not.toHaveBeenCalled();
+    });
+
+    it('works offline and refreshes cached text matches when the original labels change', () => {
+        const metadata = { ...skin, modName: 'Haze outfit' };
+        const previous = detectModHeroes(mod, metadata);
+        expect(detectModHeroes(mod, { ...metadata, heroDetection: previous })).toBe(previous);
+        expect(detectModHeroes(mod, { ...metadata, heroDetection: previous, fileDescription: 'Ivy variant' }))
+            .toMatchObject({ heroes: ['Ivy'], source: 'description' });
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+
+    it('keeps explicit hero categories and manual assignments ahead of textual matches', () => {
+        const categorized = { ...skin, categoryId: 2, categoryName: 'Ivy', modName: 'Haze outfit' };
+        expect(isModHeroDetectionEligible(categorized, paths)).toBe(false);
+        expect(resolveModClassification(mod, categorized, paths).lockerHeroes).toEqual(['Ivy']);
+        expect(resolveModClassification(mod, { ...skin, modName: 'Haze outfit', lockerHero: 'Wraith', lockerHeroSource: 'manual' }, paths))
+            .toMatchObject({ lockerHero: 'Wraith', lockerHeroes: ['Wraith'] });
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+
+    it('does not reuse text-only results when a mod becomes eligible for payload detection', () => {
+        const previous = detectModHeroes(mod, { ...skin, modName: 'Haze outfit' });
+        parser.read.mockReturnValue(['sounds/vo/wraith/line.vsnd_c']);
+        expect(detectModHeroes(mod, { ...skin, categoryId: undefined, categoryName: 'HUD', heroDetection: previous }))
+            .toMatchObject({ heroes: ['Wraith'], source: 'vpk' });
+        expect(parser.read).toHaveBeenCalledOnce();
+    });
+});
+
 it.each(['Sound', 'Wip'])('keeps existing single-hero consumers compatible with resolved %s tags', (sourceSection) => {
     const metadata: ModMetadata = { sourceSection, fileDescription: 'Haze' };
     const single = resolveModClassification(mod, metadata);

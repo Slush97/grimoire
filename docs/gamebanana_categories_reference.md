@@ -175,7 +175,7 @@ selection colors; selected hero and tag dropdown triggers retain accent hints.
 
 ## Installed hero detection
 
-Mod-section skin ownership comes from its category ancestry. Installed Sound, Wip, and HUD files use the same local detector, which can return several supported heroes. Recognize HUD descendants through the cached Mod category path, with saved-label fallback offline:
+Mod-section skin ownership comes from its category ancestry. Skins assigned directly to Skins without a hero category use the textual steps below, skipping VPK asset inspection. This runs when downloading or updating them and during installed classification, using each file's own original metadata. Explicit hero categories and manual assignments take precedence. Installed Sound, Wip, and HUD files use the same local detector, which can return several supported heroes. Recognize HUD descendants through the cached Mod category path, with saved-label fallback offline:
 
 1. Inspect recognized asset paths inside that file's VPK. Resolve sound and model codenames through their existing namespaces and supported-hero mappings; NPC and unsupported hero tokens do not count.
 2. If any supported heroes are found, use that complete set and skip text matching.

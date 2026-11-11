@@ -234,6 +234,19 @@ describe('managed download FIFO', () => {
             .toBe(true);
     });
 
+    it('saves textual hero detection for a newly downloaded skin without a hero category', async () => {
+        harness.fetchModDetails.mockResolvedValue({
+            name: 'Haze outfit', category: { id: 33295, name: 'Skins' },
+            files: [{ id: 96, fileName: 'outfit.vpk', description: 'Ivy variant', downloadUrl: `${harness.baseUrl}/96`, fileSize: 11 }],
+        });
+        await enqueueManagedDownload('/game', { ...args(96), fileName: 'outfit.vpk', section: 'Mod' }, mainWindow,
+            { afterInstall: async () => {} });
+        expect(harness.setModMetadataWithHash).toHaveBeenCalledOnce();
+        expect(harness.setModMetadataWithHash.mock.calls[0][1]).toMatchObject({
+            categoryId: 33295, categoryName: 'Skins', heroDetection: { heroes: ['Ivy'], source: 'description' },
+        });
+    });
+
     it('refuses ordinary, one-click, and managed jobs during developer library replacement', async () => {
         harness.copying = true;
         const operations = [
