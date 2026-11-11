@@ -1,7 +1,12 @@
 import { create } from 'zustand';
 import type { InstalledIssueGroup } from '../lib/installedIssues';
 
-interface SessionIssues { currentIds: ReadonlySet<string>; unreadIds: ReadonlySet<string>; outdatedIds: ReadonlySet<string> }
+interface SessionIssues {
+  currentIds: ReadonlySet<string>;
+  unreadIds: ReadonlySet<string>;
+  outdatedIds: ReadonlySet<string>;
+  attentionStartedAt: number | null;
+}
 interface InstalledIssuesState extends SessionIssues {
   scope: string | null;
   open: boolean;
@@ -12,11 +17,12 @@ interface InstalledIssuesState extends SessionIssues {
   activate: (scope: string | null) => void;
   receive: (scope: string | null, groups: InstalledIssueGroup[]) => void;
   setOpen: (open: boolean) => void;
+  stopAttention: () => void;
   setBusy: (busy: boolean) => void;
   mountView: () => () => void;
 }
 
-const empty = (): SessionIssues => ({ currentIds: new Set(), unreadIds: new Set(), outdatedIds: new Set() });
+const empty = (): SessionIssues => ({ currentIds: new Set(), unreadIds: new Set(), outdatedIds: new Set(), attentionStartedAt: null });
 const hasUnreadOutdated = ({ unreadIds, outdatedIds }: SessionIssues) => [...outdatedIds].some(id => unreadIds.has(id));
 let viewOwner: symbol | null = null;
 
@@ -36,15 +42,26 @@ export const useInstalledIssuesStore = create<InstalledIssuesState>((set) => ({
     const open = sameScope && state.open;
     const unreadIds = open ? new Set<string>() : new Set([...currentIds]
       .filter(id => previous.unreadIds.has(id) || !previous.currentIds.has(id)));
-    const session = { currentIds, unreadIds, outdatedIds };
+    const attentionStartedAt = unreadIds.size === 0 ? null
+      : [...unreadIds].some(id => !previous.currentIds.has(id))
+        ? Math.max(Date.now(), (previous.attentionStartedAt ?? -1) + 1) : previous.attentionStartedAt;
+    const session = { currentIds, unreadIds, outdatedIds, attentionStartedAt };
     return { scope, open, ...session, hasUnread: unreadIds.size > 0, hasUnreadOutdated: hasUnreadOutdated(session),
       sessions: scope ? { ...state.sessions, [scope]: session } : state.sessions };
   }),
   setOpen: open => set(state => {
     if ((!open && state.busy) || (open && (state.busy || !state.scope))) return state;
     const unreadIds = open ? new Set<string>() : state.unreadIds;
-    const session = { currentIds: state.currentIds, unreadIds, outdatedIds: state.outdatedIds };
-    return { open, unreadIds, hasUnread: unreadIds.size > 0, hasUnreadOutdated: hasUnreadOutdated(session),
+    const session = { currentIds: state.currentIds, unreadIds, outdatedIds: state.outdatedIds,
+      attentionStartedAt: open ? null : state.attentionStartedAt };
+    return { open, unreadIds, attentionStartedAt: session.attentionStartedAt,
+      hasUnread: unreadIds.size > 0, hasUnreadOutdated: hasUnreadOutdated(session),
+      sessions: state.scope ? { ...state.sessions, [state.scope]: session } : state.sessions };
+  }),
+  stopAttention: () => set(state => {
+    if (state.attentionStartedAt === null) return state;
+    const session = { currentIds: state.currentIds, unreadIds: state.unreadIds, outdatedIds: state.outdatedIds, attentionStartedAt: null };
+    return { attentionStartedAt: null,
       sessions: state.scope ? { ...state.sessions, [state.scope]: session } : state.sessions };
   }),
   setBusy: busy => set({ busy }),

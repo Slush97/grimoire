@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useInstalledIssuesStore } from './installedIssuesStore';
 import type { InstalledIssueGroup } from '../lib/installedIssues';
 
@@ -6,10 +6,62 @@ const groups = (...keys: string[]): InstalledIssueGroup[] => keys.map(key => ({
   key, primary: {} as InstalledIssueGroup['primary'], mods: [], issues: [{ key, kind: 'camera', modId: key }],
 }));
 beforeEach(() => useInstalledIssuesStore.setState({
-  scope: null, open: false, busy: false, hasUnread: false, hasUnreadOutdated: false, sessions: {}, currentIds: new Set(), unreadIds: new Set(), outdatedIds: new Set(),
+  scope: null, open: false, busy: false, hasUnread: false, hasUnreadOutdated: false, attentionStartedAt: null,
+  sessions: {}, currentIds: new Set(), unreadIds: new Set(), outdatedIds: new Set(),
 }));
+afterEach(() => vi.restoreAllMocks());
 
 describe('installed issue attention', () => {
+  it('dismisses attention without acknowledging findings and keeps it stopped across refreshes and scope changes', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(10000);
+    const store = useInstalledIssuesStore.getState();
+    store.receive('normal', groups('a'));
+    store.stopAttention();
+    expect(useInstalledIssuesStore.getState()).toMatchObject({ attentionStartedAt: null, hasUnread: true });
+    now.mockReturnValue(12000);
+    store.receive('normal', groups('a'));
+    store.activate('dev');
+    store.activate('normal');
+    expect(useInstalledIssuesStore.getState()).toMatchObject({ attentionStartedAt: null, hasUnread: true });
+    store.receive('normal', groups('a', 'b'));
+    expect(useInstalledIssuesStore.getState().attentionStartedAt).toBe(12000);
+  });
+
+  it('starts attention for initial and new findings, including replacements at the same count', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(10000);
+    const store = useInstalledIssuesStore.getState();
+    store.receive('normal', groups('a', 'b'));
+    expect(useInstalledIssuesStore.getState().attentionStartedAt).toBe(10000);
+    now.mockReturnValue(12000);
+    store.receive('normal', groups('a', 'b'));
+    store.receive('normal', groups('b'));
+    expect(useInstalledIssuesStore.getState().attentionStartedAt).toBe(10000);
+    store.receive('normal', groups('c'));
+    expect(useInstalledIssuesStore.getState().attentionStartedAt).toBe(12000);
+    store.receive('normal', []);
+    expect(useInstalledIssuesStore.getState().attentionStartedAt).toBeNull();
+    now.mockReturnValue(14000);
+    store.receive('normal', groups('c'));
+    expect(useInstalledIssuesStore.getState().attentionStartedAt).toBe(14000);
+  });
+
+  it('keeps attention scoped to its original time and cancels it on acknowledgement', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(10000);
+    const store = useInstalledIssuesStore.getState();
+    store.receive('normal', groups('a'));
+    now.mockReturnValue(12000);
+    store.receive('dev', groups('b'));
+    store.activate('normal');
+    expect(useInstalledIssuesStore.getState().attentionStartedAt).toBe(10000);
+    store.setOpen(true);
+    expect(useInstalledIssuesStore.getState().attentionStartedAt).toBeNull();
+    store.receive('normal', groups('a', 'c'));
+    expect(useInstalledIssuesStore.getState().attentionStartedAt).toBeNull();
+    store.setOpen(false);
+    store.activate('dev');
+    expect(useInstalledIssuesStore.getState().attentionStartedAt).toBe(12000);
+  });
+
   it('acknowledges on opening and retains that acknowledgement across page remounts and unchanged refreshes', () => {
     const store = useInstalledIssuesStore.getState();
     store.receive('normal', groups('a'));

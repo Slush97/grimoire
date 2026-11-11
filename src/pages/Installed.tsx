@@ -41,7 +41,6 @@ import {
   Search,
   Download,
   CheckSquare,
-  Wrench,
   Layers,
   Beaker,
   Tag as TagIcon,
@@ -151,7 +150,7 @@ import { InstalledFilterMenu } from '../components/installed/InstalledFilterMenu
 import { sortInstalledEntries, type InstalledSortMode } from '../lib/installedSort';
 import { EMPTY_CUSTOM_TAGS, customTagsForMods, useInstalledTagsStore } from '../stores/installedTagsStore';
 import { InstalledOptionsMenu } from '../components/installed/InstalledOptionsMenu';
-import { InstalledIssuesModal } from '../components/installed/InstalledIssuesModal';
+import { InstalledIssuesButton, InstalledIssuesModal } from '../components/installed/InstalledIssuesModal';
 import { useInstalledIssuesStore } from '../stores/installedIssuesStore';
 import { ModCard } from '../components/installed/ModCard';
 import { EMPTY_LIST_IDS } from '../components/installed/emptyIds';
@@ -759,9 +758,6 @@ export default function Installed() {
   const unknownMods = useMemo(() => mods.filter(mod => mod.isUnknown).sort((a, b) => a.priority - b.priority), [mods]);
   useInstalledRequirements(visibleMods);
   const issuesOpen = useInstalledIssuesStore(state => state.open);
-  const issuesUnread = useInstalledIssuesStore(state => state.hasUnread);
-  const issuesUnreadOutdated = useInstalledIssuesStore(state => state.hasUnreadOutdated);
-  const issuesBusy = useInstalledIssuesStore(state => state.busy);
   const setIssuesOpen = useInstalledIssuesStore(state => state.setOpen);
   // Mods the bulk imprint could plausibly act on: visible (locker artifacts and
   // absorbed sources already excluded above) that are not yet imprinted OR
@@ -3622,13 +3618,7 @@ export default function Installed() {
             </Button>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" disabled={issuesBusy} onClick={() => setIssuesOpen(true)}
-              className={`inline-flex h-[38px] cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 ${issuesUnreadOutdated
-                ? 'border-state-danger/30 bg-state-danger/10 text-state-danger hover:border-state-danger/50 hover:bg-state-danger/20'
-                : issuesUnread ? 'border-state-warning/30 bg-state-warning/10 text-state-warning hover:border-state-warning/50 hover:bg-state-warning/20'
-                : 'border-border bg-bg-secondary text-text-primary hover:bg-bg-tertiary'}`}>
-              <Wrench className="h-4 w-4" aria-hidden />{t('installed.issues.title')}
-            </button>
+            <InstalledIssuesButton />
             <button type="button" onClick={() => openBatchImport()} className={installedToolbarIconClass}
               aria-label={t('installed.actions.addCustomMod')} title={t('installed.actions.addCustomModHint')}>
               <FilePlus className="h-4 w-4" aria-hidden />

@@ -27,6 +27,47 @@ class ScopeChangedError extends Error {}
 const entryName = (entry: string) => entry.slice(entry.lastIndexOf('/') + 1).replace(/_c$/, '');
 const EMPTY_REPORTS: readonly CompatibilityReview[] = [];
 
+export function InstalledIssuesButton() {
+  const { t } = useTranslation();
+  const unread = useInstalledIssuesStore(state => state.hasUnread);
+  const outdated = useInstalledIssuesStore(state => state.hasUnreadOutdated);
+  const busy = useInstalledIssuesStore(state => state.busy);
+  const attentionStartedAt = useInstalledIssuesStore(state => state.attentionStartedAt);
+  const setOpen = useInstalledIssuesStore(state => state.setOpen);
+  const stopAttention = useInstalledIssuesStore(state => state.stopAttention);
+  const ref = useRef<HTMLButtonElement>(null);
+  const hovered = useRef(false);
+
+  useEffect(() => {
+    const button = ref.current;
+    if (hovered.current) {
+      stopAttention();
+      return;
+    }
+    if (!button || !unread || attentionStartedAt === null || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const elapsed = Math.max(0, Date.now() - attentionStartedAt);
+    if (elapsed >= 5000) return;
+    const animation = button.animate([
+      { filter: 'brightness(1)' },
+      { filter: 'brightness(0.35)' },
+      { filter: 'brightness(1)' },
+    ], { id: 'installed-issues-attention', duration: 1000, iterations: 5, easing: 'ease-in-out' });
+    // Resume the same five-second window after navigation or a severity change.
+    animation.currentTime = elapsed;
+    return () => animation.cancel();
+  }, [attentionStartedAt, unread, outdated, stopAttention]);
+
+  return <button ref={ref} type="button" disabled={busy} onClick={() => setOpen(true)}
+    onMouseEnter={() => { hovered.current = true; stopAttention(); }}
+    onMouseLeave={() => { hovered.current = false; }}
+    className={`inline-flex h-[38px] cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 ${outdated
+      ? 'border-state-danger/30 bg-state-danger/10 text-state-danger hover:border-state-danger/50 hover:bg-state-danger/20'
+      : unread ? 'border-state-warning/30 bg-state-warning/10 text-state-warning hover:border-state-warning/50 hover:bg-state-warning/20'
+      : 'border-border bg-bg-secondary text-text-primary hover:bg-bg-tertiary'}`}>
+    <Wrench className="h-4 w-4" aria-hidden />{t('installed.issues.title')}
+  </button>;
+}
+
 function CompatibilityFindingRow({ finding }: { finding: CompatibilityFinding }) {
   const { t } = useTranslation();
   const text = finding.status !== 'repairable' ? t('installed.repairs.unsupported')
