@@ -104,17 +104,16 @@ export async function restoreLocalVariantGroupReplacementUnlocked(
     const source = all.find(mod => mod.id === args.sourceModId);
     const groupId = source && getModMetadata(source.metaKey)?.localGroupId?.trim();
     const replacementIds = new Set(args.replacementModIds);
-    const categoryPaths = new Map<string, CategoryPaths | undefined>();
     const members = all.filter(mod => mod.id === args.sourceModId || replacementIds.has(mod.id)
         || (groupId && getModMetadata(mod.metaKey)?.localGroupId?.trim() === groupId)).map((mod) => ({
-        ...toLocalVariantGroupMember(mod, categoryPaths),
+        ...toLocalVariantGroupMember(mod, undefined, false),
         gameBananaFileId: getModMetadata(mod.metaKey)?.gameBananaFileId,
     }));
     const plan = planLocalVariantReplacementRestore(members, args);
     return plan.replacementMetaKeys.map((metaKey) => {
         const mod = all.find((candidate) => candidate.metaKey === metaKey);
         if (!mod) throw new Error(`Replacement metadata target disappeared: ${metaKey}`);
-        setModMetadata(metaKey, { localGroupId: plan.groupId, modName: plan.modName, ...plan.classification });
+        setModMetadata(metaKey, { localGroupId: plan.groupId, modName: plan.modName });
         return mod;
     });
 }

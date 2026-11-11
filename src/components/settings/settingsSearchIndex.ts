@@ -17,7 +17,7 @@ export function settingsSearchEntries(
     ...(socialEnabled ? [{ section: 'social', category: t('settings.sections.grimoireSocial'), label: t('settings.sections.grimoireSocial'), description: t('settings.experimental.socialDescription'), target: 'settings-social' }] : []),
     ...(modSafetyEnabled ? [{ section: 'mod-safety', category: t('modSafety.manage'), label: t('modSafety.manage'), description: t('settings.toggles.modSafety'), target: 'settings-mod-safety' }] : []),
     { section: 'appearance', category: t('settings.sections.appearance'), label: t('settings.sections.appearance'), description: '', target: 'settings-appearance-settings-sections-appearance-card' },
-    { section: 'appearance', category: t('settings.sections.appearance'), label: t('settings.appearance.oled.title'), description: '', target: 'settings-appearance-settings-appearance-oled-title-toggle' },
+    { section: 'appearance', category: t('settings.sections.appearance'), label: t('settings.appearance.theme.title'), description: [t('settings.appearance.theme.dark'), t('settings.appearance.theme.oled'), t('settings.appearance.theme.light')].join(', '), target: 'settings-theme' },
     { section: 'appearance', category: t('settings.sections.appearance'), label: t('settings.nav.language'), description: '', target: 'settings-appearance-settings-nav-language-card' },
     { section: 'experimental', category: t('settings.sections.experimentalFeatures'), label: t('settings.sections.experimentalFeatures'), description: '', target: 'settings-experimental-settings-sections-experimentalFeatures-card' },
     { section: 'experimental', category: t('settings.sections.experimentalFeatures'), label: t('settings.experimental.statsDashboard'), description: t('settings.experimental.statsDashboardDescription'), target: 'settings-experimental-settings-experimental-statsDashboard-toggle' },
@@ -35,6 +35,7 @@ export function settingsSearchEntries(
     { section: 'maintenance', category: t('settings.sections.maintenance'), label: t('settings.sections.localPreviewCache'), description: t('settings.cache.previewDescription'), target: 'settings-maintenance-settings-sections-localPreviewCache-card' },
     { section: 'preferences', category: t('settings.sections.preferences'), label: t('settings.sections.preferences'), description: '', target: 'settings-preferences-settings-sections-preferences-card' },
     { section: 'preferences', category: t('settings.sections.preferences'), label: t('settings.preferences.expandLocker'), description: t('settings.toggles.expandLocker'), target: 'settings-preferences-settings-preferences-expandLocker-toggle' },
+    { section: 'preferences', category: t('settings.sections.preferences'), label: t('settings.preferences.groupClickOpensDetails'), description: t('settings.toggles.groupClickOpensDetails'), target: 'settings-preferences-settings-preferences-groupClickOpensDetails-toggle' },
     { section: 'preferences', category: t('settings.sections.preferences'), label: t('settings.preferences.confirmProfileUpdate'), description: t('settings.toggles.confirmProfileUpdate'), target: 'settings-preferences-settings-preferences-confirmProfileUpdate-toggle' },
     { section: 'preferences', category: t('settings.sections.preferences'), label: t('settings.preferences.promptOptionalRequirements'), description: t('settings.toggles.promptOptionalRequirements'), target: 'settings-preferences-settings-preferences-promptOptionalRequirements-toggle' },
     { section: 'preferences', category: t('settings.sections.preferences'), label: t('settings.preferences.ignoreOverlap'), description: t('settings.toggles.ignoreOverlap'), target: 'settings-preferences-settings-preferences-ignoreOverlap-toggle' },
@@ -99,7 +100,7 @@ export function searchSettings(entries: SettingsSearchEntry[], query: string): S
 }
 
 const TARGET_PARENTS: Readonly<Partial<Record<string, string>>> = {
-  "settings-appearance-settings-appearance-oled-title-toggle": "settings-appearance-settings-sections-appearance-card",
+  "settings-theme": "settings-appearance-settings-sections-appearance-card",
   "settings-accent": "settings-appearance-settings-sections-appearance-card",
   "settings-background": "settings-appearance-settings-sections-appearance-card",
   "settings-language": "settings-appearance-settings-nav-language-card",
@@ -118,6 +119,7 @@ const TARGET_PARENTS: Readonly<Partial<Record<string, string>>> = {
   "settings-cleanup": "settings-maintenance-settings-sections-maintenance-card",
   "settings-reset-setup": "settings-maintenance-settings-sections-maintenance-card",
   "settings-preferences-settings-preferences-expandLocker-toggle": "settings-preferences-settings-sections-preferences-card",
+  "settings-preferences-settings-preferences-groupClickOpensDetails-toggle": "settings-preferences-settings-sections-preferences-card",
   "settings-preferences-settings-preferences-confirmProfileUpdate-toggle": "settings-preferences-settings-sections-preferences-card",
   "settings-preferences-settings-preferences-ignoreOverlap-toggle": "settings-preferences-settings-sections-preferences-card",
   "settings-preferences-settings-preferences-keepModBackups-toggle": "settings-preferences-settings-sections-preferences-card",

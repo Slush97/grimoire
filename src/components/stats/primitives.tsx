@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ExternalLink, RefreshCw, AlertCircle, type LucideIcon } from 'lucide-react'
+import { ExternalLink, RefreshCw, AlertCircle, ShieldCheck, type LucideIcon } from 'lucide-react'
 import { Button } from '../common/ui'
 import { Skeleton } from '../common/Skeleton'
 import type { Async } from '../../stores/stats/async'
@@ -28,7 +28,7 @@ export function StatCard({ label, value, tone = 'default', sub }: StatCardProps)
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
             <p className={`text-3xl font-bold font-reaver tracking-wide ${valueClass}`}>{value}</p>
             <p className="text-xs text-text-secondary uppercase tracking-wider mt-1.5">{label}</p>
-            {sub && <p className="text-xs text-text-secondary mt-0.5">{sub}</p>}
+            {sub && <div className="text-xs text-text-secondary mt-0.5">{sub}</div>}
         </div>
     )
 }
@@ -146,6 +146,14 @@ interface MatchRowProps {
     startTime?: number
     netWorth?: number
     damage?: number | null
+    /** Rank points the match gave or took. Ranked matches only. */
+    rankDelta?: number | null
+    /** Demotion protection absorbed this loss. */
+    rankProtected?: boolean
+    /** Street Brawl, tagged because its souls and K/D don't compare with normal games. */
+    brawl?: boolean
+    /** Opens the match scoreboard. Makes the whole row clickable. */
+    onOpen?: () => void
     compact?: boolean
 }
 
@@ -160,6 +168,10 @@ export function MatchRow({
     startTime,
     netWorth,
     damage,
+    rankDelta,
+    rankProtected = false,
+    brawl = false,
+    onOpen,
     compact = false,
 }: MatchRowProps) {
     const { t } = useTranslation()
@@ -171,7 +183,19 @@ export function MatchRow({
         <div
             className={`group flex items-center gap-3 p-2.5 bg-bg-tertiary rounded-sm border-l-2 transition-colors ${
                 won ? 'border-green-400/60' : 'border-red-400/60'
-            } hover:bg-hl/5`}
+            } hover:bg-hl/5 ${onOpen ? 'cursor-pointer' : ''}`}
+            {...(onOpen && {
+                role: 'button',
+                tabIndex: 0,
+                title: t('stats.scoreboard.open'),
+                onClick: onOpen,
+                onKeyDown: (e: React.KeyboardEvent) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onOpen()
+                    }
+                },
+            })}
         >
             <HeroChip heroId={heroId} size="md" />
             <div className="flex-1 min-w-0">
@@ -180,6 +204,26 @@ export function MatchRow({
                     <span className={`text-xs font-semibold ${won ? 'text-green-400' : 'text-state-danger'}`}>
                         {won ? t('stats.primitives.win') : t('stats.primitives.loss')}
                     </span>
+                    {brawl && (
+                        <span
+                            className="rounded-sm border border-hl/10 px-1 text-2xs text-text-secondary"
+                            title={t('stats.scoreboard.mode.brawl')}
+                        >
+                            {t('stats.primitives.brawl')}
+                        </span>
+                    )}
+                    {rankDelta != null && rankDelta !== 0 && (
+                        <span
+                            className={`inline-flex items-center gap-0.5 font-mono text-2xs tabular-nums ${
+                                rankDelta > 0 ? 'text-state-success/80' : 'text-state-danger/80'
+                            }`}
+                            title={t(rankProtected ? 'stats.primitives.rankPointsProtected' : 'stats.primitives.rankPoints')}
+                        >
+                            {rankProtected && <ShieldCheck className="h-3 w-3" />}
+                            {rankDelta > 0 ? '+' : ''}
+                            {rankDelta}
+                        </span>
+                    )}
                 </div>
                 <div className="text-xs text-text-secondary">
                     {startTime ? `${timeAgo(startTime)} · ` : ''}
@@ -217,6 +261,7 @@ export function MatchRow({
                 target="_blank"
                 rel="noopener noreferrer"
                 title={t('stats.primitives.viewMatchOnStatlocker')}
+                onClick={(e) => e.stopPropagation()}
                 className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-accent transition-all shrink-0"
             >
                 <ExternalLink className="w-4 h-4" />

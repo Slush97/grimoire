@@ -11,7 +11,6 @@ import { tmpdir } from 'os';
 import { loadSettings, saveSettings, getActiveDeadlockPath } from '../services/settings';
 import {
     scanMods,
-    generateModId,
     scanModsAfterMutations,
     healModFolders,
     enableMod,
@@ -81,9 +80,9 @@ import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '.
 import { resolveModVpk, clearSoulModelCache } from '../services/soulContainerModels';
 import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport';
 import { getMainWindow } from '../index';
-import { assertCompatibleLocalVariantClassifications, planLocalVariantGroup, resolveLocalVariantGroupProfile, type LocalVariantGroupMember, type LocalVariantGroupProfile } from '../services/localVariantGroup';
+import { planLocalVariantGroup, resolveLocalVariantGroupProfile, type LocalVariantGroupProfile } from '../services/localVariantGroup';
 import { refreshEmbedAfterMetadataChange, toLocalVariantGroupMember } from '../services/modReplacement';
-import { resolveImportedVariantLabel } from '../../../src/lib/customModImport';
+import { planLocalImport } from '../../../src/lib/customModImport';
 import type { ImportCustomModArgs, ImportCustomModsBatchArgs, ImportCustomModsBatchResult, ImportCustomModResult, ImportCustomModsProgress, ImportSoulContainerGlbArgs, LocalVariantGroupTarget, PreviewSoulContainerGlbArgs, SetLocalVariantGroupResult, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
 import type { AbilitySoundClassification, AddMergeSourcesResult, DeleteModEntry, ModSwapPlacement, DeleteModsResult, MergeSourceReplacement, ReplaceMergeSourcesResult, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
@@ -728,23 +727,14 @@ ipcMain.handle(
 
         const { groupId, renamed, snapshot } = await runExclusiveModMutation(async () => {
             const all = await scanMods(deadlockPath);
-            const selected = new Set(modIds ?? []);
-            const joinGroup = target.mode === 'join' ? target.groupId?.trim() : undefined;
-            const categoryPaths = new Map<string, CategoryPaths | undefined>();
-            const members: LocalVariantGroupMember[] = all.map(mod => {
-                const classify = target.mode !== 'clear' && (selected.has(mod.id)
-                    || !!joinGroup && getModMetadata(mod.metaKey)?.localGroupId?.trim() === joinGroup);
-                return toLocalVariantGroupMember(mod, categoryPaths, classify);
-            });
+            const members = all.map(mod => toLocalVariantGroupMember(mod, undefined, false));
 
             const plan = planLocalVariantGroup(members, modIds ?? [], target, randomUUID);
             const renamedMods: Mod[] = [];
             for (const write of plan.writes) {
-                const classification = write.classification ?? {};
                 const data = {
                     localGroupId: write.localGroupId,
                     ...(write.modName ? { modName: write.modName } : {}),
-                    ...classification,
                 };
                 const mod = all.find((candidate) => candidate.id === write.id);
                 if (write.localGroupId && mod && !getModMetadata(write.metaKey)?.sha256) {
@@ -1127,10 +1117,9 @@ async function installedLocalVariantGroupProfile(
     requireExisting: boolean
 ): Promise<LocalVariantGroupProfile | undefined> {
     const all = await scanMods(deadlockPath);
-    const categoryPaths = new Map<string, CategoryPaths | undefined>();
     const members = all
         .filter(mod => getModMetadata(mod.metaKey)?.localGroupId === groupId)
-        .map(mod => toLocalVariantGroupMember(mod, categoryPaths));
+        .map(mod => toLocalVariantGroupMember(mod, undefined, false));
     if (members.length === 0) {
         if (requireExisting) throw new Error('The local variant group no longer exists');
         return undefined;
@@ -1189,29 +1178,42 @@ async function importCustomModSource(
     }
 
     // A multi-VPK archive is one mod shipped as several interchangeable files,
-    // so link its members with a freshly minted local group id: the Installed
-    // page collapses them into one variant card exactly like a multi-file
-    // GameBanana submission. The id is grouping state only (no provenance, no
-    // meaning outside this install). A single-VPK import stays standalone.
+    // so its members share a freshly minted local group id: the Installed page
+    // collapses them into one variant card exactly like a multi-file GameBanana
+    // submission. The id is grouping state only (no provenance, no meaning
+    // outside this install). A single-VPK import stays standalone, and an
+    // archive whose imprints name different mods is imported as those mods.
     //
-    // An import addressed to an existing group ("Add variant") overrides both
-    // rules: every VPK joins that group, INCLUDING a lone one, which is the
+    // An import addressed to an existing group ("Add variant") overrides all
+    // of that: every VPK joins that group, INCLUDING a lone one, which is the
     // whole point of the affordance. The caller passes the group's name as
     // `name`, so the members stay name-unified without a second write.
-    const localGroupId = joinGroupId?.trim() || (sourceVpks.length > 1 ? randomUUID() : undefined);
+    // planLocalImport holds these rules.
+    const joinId = joinGroupId?.trim() || undefined;
     let groupProfile: LocalVariantGroupProfile | undefined;
-    const categoryPaths = new Map<string, CategoryPaths | undefined>();
     const importWrites: LocalImportTransactionWrite[] = [];
     const thumbnailStart = thumbnailFetchTargets.length;
     let needsReview = false;
 
     try {
-        groupProfile = localGroupId
-            ? await installedLocalVariantGroupProfile(
-                  deadlockPath,
-                  localGroupId,
-                  requireExistingGroup
-              )
+        const plan = planLocalImport(
+            sourceVpks.map((source) => ({
+                // Label seed: the author's own folder inside the archive when
+                // there is one ("Gold/skin.vpk" reads as "Gold"), which is how
+                // GameBanana multi-variant downloads are labelled too, falling
+                // back to the VPK filename stem.
+                seed: source.archiveFolder || localSourceFileStem(source.fileName),
+                // The dialog already read a bare VPK's imprint and sends the
+                // label the user saw, so only archive members are read here.
+                imprint: isVpk ? null : readImprintSummary(source.path),
+            })),
+            trimmedName,
+            requestedVariantLabel,
+            joinId,
+            randomUUID
+        );
+        groupProfile = joinId
+            ? await installedLocalVariantGroupProfile(deadlockPath, joinId, requireExistingGroup)
             : undefined;
         // Complete the whole source while disabled. Review is a separate
         // activation step after the batch and import dialog have finished.
@@ -1231,29 +1233,15 @@ async function importCustomModSource(
             // Grouped members all carry the SAME name (the card title comes from
             // the group's primary) and are told apart by their variant label
             // instead of the old "(N)" suffix.
-            const stampedName = trimmedName;
-            const sourceFileName = localSourceFileStem(sourceVpks[i].fileName);
-            // Label seed: the author's own folder inside the archive when there
-            // is one ("Gold/skin.vpk" reads as "Gold"), which is how GameBanana
-            // multi-variant downloads are labelled too, falling back to the VPK
-            // filename stem. Ungrouped imports get no label at all: the card
-            // title already says everything about a standalone mod.
-            const variantSeed = sourceVpks[i].archiveFolder || sourceFileName;
+            const { modName: stampedName, localGroupId, variantLabel } = plan[i];
             await setModMetadataWithHash(destMetaKey, {
                 modName: stampedName,
                 thumbnailUrl: thumbnailDataUrl,
                 nsfw: !!nsfw,
-                sourceFileName,
+                sourceFileName: localSourceFileStem(sourceVpks[i].fileName),
                 localGroupId,
                 priorityMod: groupProfile?.priorityMod ? true : undefined,
-                variantLabel: localGroupId
-                    ? resolveImportedVariantLabel(
-                          requestedVariantLabel,
-                          variantSeed,
-                          sourceVpks.length,
-                          i
-                      )
-                    : undefined,
+                variantLabel,
             }, destPath);
 
             // ADOPTION: the just-copied VPK may already carry a Grimoire
@@ -1274,33 +1262,9 @@ async function importCustomModSource(
                 setModMetadata(destMetaKey, adoptionPatch);
             }
 
-            // localGroupId is an explicit grouping decision, while an adopted
-            // GameBanana id is provenance/update identity. Keep both. The
-            // group's first member establishes one Locker profile; later
-            // members inherit it so one logical card cannot split across hero,
-            // General, or priority-root sections.
-            if (localGroupId) {
-                const stat = await fs.stat(destPath);
-                const candidate = toLocalVariantGroupMember({
-                    id: generateModId(destPath), metaKey: destMetaKey, path: destPath,
-                    fileName: basename(destPath), name: stampedName, enabled: false,
-                    priority: 0, size: stat.size, installedAt: stat.mtime.toISOString(),
-                }, categoryPaths);
-                const importedProfile = resolveLocalVariantGroupProfile([candidate]);
-                if (groupProfile) {
-                    assertCompatibleLocalVariantClassifications(groupProfile, candidate);
-                    if (!groupProfile.classification && !groupProfile.resolvedGlobalType
-                        && !groupProfile.resolvedHeroes?.length) {
-                        groupProfile = { ...importedProfile, priorityMod: groupProfile.priorityMod };
-                    }
-                } else {
-                    groupProfile = importedProfile;
-                }
-                setModMetadata(destMetaKey, {
-                    ...groupProfile.classification,
-                    priorityMod: groupProfile.priorityMod ? true : undefined,
-                });
-            }
+            // Membership is organizational. Adopted identity, manual tags, and
+            // payload detection stay on this file and never inherit a peer's
+            // Locker classification. Placement was set from the group above.
 
             // Stamp imprinted/imprintStale from the embed truth immediately,
             // so the toolbar button's pending count is honest without
@@ -2080,6 +2044,21 @@ ipcMain.handle('read-imprint-details', async (_, modId: string): Promise<Imprint
 // no recoverable Grimoire embed, so the dialog's recognition note simply
 // doesn't show rather than erroring.
 ipcMain.handle('peek-imprint', async (_, filePath: string): Promise<PeekImprintResult | null> => {
+    const summary = readImprintSummary(filePath);
+    if (!summary) return null;
+    const { section, ...imprint } = summary;
+    return {
+        ...imprint,
+        thumbnailUrl:
+            imprint.kind === 'mod' ? catalogThumbnailUrl(imprint.gamebananaId, section) : undefined,
+    };
+});
+
+/** What a VPK's embed says about itself: the import dialog's recognition note,
+ *  and the names an imported archive member gets. Read-only. */
+function readImprintSummary(
+    filePath: string
+): (Omit<PeekImprintResult, 'thumbnailUrl'> & { section?: string }) | null {
     if (!filePath || !filePath.toLowerCase().endsWith('.vpk') || !existsSync(filePath)) {
         return null;
     }
@@ -2089,13 +2068,13 @@ ipcMain.handle('peek-imprint', async (_, filePath: string): Promise<PeekImprintR
         if (modinfo.kind === 'merge') {
             return { title: modinfo.merge.title || modinfo.title, kind: 'merge' };
         }
-        const gamebananaId = modinfo.source?.gamebananaId;
         return {
             title: modinfo.title,
             author: modinfo.author,
-            gamebananaId,
+            gamebananaId: modinfo.source?.gamebananaId,
             gamebananaFileId: modinfo.source?.gamebananaFileId,
-            thumbnailUrl: catalogThumbnailUrl(gamebananaId, modinfo.source?.section),
+            variantLabel: modinfo.packaging?.variantLabel,
+            section: modinfo.source?.section,
             kind: 'mod',
         };
     }
@@ -2112,18 +2091,15 @@ ipcMain.handle('peek-imprint', async (_, filePath: string): Promise<PeekImprintR
     // A legacy merge companion is the only way a legacy embed could be a
     // merge; readLegacyGrimoireMergeMeta's presence with a readable source
     // list is the same signal classifyMissingMergeManifest uses elsewhere.
-    const kind = hasLegacyGrimoireMergeMetaEntry(filePath) ? 'merge' : 'mod';
-    const gamebananaId = legacyGbId !== undefined && Number.isFinite(legacyGbId) ? legacyGbId : undefined;
     return {
         title: embedded.title,
         author: embedded.author,
-        gamebananaId,
+        gamebananaId: legacyGbId !== undefined && Number.isFinite(legacyGbId) ? legacyGbId : undefined,
         gamebananaFileId:
             legacyFileId !== undefined && Number.isFinite(legacyFileId) ? legacyFileId : undefined,
-        thumbnailUrl: kind === 'mod' ? catalogThumbnailUrl(gamebananaId) : undefined,
-        kind,
+        kind: hasLegacyGrimoireMergeMetaEntry(filePath) ? 'merge' : 'mod',
     };
-});
+}
 
 // Read from the local catalog mirror only, so peeking never touches the
 // network. A mod the catalog hasn't synced still gets its art from the

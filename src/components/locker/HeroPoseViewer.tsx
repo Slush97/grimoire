@@ -2386,7 +2386,7 @@ export default function HeroPoseViewer({
       data-movement-effect={movementPreview?.kind}
       data-animation-availability={scene ? rigged ? 'ready' : 'unavailable' : 'pending'}
       data-cloth-availability={scene ? clothModel ? 'ready' : 'unavailable' : 'pending'}
-      className={`absolute inset-0 ${viewerScene === 'transparent' ? '' : 'bg-bg-secondary'}`}>
+      className={`always-dark absolute inset-0 ${viewerScene === 'transparent' ? '' : 'bg-bg-secondary'}`}>
       {canvasMounted && <Canvas
         // Fades in over the placeholder; later changes crossfade (useViewerCrossfade).
         className="animate-fade-in"

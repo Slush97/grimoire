@@ -1644,9 +1644,11 @@ export default function Locker() {
           </div>
         </div>
       )}
+      {/* The Global view sets its cards straight on full-bleed art under a dark
+          wash, so it keeps the dark tokens in the light theme (always-dark). */}
       {globalOverlay.item && (
         <div
-          className={`fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary sidebar-offset-transition ${
+          className={`always-dark fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary sidebar-offset-transition ${
             globalOverlay.closing ? 'animate-fade-out pointer-events-none' : 'animate-fade-in'
           }`}
           style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
@@ -3021,7 +3023,7 @@ const HeroGalleryCard = memo(function HeroGalleryCard({
     <div
       onClick={() => onNavigate(hero)}
       data-locker-hero-id={hero.id}
-      className={`group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer ${typeaheadClassName}`}
+      className={`always-dark group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer ${typeaheadClassName}`}
     >
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />

@@ -171,7 +171,7 @@ export default memo(function CrosshairControls() {
             <Slider editable label={<Tx k="crosshair.controls.size" fallback="Size" />} value={dotSize} min={0} max={20} onChange={setDotSize} />
             <Slider editable label={<Tx k="crosshair.controls.opacity" fallback="Opacity" />} value={dotOpacity} min={0} max={1} step={0.05} onChange={setDotOpacity} />
             {dotOpacity === 0 && (
-              <p className="rounded-sm border border-hl/5 bg-black/20 px-3 py-2 text-xs text-text-secondary">
+              <p className="rounded-sm border border-hl/5 bg-shade/20 px-3 py-2 text-xs text-text-secondary">
                 <Tx k="crosshair.hints.dotHidden" fallback="The dot is fully transparent. Raise Opacity to see it." />
               </p>
             )}
@@ -189,7 +189,7 @@ export default memo(function CrosshairControls() {
               <label className="mb-2 block text-sm font-medium text-text-secondary">
                 <Tx k="crosshair.controls.color" fallback="Crosshair color" />
               </label>
-              <div className="flex items-center gap-3 rounded-sm border border-hl/5 bg-black/20 p-3">
+              <div className="flex items-center gap-3 rounded-sm border border-hl/5 bg-shade/20 p-3">
                 <input
                   type="color"
                   value={rgbToHex(colorR, colorG, colorB)}
@@ -232,7 +232,7 @@ export default memo(function CrosshairControls() {
             </div>
 
             <SubGroup title={<Tx k="crosshair.controls.outlineColor" fallback="Outline color" />}>
-              <div className="flex items-center gap-3 rounded-sm border border-hl/5 bg-black/20 p-3">
+              <div className="flex items-center gap-3 rounded-sm border border-hl/5 bg-shade/20 p-3">
                 <input
                   type="color"
                   value={rgbToHex(outlineColorR, outlineColorG, outlineColorB)}

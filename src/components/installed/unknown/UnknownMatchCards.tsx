@@ -109,7 +109,7 @@ export function UnknownEmbeddedCard({
       </div>
 
       {!isMerge && typeof match.modId === 'number' && (
-        <div className="border-t border-state-success/20 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
+        <div className="border-t border-state-success/20 px-4 py-3 bg-shade/10 flex flex-wrap justify-end gap-2">
           <Button variant="secondary" size="sm" icon={Info} disabled={linking} onClick={onView}>
             {t('installed.unknown.viewMod')}
           </Button>
@@ -184,7 +184,7 @@ export function UnknownMatchCard({
 
       </div>
 
-      <div className="border-t border-state-success/20 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
+      <div className="border-t border-state-success/20 px-4 py-3 bg-shade/10 flex flex-wrap justify-end gap-2">
         <Button
           variant="secondary"
           size="sm"

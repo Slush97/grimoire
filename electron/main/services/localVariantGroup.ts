@@ -33,20 +33,9 @@ export interface LocalVariantGroupMember {
     merged?: boolean;
 }
 
-export interface LocalVariantGroupClassification {
-    /** Missing fields are unchanged; explicit undefined clears an override. */
-    lockerHero?: string;
-    lockerHeroSource?: LockerHeroSource;
-    globalType?: GlobalModType | null;
-    globalTypeSource?: 'manual';
-}
-
+/** Group-wide placement only; classification remains per file. */
 export interface LocalVariantGroupProfile {
-    classification?: LocalVariantGroupClassification;
     priorityMod: boolean;
-    /** Resolved axis for compatibility checks, separate from stored overrides. */
-    resolvedHeroes?: readonly string[];
-    resolvedGlobalType?: GlobalModType;
 }
 
 /** One sidecar merge-write. Fields left undefined are not touched. */
@@ -58,8 +47,6 @@ export interface LocalVariantGroupWrite {
     localGroupId: string | undefined;
     /** Present only when this member has to adopt the group's name. */
     modName?: string;
-    /** Present when an unclassified member must inherit the group's Locker axis. */
-    classification?: LocalVariantGroupClassification;
 }
 
 export interface LocalVariantGroupPlan {
@@ -67,11 +54,6 @@ export interface LocalVariantGroupPlan {
     groupId: string | null;
     writes: LocalVariantGroupWrite[];
 }
-
-type LocalVariantClassificationFields = Pick<
-    LocalVariantGroupMember,
-    'lockerHero' | 'globalType' | 'resolvedHeroes' | 'resolvedGlobalType'
->;
 
 /** A normal GameBanana install groups by submission id. An explicitly-local
  * group is different: re-import adoption may legitimately discover GB
@@ -89,58 +71,9 @@ function currentGroupOf(member: LocalVariantGroupMember): string | undefined {
     return member.localGroupId && member.localGroupId.length > 0 ? member.localGroupId : undefined;
 }
 
-function classificationKey(member: LocalVariantClassificationFields): string | undefined {
-    const globalType = member.resolvedHeroes === undefined ? member.globalType : member.resolvedGlobalType;
-    if (globalType) return `global:${globalType}`;
-    const heroes = member.resolvedHeroes ?? (member.lockerHero ? [member.lockerHero] : []);
-    const names = [...new Set(heroes.map((hero) => hero.trim().toLowerCase()).filter(Boolean))].sort();
-    return names.length > 0 ? `hero:${JSON.stringify(names)}` : undefined;
-}
-
-/** Only explicit choices, including preserved local classifications, can transfer. */
-function storedClassification(member: LocalVariantGroupMember): LocalVariantGroupClassification | undefined {
-    const manualHero = member.lockerHeroSource === 'manual' ? member.lockerHero?.trim() : undefined;
-    if (manualHero) {
-        return {
-            lockerHero: manualHero,
-            lockerHeroSource: 'manual',
-            globalType: undefined,
-            globalTypeSource: undefined,
-        };
-    }
-    if (member.globalTypeSource === 'manual' || (!member.gameBananaId && member.globalType)) {
-        return {
-            globalType: member.globalType,
-            globalTypeSource: 'manual',
-            ...(member.globalType ? { lockerHero: undefined, lockerHeroSource: undefined } : {}),
-        };
-    }
-    return undefined;
-}
-
-/** Reject two definite but different Locker axes. An unclassified VPK may
- * inherit the established group profile, but a known Ivy/Geist or hero/Global
- * mismatch must not be silently relabelled merely because it arrived through
- * the import path instead of the installed-mod grouping path. */
-export function assertCompatibleLocalVariantClassifications(
-    established: LocalVariantClassificationFields | undefined,
-    candidate: LocalVariantClassificationFields | undefined
-): void {
-    if (!established || !candidate) return;
-    const establishedKey = classificationKey(established);
-    const candidateKey = classificationKey(candidate);
-    if (establishedKey && candidateKey && establishedKey !== candidateKey) {
-        throw new Error('Variants must use the same Locker hero or Global classification');
-    }
-}
-
-/** Resolve one group's comparison axis and explicit shared choices.
- * Automatic identities stay on their original payload. Two positive but
- * different classifications are refused: silently relabelling an Ivy VPK as
- * Geist (or a HUD as a hero skin) would be worse than declining the grouping.
- * Priority-root placement is never inferred/rewritten here because it entails
- * a filesystem move; mixed placement is therefore rejected before metadata is
- * touched. */
+/** Group membership never compares or propagates per-file classifications.
+ * Priority-root placement still requires a filesystem move, so grouping cannot
+ * silently change it through metadata alone. */
 export function resolveLocalVariantGroupProfile(
     members: readonly LocalVariantGroupMember[]
 ): LocalVariantGroupProfile {
@@ -154,32 +87,7 @@ export function resolveLocalVariantGroupProfile(
         );
     }
 
-    const classified = members.filter((member) => classificationKey(member));
-    const owner = classified[0];
-    for (const member of classified.slice(1)) {
-        assertCompatibleLocalVariantClassifications(owner, member);
-    }
-    const choices = members.map(storedClassification).filter((choice): choice is LocalVariantGroupClassification => !!choice);
-    // An unassigned member cannot erase a positive explicit group identity.
-    // A null-only patch leaves any automatic hero fields on their own payload.
-    const classification = choices.find(choice => choice.lockerHero || choice.globalType)
-        ?? choices[0];
-    return {
-        priorityMod: priority,
-        ...(owner ? {
-            resolvedHeroes: owner.resolvedHeroes ?? (owner.lockerHero ? [owner.lockerHero] : []),
-            resolvedGlobalType: owner.resolvedHeroes === undefined ? owner.globalType ?? undefined : owner.resolvedGlobalType,
-        } : {}),
-        ...(classification ? { classification } : {}),
-    };
-}
-
-function needsClassification(
-    member: LocalVariantGroupMember,
-    classification: LocalVariantGroupClassification
-): boolean {
-    return (Object.keys(classification) as Array<keyof LocalVariantGroupClassification>)
-        .some(key => member[key] !== classification[key]);
+    return { priorityMod: priority };
 }
 
 /**
@@ -246,30 +154,25 @@ export function planLocalVariantGroup(
         ? all.find((member) => !targetIds.has(member.id) && currentGroupOf(member) === groupId)
               ?.name ?? targets[0].name
         : undefined;
-    // Existing members lead on a join: their established manual/classifier
-    // provenance is the group profile. A fresh mint has no existing members,
-    // so the caller's target order remains authoritative.
+    // Existing members establish the shared priority-folder placement.
     const existingGroupMembers = groupId
         ? all.filter(
               (member) => !targetIds.has(member.id) && currentGroupOf(member) === groupId
           )
         : [];
     const groupedMembers = groupId ? [...existingGroupMembers, ...targets] : [];
-    const groupProfile = groupId ? resolveLocalVariantGroupProfile(groupedMembers) : undefined;
+    if (groupId) resolveLocalVariantGroupProfile(groupedMembers);
 
     const writes: LocalVariantGroupWrite[] = [];
     for (const member of groupId ? groupedMembers : targets) {
         const groupChanged = currentGroupOf(member) !== (groupId ?? undefined);
         const nameChanged = targetIds.has(member.id) && !!groupName && member.name !== groupName;
-        const classification = groupProfile?.classification;
-        const classificationChanged = !!classification && needsClassification(member, classification);
-        if (!groupChanged && !nameChanged && !classificationChanged) continue;
+        if (!groupChanged && !nameChanged) continue;
         writes.push({
             id: member.id,
             metaKey: member.metaKey,
             localGroupId: groupId ?? undefined,
             modName: nameChanged ? groupName : undefined,
-            ...(classificationChanged ? { classification } : {}),
         });
     }
 
