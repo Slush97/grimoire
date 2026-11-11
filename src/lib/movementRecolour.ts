@@ -7,7 +7,7 @@
 
 import type { KVObject, KVValue } from './particles/kv';
 import type { MovementEnginePreview, MovementFxChoice, MovementPalette, ParryPart } from './movementFx';
-import type { ParticleBundle } from './particles/host/bundle';
+import type { BundleTexture, ParticleBundle } from './particles/host/bundle';
 
 /** Where vpkmerge packs the stamp images (workshop.rs DASH_STAMP_PATH, PARRY_SHIELD_PATH, PARRY_STUN_PATH). */
 export const DASH_STAMP_PATH = 'materials/grimoire/movement/dash_stamp.vtex';
@@ -148,6 +148,14 @@ export function paletteFor(choice: MovementFxChoice, part: ParryPart): RecolourP
 }
 
 const clone = <T extends KVValue>(value: T): T => structuredClone(value);
+
+function sameKV(a: KVValue | undefined, b: KVValue | undefined): boolean {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, index) => sameKV(item, b[index]));
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => key in b && sameKV(a[key], b[key]));
+}
 
 function at(root: KVValue, path: KVPath): KVValue | undefined {
   let node: KVValue | undefined = root;
@@ -291,7 +299,7 @@ export function recolourSystem(definition: KVObject, entry: string, system: Reco
   const tree = clone(definition);
   if (scheme.mode === 'original') {
     parryStamps(tree, entry, choice);
-    return tree;
+    return sameKV(tree, definition) ? definition : tree;
   }
   const fallback = parseColor(choice.color);
   const [rgb, end, rainbow]: [RGB, RGB | null, boolean] = scheme.mode === 'solid' ? [scheme.color, null, false]
@@ -314,7 +322,7 @@ export function recolourSystem(definition: KVObject, entry: string, system: Reco
     parryAppearance(tree, brightness, illuminated, image && entry === PARRY_SHIELD_SYSTEM ? outline : null);
   }
   if (colored && (rainbow || end)) colorRamp(tree, rgb, end, rainbow);
-  return tree;
+  return sameKV(tree, definition) ? definition : tree;
 }
 
 /** The stamp images a choice packs, by texture path (the bake writes each at its path). */
@@ -334,6 +342,9 @@ function pngSize(dataUrl: string): { width: number; height: number } | null {
   return { width: read(16), height: read(20) };
 }
 
+/** The stamp entries each recolour served last, so a colour-only change hands the texture source the entry it already loaded. */
+const servedStamps = new WeakMap<object, Map<string, BundleTexture>>();
+
 /**
  * The game's own engine bundle with `choice` applied as the bake would: the planned systems recoloured
  * (unchanged ones keep their objects, so a running effect can tell what changed) and each stamp image
@@ -346,11 +357,20 @@ export function applyMovementRecolour(bundle: ParticleBundle, recolour: NonNulla
     if (stored) systems[key] = { ...stored, data: recolourSystem(stored.data, `${key}_c`, system, choice.kind, choice) };
   }
   const textures = { ...bundle.textures };
+  const served = servedStamps.get(recolour) ?? new Map<string, BundleTexture>();
+  servedStamps.set(recolour, served);
   for (const [path, url] of Object.entries(movementStamps(choice))) {
+    const reused = served.get(path);
+    if (reused?.url === url) {
+      textures[path] = reused;
+      continue;
+    }
     const size = pngSize(url);
     // The bake stretches the image to the template's size; sampling the image as it is does the same
     const info = recolour.stamp ?? (size ? { width: size.width, height: size.height, format: 0, flags: 0, mipLevels: 1, motionVectorsMaxDistance: 0, sheet: null } : null);
-    if (info) textures[path] = { file: '', url, info };
+    if (!info) continue;
+    textures[path] = { file: '', url, info };
+    served.set(path, textures[path]);
   }
   return { ...bundle, systems, textures };
 }

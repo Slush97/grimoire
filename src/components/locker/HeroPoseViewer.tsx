@@ -1920,8 +1920,11 @@ export default function HeroPoseViewer({
           if (!rig.hasModel) continue;
           // With its cloth sidecar: a coat drapes as the hero's does
           const { gltf, clothModel: actorCloth } = await loadRiggedHeroPreview(rig, true, true);
+          if (cancelled) {
+            disposeScene(gltf.scene);
+            return;
+          }
           scenes.push(gltf.scene);
-          if (cancelled) return;
           installFastSkinnedBounds(gltf.scene);
           enableVertexColors(gltf.scene);
           actors.push({ actor, scene: gltf.scene, clothModel: actorCloth, clips: (gltf.animations ?? []).filter((c) => Number.isFinite(c.duration) && c.duration > 0.001) });
@@ -1932,7 +1935,12 @@ export default function HeroPoseViewer({
       }
       if (!cancelled) setLoadedActors({ key: stagedActorsKey, actors });
     })();
-    return () => { cancelled = true; for (const actorScene of scenes) disposeScene(actorScene); };
+    return () => {
+      cancelled = true;
+      for (const actorScene of scenes) disposeScene(actorScene);
+      // The disposed rigs must not be served again when this kind comes back
+      setLoadedActors(null);
+    };
     // stagedActorsKey covers the actors
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stagedActorsKey]);

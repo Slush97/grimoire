@@ -57,6 +57,33 @@ describe('recolourSystem', () => {
   });
 });
 
+describe('recolourSystem identity', () => {
+  const dash = choice({ kind: 'dash' });
+  const trailPlan = { part: 'shield' as const, colors: [['m_ConstantColor']] };
+
+  it('returns the stored definition when no edit applies', () => {
+    const definition = trail();
+    expect(recolourSystem(definition, 'particles/generic/air_dash.vpcf_c', trailPlan, 'dash', dash)).toBe(definition);
+  });
+
+  it('returns the stored definition when the colour already matches, and a new one when it does not', () => {
+    const red: KVObject = { ...trail(), m_ConstantColor: [200, 0, 0, 255] };
+    expect(recolourSystem(red, 'particles/generic/air_dash_trail.vpcf_c', trailPlan, 'dash', dash)).toBe(red);
+    const other = recolourSystem(trail(), 'particles/generic/air_dash_trail.vpcf_c', trailPlan, 'dash', dash);
+    expect(other).not.toBe(red);
+    expect(other.m_ConstantColor).toEqual([200, 0, 0, 255]);
+  });
+
+  it('returns an original parry part as stored unless a stamp lands on it', () => {
+    const parts = { linked: false, shield: { original: true, color: '#00ff00', palette: { mode: 'solid' as const } },
+      catch: { original: false, color: '#0000ff', palette: { mode: 'solid' as const } }, stun: { original: false, color: '#ffffff', palette: { mode: 'rainbow' as const } } };
+    const shield: KVObject = { _class: 'CParticleSystemDefinition', m_Renderers: [{ _class: 'C_OP_RenderSprites', m_vecTexturesInput: [{ m_hTexture: PARRY_SHIELD_TEXTURE }] }] };
+    const entry = 'particles/abilities/melee/melee_parry_symbol.vpcf_c';
+    expect(recolourSystem(shield, entry, { part: 'shield', colors: [] }, 'parry', choice({ kind: 'parry', parts }))).toBe(shield);
+    expect(recolourSystem(shield, entry, { part: 'shield', colors: [] }, 'parry', choice({ kind: 'parry', image: PNG, parts }))).not.toBe(shield);
+  });
+});
+
 describe('applyMovementRecolour', () => {
   it('replaces the planned systems only and serves the stamp from its data URL', () => {
     const other: KVObject = { _class: 'CParticleSystemDefinition' };
@@ -68,5 +95,18 @@ describe('applyMovementRecolour', () => {
     expect(live.systems['particles/generic/air_dash_trail.vpcf'].data.m_ConstantColor).toEqual([200, 0, 0, 255]);
     expect(live.textures[DASH_STAMP_PATH]).toEqual({ file: '', url: PNG, info: stamp });
     expect(bundle.systems['particles/generic/air_dash_trail.vpcf'].data.m_ConstantColor).toEqual([100, 200, 50, 255]);
+  });
+
+  it('keeps the stamp entry across a colour-only change and makes another for another image', () => {
+    const bundle = { systems: { 'particles/generic/air_dash_trail.vpcf': { data: trail(), format: null } }, textures: {} } as unknown as ParticleBundle;
+    const recolour = { systems: { 'particles/generic/air_dash_trail.vpcf': { part: 'shield' as const, colors: [['m_ConstantColor']] } }, stamp: { width: 64, height: 64, format: 4, flags: 0, mipLevels: 7, motionVectorsMaxDistance: 0, sheet: null } };
+    const first = applyMovementRecolour(bundle, recolour, choice({ kind: 'dash', image: PNG, color: '#00ff80' }));
+    const second = applyMovementRecolour(bundle, recolour, choice({ kind: 'dash', image: PNG, color: '#0000ff' }));
+    expect(second.systems['particles/generic/air_dash_trail.vpcf'].data).not.toBe(first.systems['particles/generic/air_dash_trail.vpcf'].data);
+    expect(second.textures[DASH_STAMP_PATH]).toBe(first.textures[DASH_STAMP_PATH]);
+    const other = PNG.replace('AAAADUlE', 'AAAADUlF');
+    const swapped = applyMovementRecolour(bundle, recolour, choice({ kind: 'dash', image: other, color: '#0000ff' }));
+    expect(swapped.textures[DASH_STAMP_PATH]).not.toBe(first.textures[DASH_STAMP_PATH]);
+    expect(swapped.textures[DASH_STAMP_PATH].url).toBe(other);
   });
 });
