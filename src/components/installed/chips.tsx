@@ -33,10 +33,11 @@ export function MetaTextChip({ label, className, title }: { label: string; class
   return <span className={className} title={title ?? label}><ChipText>{label}</ChipText></span>;
 }
 
-function OverlappingIcons({ items, maxWidth, title, ...attributes }: {
+function OverlappingIcons({ items, maxWidth, title, iconSize = 22, ...attributes }: {
   items: { id: string; content: ReactNode; title?: string }[];
   maxWidth: number;
   title: string;
+  iconSize?: 16 | 22;
 } & HTMLAttributes<HTMLSpanElement>) {
   if (items.length === 0) return null;
   return (
@@ -44,12 +45,12 @@ function OverlappingIcons({ items, maxWidth, title, ...attributes }: {
       role="img"
       aria-label={title}
       title={title}
-      className="relative isolate inline-block h-[22px] min-w-[22px]"
-      style={{ width: Math.min(maxWidth, items.length * 22) }}
+      className="relative isolate inline-block shrink-0"
+      style={{ width: Math.min(maxWidth, items.length * iconSize), height: iconSize, minWidth: iconSize }}
       {...attributes}
     >
       {items.map((item, index) => (
-        <span key={item.id} title={item.title} className="absolute top-0 w-[22px]" style={{ left: items.length === 1 ? 0 : `calc((100% - 22px) * ${index / (items.length - 1)})` }}>
+        <span key={item.id} title={item.title} className="absolute top-0 flex items-center" style={{ width: iconSize, height: iconSize, left: items.length === 1 ? 0 : `calc((100% - ${iconSize}px) * ${index / (items.length - 1)})` }}>
           {item.content}
         </span>
       )).reverse()}
@@ -58,12 +59,15 @@ function OverlappingIcons({ items, maxWidth, title, ...attributes }: {
 }
 
 /** Earlier heroes paint in front; the overflow urn stays behind every hero. */
-export function HeroIconStack({ heroes, maxVisible = 5 }: { heroes: readonly string[]; maxVisible?: number }) {
+export function HeroIconStack({ heroes, maxVisible = 5, iconSize = 22, maxWidth = 66 }: {
+  heroes: readonly string[]; maxVisible?: number; iconSize?: 16 | 22; maxWidth?: number;
+}) {
   const icons = heroes.length > maxVisible ? [...heroes.slice(0, maxVisible - 1), null] : heroes;
-  return <OverlappingIcons data-hero-stack maxWidth={66} title={heroes.join(', ')} items={icons.map(hero => ({
+  const iconClassName = iconSize === 16 ? 'h-4 w-4' : 'h-[22px] w-[22px]';
+  return <OverlappingIcons data-hero-stack maxWidth={maxWidth} iconSize={iconSize} title={heroes.join(', ')} items={icons.map(hero => ({
     id: hero ?? 'overflow',
-    content: hero !== null ? <HeroTagLabel heroName={hero} iconClassName="h-[22px] w-[22px]" iconOnly /> : (
-      <img src={soulUrn} alt="" aria-hidden="true" draggable={false} className="block h-[22px] w-[22px] object-contain grayscale brightness-50 opacity-70" />
+    content: hero !== null ? <HeroTagLabel heroName={hero} iconClassName={iconClassName} iconOnly /> : (
+      <img src={soulUrn} alt="" aria-hidden="true" draggable={false} className={`block ${iconClassName} object-contain grayscale brightness-50 opacity-70`} />
     ),
   }))} />;
 }

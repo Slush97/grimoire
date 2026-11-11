@@ -85,8 +85,23 @@ describe('variant hero indicators', () => {
             variant('first', ['Haze', 'Wraith']),
             variant('second', ['Wraith'], { enabled: false }),
         ]);
-        expect(heroIcons('first')).toEqual(['haze.png', 'wraith.png']);
+        expect(heroIcons('first').sort()).toEqual(['haze.png', 'wraith.png']);
         expect(heroIcons('second')).toEqual(['wraith.png']);
+    });
+
+    it('caps multihero rows at two 16px slots and exposes the complete hero set through the shared overflow stack', async () => {
+        await render([
+            variant('first', ['Haze', 'Wraith', 'Ivy', 'Abrams']),
+            variant('second', ['Wraith']),
+        ]);
+        const stack = row('first').querySelector<HTMLElement>('[data-hero-stack]')!;
+        expect(stack.style.width).toBe('32px');
+        expect(stack.style.height).toBe('16px');
+        expect(stack.title).toBe('Haze, Wraith, Ivy, Abrams');
+        expect(stack.querySelectorAll('img')).toHaveLength(2);
+        expect(heroIcons('first')).toEqual(['haze.png']);
+        expect(stack.querySelector('img[aria-hidden="true"]')).not.toBeNull();
+        expect(row('second').querySelector<HTMLElement>('[data-hero-stack]')!.style.width).toBe('16px');
     });
 
     it('treats an empty set as different but renders no icons for that row', async () => {
@@ -154,6 +169,6 @@ describe('variant hero indicators', () => {
         const overlay = document.querySelector('[style*="z-index: 60"]');
         expect(overlay).not.toBeNull();
         expect([...overlay!.querySelectorAll<HTMLImageElement>('img[src*="chip-icons"]')]
-            .map(image => image.getAttribute('src')?.split('/').at(-1))).toEqual(['haze.png', 'wraith.png']);
+            .map(image => image.getAttribute('src')?.split('/').at(-1)).sort()).toEqual(['haze.png', 'wraith.png']);
     });
 });

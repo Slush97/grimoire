@@ -46,7 +46,7 @@ import { useCategoryStore } from '../stores/categoryStore';
 import { getInstalledCardTaxonomy } from '../lib/installedCardTaxonomy';
 import { canonicalHeroName } from '../lib/lockerUtils';
 import { isModLoadedInGame, isReorderBlocked } from '../lib/modLocks';
-import { HeroTagLabel } from './installed/chips';
+import { HeroIconStack } from './installed/chips';
 
 type DropPosition = 'before' | 'after';
 type VariantSection = 'enabled' | 'disabled';
@@ -373,15 +373,9 @@ export default function VariantPickerModal({
                     <div className="flex items-center gap-3">
                         <CheckboxMark checked={isActive} />
                         <div className="min-w-0 flex-1">
-                            <div className="flex min-w-0 items-start gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
                             {showVariantHeroes && heroes.length > 0 && (
-                                <span className="inline-flex max-w-[50%] flex-shrink-0 flex-wrap items-center gap-1 pt-0.5">
-                                    {heroes.map(hero => (
-                                        <span key={hero} title={hero}>
-                                            <HeroTagLabel heroName={hero} iconOnly iconClassName="h-4 w-4" />
-                                        </span>
-                                    ))}
-                                </span>
+                                <HeroIconStack heroes={heroes} maxVisible={2} iconSize={16} maxWidth={32} />
                             )}
                             {isEditing ? (
                                 <Input
