@@ -8,6 +8,7 @@ import { useAppStore } from '../stores/appStore';
 import { useCategoryStore } from '../stores/categoryStore';
 import { buildCategoryPaths } from '../lib/categoryPaths';
 import { requestRequirementToggle, useRequirementsStore } from '../stores/requirementsStore';
+import soulUrn from '../assets/soul-urn.png';
 
 vi.mock('react-i18next', () => ({
     initReactI18next: { type: '3rdParty', init: () => {} },
@@ -89,18 +90,19 @@ describe('variant hero indicators', () => {
         expect(heroIcons('second')).toEqual(['wraith.png']);
     });
 
-    it('caps multihero rows at two 16px slots and exposes the complete hero set through the shared overflow stack', async () => {
+    it.each([4, 5])('keeps %i heroes within 32px using at most four 16px icons', async count => {
+        const selected = ['Haze', 'Wraith', 'Ivy', 'Abrams', 'Baba'].slice(0, count);
         await render([
-            variant('first', ['Haze', 'Wraith', 'Ivy', 'Abrams']),
+            variant('first', selected),
             variant('second', ['Wraith']),
         ]);
         const stack = row('first').querySelector<HTMLElement>('[data-hero-stack]')!;
         expect(stack.style.width).toBe('32px');
         expect(stack.style.height).toBe('16px');
-        expect(stack.title).toBe('Haze, Wraith, Ivy, Abrams');
-        expect(stack.querySelectorAll('img')).toHaveLength(2);
-        expect(heroIcons('first')).toEqual(['haze.png']);
-        expect(stack.querySelector('img[aria-hidden="true"]')).not.toBeNull();
+        expect(stack.title).toBe(selected.join(', '));
+        expect(stack.querySelectorAll('img')).toHaveLength(4);
+        expect(heroIcons('first').sort()).toEqual(selected.slice(0, count > 4 ? 3 : 4).map(hero => `${hero.toLowerCase()}.png`).sort());
+        expect([...stack.querySelectorAll('img')].filter(image => image.getAttribute('src') === soulUrn)).toHaveLength(count > 4 ? 1 : 0);
         expect(row('second').querySelector<HTMLElement>('[data-hero-stack]')!.style.width).toBe('16px');
     });
 

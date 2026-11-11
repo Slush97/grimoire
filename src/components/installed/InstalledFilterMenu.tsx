@@ -120,7 +120,7 @@ export function InstalledFilterMenu({
               className="text-xs text-text-secondary hover:text-accent cursor-pointer">{t('common.actions.clear')}</button>}
           </div>
           <HeroSelect ariaLabel={t('browse.filters.filterByHero')} value="" values={heroFilter} active={heroFilter.length > 0}
-            leading={heroFilter.length > 1 ? <HeroIconStack heroes={heroFilter} maxVisible={8} /> : undefined}
+            leading={heroFilter.length > 0 ? <HeroIconStack heroes={heroFilter} maxVisible={6} iconSize={20} maxWidth={60} /> : undefined}
             displayLabel={heroFilter.length === 0 ? t('browse.filters.allHeroes') : heroFilter.length === 1 ? heroFilter[0] : t('installed.filters.heroCount', { count: heroFilter.length })}
             onChange={hero => onHeroChange(toggleValue(heroFilter, hero))}
             search={{ ariaLabel: t('browse.filters.searchHeroesAria'), placeholder: t('browse.filters.filterPlaceholder'),

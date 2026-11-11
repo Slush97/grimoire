@@ -37,7 +37,7 @@ function OverlappingIcons({ items, maxWidth, title, iconSize = 22, ...attributes
   items: { id: string; content: ReactNode; title?: string }[];
   maxWidth: number;
   title: string;
-  iconSize?: 16 | 22;
+  iconSize?: 16 | 20 | 22;
 } & HTMLAttributes<HTMLSpanElement>) {
   if (items.length === 0) return null;
   return (
@@ -59,11 +59,11 @@ function OverlappingIcons({ items, maxWidth, title, iconSize = 22, ...attributes
 }
 
 /** Earlier heroes paint in front; the overflow urn stays behind every hero. */
-export function HeroIconStack({ heroes, maxVisible = 5, iconSize = 22, maxWidth = 66 }: {
-  heroes: readonly string[]; maxVisible?: number; iconSize?: 16 | 22; maxWidth?: number;
+export function HeroIconStack({ heroes, maxVisible = 6, iconSize = 22, maxWidth = 66 }: {
+  heroes: readonly string[]; maxVisible?: number; iconSize?: 16 | 20 | 22; maxWidth?: number;
 }) {
   const icons = heroes.length > maxVisible ? [...heroes.slice(0, maxVisible - 1), null] : heroes;
-  const iconClassName = iconSize === 16 ? 'h-4 w-4' : 'h-[22px] w-[22px]';
+  const iconClassName = iconSize === 16 ? 'h-4 w-4' : iconSize === 20 ? 'h-5 w-5' : 'h-[22px] w-[22px]';
   return <OverlappingIcons data-hero-stack maxWidth={maxWidth} iconSize={iconSize} title={heroes.join(', ')} items={icons.map(hero => ({
     id: hero ?? 'overflow',
     content: hero !== null ? <HeroTagLabel heroName={hero} iconClassName={iconClassName} iconOnly /> : (

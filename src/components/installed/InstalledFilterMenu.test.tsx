@@ -140,7 +140,7 @@ describe('Installed filter menu', () => {
     }
   });
 
-  it.each([2, 8, 9])('fits %i selected hero icons into the shared 66px stack', count => {
+  it.each([1, 2, 6, 7])('fits %i selected heroes into a 60px stack with fixed 20px icons', count => {
     act(() => root.unmount());
     root = createRoot(host);
     act(() => root.render(<Harness selectedHeroes={heroes.slice(0, count)} />));
@@ -148,11 +148,17 @@ describe('Installed filter menu', () => {
     const heroTrigger = panel().querySelector<HTMLButtonElement>('[aria-label="browse.filters.filterByHero"]')!;
     const stack = heroTrigger.querySelector<HTMLElement>('[data-hero-stack]')!;
     const images = [...stack.querySelectorAll<HTMLImageElement>('img')];
-    expect(stack.style.width).toBe(`${Math.min(66, count * 22)}px`);
+    expect(stack.style.width).toBe(`${Math.min(60, count * 20)}px`);
+    expect(stack.style.height).toBe('20px');
     expect(stack.title).toBe(heroes.slice(0, count).join(', '));
-    expect(images.filter(image => image.getAttribute('src') !== soulUrn)).toHaveLength(count > 8 ? 7 : count);
-    expect(images.filter(image => image.getAttribute('src') === soulUrn)).toHaveLength(count > 8 ? 1 : 0);
-    expect(heroTrigger.textContent).toContain('installed.filters.heroCount');
+    expect(images.filter(image => image.getAttribute('src') !== soulUrn)).toHaveLength(count > 6 ? 5 : count);
+    expect(images.filter(image => image.getAttribute('src') === soulUrn)).toHaveLength(count > 6 ? 1 : 0);
+    expect(heroTrigger.querySelectorAll('img')).toHaveLength(images.length);
+    for (const image of images) {
+      expect(image.classList.contains('h-5')).toBe(true);
+      expect(image.classList.contains('w-5')).toBe(true);
+    }
+    expect(heroTrigger.textContent).toContain(count === 1 ? heroes[0] : 'installed.filters.heroCount');
   });
 
   it('keeps the outer popover open through portaled hero selection and closes on Escape', () => {

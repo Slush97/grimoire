@@ -115,11 +115,11 @@ Sound cards use a hero portrait only when they resolve to exactly one hero. A mu
 Installed cards and filter facets share `installedCardTaxonomy.ts` and the category-tree indexes:
 
 - The Tags filter includes every non-hero ancestor and leaf label, plus the existing Sounds/Wip section tags. Heroes have their separate filter.
-- Installed cards use 22px hero icons in a stack capped at 66px. Earlier heroes overlap in front of later heroes. Up to five hero icons are visible; from six heroes onward, four icons and a shadowed Soul Urn represent the group. The urn shares the overlapping slots and always sits behind every hero. The stack's mouse tooltip lists every hero separated by commas. The reusable 64px urn asset keeps its original colors; only this overflow treatment darkens it with CSS.
+- Installed cards use 22px hero icons in a stack capped at 66px. Earlier heroes overlap in front of later heroes. Up to six hero icons are visible; from seven heroes onward, five icons and a shadowed Soul Urn represent the group. The urn shares the overlapping slots and always sits behind every hero. The stack's mouse tooltip lists every hero separated by commas. The reusable 64px urn asset keeps its original colors; only this overflow treatment darkens it with CSS.
 - Card category tags run from the representative file's leaf toward its ancestors, with deeper categories before parents and custom fallback labels last. Their single 22px-high line fits as many tags as the available width allows, reserving the measured width of a `+n` chip whose mouse tooltip lists the remaining labels. Filter tag sets and counts are unchanged.
 - Grouped variants contribute their combined categories and hero identities, with each group counted once per filter option.
 - CameraOff, FileWarning, and requirements indicators share one overlapping stack before the hero stack and category tags in every Installed layout. Each 16px icon is centered in a 22px slot, with their shared stack currently capped at 110px. Severity colors and detailed tooltips are retained. Other warning badges keep their existing placement. Merged-source updates use the normal orange Update tag without an extra hover effect; source counts and replacement details remain in its tooltip.
-- When variant hero sets differ, the installed variant picker shows each file's own hero icons using the shared overlapping stack. Its two 16px slots occupy at most 32px; more heroes use the overflow urn and a tooltip listing every hero. It omits these repeated icons when all files target the same heroes, and never adds category text to the variant rows.
+- When variant hero sets differ, the installed variant picker shows each file's own hero icons using the shared overlapping stack. Up to four 16px icons overlap within 32px; more heroes use three hero icons and the overflow urn, with a tooltip listing every hero. It omits these repeated icons when all files target the same heroes, and never adds category text to the variant rows.
 - Category labels retain GameBanana's spelling and singular/plural forms, with two known corrections: `Faithul/Vanilla+` is displayed as `Faithful/Vanilla+`, and `RatKing Flag` as `Rat King Flag`. Both use the shared label normalizer for cached paths and offline labels, retaining the original category IDs.
 - Identical labels share a filter option. There is no synthetic Other bucket or a second tag generated from Locker's General classification for linked mods.
 
@@ -144,8 +144,9 @@ Game-loaded outgoing files block the swap with the usual warning and shake
 feedback on both rendered cards, including when the lock changes during selection.
 
 Installed's Hero selector supports several heroes, matching any selected hero.
-Selected heroes share the cards' 66px overlapping stack, showing up to eight
-icons before an overflow urn. Its tooltip lists every selected hero.
+Selected heroes use the shared overlapping stack capped at 60px, with consistent
+20px icons for both single and multiple selections. Up to six heroes are shown;
+larger selections use five hero icons and an overflow urn. Its tooltip lists every selected hero.
 Its Tags selector includes tags on left-click (green plus) and excludes them on
 right-click (red minus). A card must match an included tag when any are selected,
 and must not match any excluded tag. Either click clears a tag that is already
