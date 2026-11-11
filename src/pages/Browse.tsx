@@ -74,7 +74,7 @@ import { checkQuickInstallRequirements } from '../stores/requirementsStore';
 import { HiddenCreatorsModal, HiddenModsModal } from '../components/HiddenContentManager';
 import ImportCollectionModal from '../components/ImportCollectionModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
-import { inferHeroFromTitle, findCategoryByName } from '../lib/lockerUtils';
+import { inferHeroFromTitle, findCategoryByName, canonicalHeroName } from '../lib/lockerUtils';
 import { classifyModFiles } from '../lib/updateFileMatch';
 import { decideFileDownload, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
 import { mergeSourceInstalls } from '../lib/updateCheck';
@@ -733,7 +733,7 @@ export default function Browse() {
   const selectedHeroNode = heroCategoryId !== 'all' && skinsCategory?.children
     ? skinsCategory.children.find((child) => child.id === heroCategoryId)
     : undefined;
-  const selectedHeroName = selectedHeroNode?.name;
+  const selectedHeroName = selectedHeroNode ? canonicalHeroName(selectedHeroNode.name) : undefined;
   const selectedHeroCategoryIds = useMemo(
     () => (selectedHeroNode ? categorySubtreeIds(selectedHeroNode) : undefined),
     [selectedHeroNode]
@@ -1216,10 +1216,10 @@ export default function Browse() {
         // The cached rows have no category id, only a root category name; see
         // rootCategoryNameById. Ignored when a hero is selected.
         categoryName: effectiveCategoryName,
-        // Mod skins match the hero's category. Sound and Wip have no hero
-        // categories, so they can only match the title.
+        // Match assigned hero categories or a hero name in the title. Sounds
+        // and WiPs use only title matching because their category IDs differ.
         heroCategoryIds: combinedFeed || section === 'Mod' ? selectedHeroCategoryIds : undefined,
-        heroName: combinedFeed || section !== 'Mod' ? selectedHeroName : undefined,
+        heroName: selectedHeroName,
         sortBy: sortMap[sort] || 'relevance',
         nsfw,
         addedWithin,

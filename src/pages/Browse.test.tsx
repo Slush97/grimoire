@@ -105,6 +105,17 @@ describe('Browse navigation and refresh', () => {
     expect(gridNames()).toEqual([]);
   });
 
+  it('passes both the hero category subtree and canonical name for Mod catalog filtering', async () => {
+    localCount = 1000;
+    vi.mocked(getGamebananaCategories).mockResolvedValue([{ id: 1, name: 'Skins', itemCount: 1, children: [{
+      id: 42, name: 'RatKing', itemCount: 1, children: [{ id: 43, name: 'RatKing Flag', itemCount: 1 }],
+    }] }]);
+    useAppStore.getState().setBrowseUi({ heroCategoryId: 42 });
+    await render();
+    expect(localSearch.mock.calls.at(-1)?.[0]).toMatchObject({ section: 'Mod', heroName: 'Rat King', heroCategoryIds: [42, 43] });
+    expect(browseMods).not.toHaveBeenCalled();
+  });
+
   it('continues past a fully hidden first remote page', async () => {
     useAppStore.setState(state => ({ settings: { ...state.settings!, hiddenCreators: [{ id: 1, name: 'Hidden' }] } }));
     vi.mocked(browseMods).mockResolvedValueOnce(response([mod(1, { submitter: { id: 1, name: 'Hidden' } })]))

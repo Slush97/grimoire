@@ -70,6 +70,29 @@ describe('section-aware catalog identity', () => {
     expect(searchMods({ query: 'blue' }).mods.map(mod => mod.section)).toEqual(['Mod']);
   });
 
+  it('combines category and hero-title matches without duplicates or cross-section category leaks', () => {
+    directory();
+    upsertMods([
+      { ...row('Mod', 'Blue outfit'), id: 1, subCategoryId: 42 },
+      { ...row('Mod', 'Haze_blue outfit'), id: 2, subCategoryId: 99 },
+      { ...row('Sound', 'Haze blue audio'), id: 3 },
+      { ...row('Sound', 'Other audio'), id: 4, subCategoryId: 42 },
+      { ...row('Mod', 'Hazelnut blue outfit'), id: 5 },
+      { ...row('Wip', 'Haze blue prototype'), id: 6 },
+      { ...row('Mod', 'Haze blue nested outfit'), id: 7, subCategoryId: 43 },
+    ]);
+    const scope = { heroCategoryIds: [42, 43], heroName: 'Haze' };
+    expect(searchMods({ ...scope, section: 'Mod' }).mods.map(mod => mod.id).sort()).toEqual([1, 2, 7]);
+    for (const query of [undefined, 'blue', 'lue']) {
+      const options = { ...scope, query, sections: ['Mod', 'Sound', 'Wip'], sortBy: 'name' as const };
+      const result = searchMods(options);
+      expect(result.totalCount).toBe(5);
+      expect(result.mods.map(mod => mod.id).sort()).toEqual([1, 2, 3, 6, 7]);
+      const pages = [0, 2, 4].flatMap(offset => searchMods({ ...options, limit: 2, offset }).mods);
+      expect(pages.map(mod => mod.id)).toEqual(result.mods.map(mod => mod.id));
+    }
+  });
+
   it('migrates a legacy cache without losing enrichment, categories or immediate search', () => {
     directory();
     const legacy = new DatabaseSync(join(fixture.directory, 'mods-cache.db'));

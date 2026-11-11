@@ -17,7 +17,7 @@ function filter(
 }
 
 describe('applyCategoryFilter hero scoping', () => {
-  it('matches Mod skins on the hero category ids, never the title', () => {
+  it('supports category-only scoping when no hero name is available', () => {
     const { conditions, params } = filter(42671, undefined, undefined, [42671]);
     expect(conditions).toEqual(['mods.sub_category_id IN (@hero_category_0)']);
     expect(params).toEqual({ hero_category_0: 42671 });
@@ -36,9 +36,10 @@ describe('applyCategoryFilter hero scoping', () => {
     expect(conditions.join(' ')).not.toMatch(/LIKE/i);
   });
 
-  it('prefers the category ids when both are given', () => {
-    const { conditions } = filter(42671, undefined, 'Silver', [42671]);
-    expect(conditions).toEqual(['mods.sub_category_id IN (@hero_category_0)']);
+  it('includes either assigned categories or a matching title when both are given', () => {
+    const { conditions, params } = filter(42671, undefined, 'Silver', [42671]);
+    expect(conditions).toEqual(['(mods.sub_category_id IN (@hero_category_0) OR hero_name_match(mods.name, @heroName))']);
+    expect(params).toEqual({ hero_category_0: 42671, heroName: 'Silver' });
   });
 
   it('lets a hero scope without a category id', () => {

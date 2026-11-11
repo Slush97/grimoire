@@ -53,9 +53,9 @@ describe.skipIf(nativeSqliteUnavailable)('combined catalog search', () => {
     expect(searchMods({ ...options, offset: 2 }).mods.map((mod) => mod.id)).toEqual([3]);
   });
 
-  it('uses exact skin categories for Mods and hero names for Sounds and WiPs', () => {
+  it('includes hero categories and title matches across Mods, Sounds and WiPs', () => {
     const result = searchMods({ sections: ['Mod', 'Sound', 'Wip'], heroCategoryIds: [42], heroName: 'Haze', sortBy: 'date' });
-    expect(result.mods.map((mod) => mod.id)).toEqual([1, 2, 3]);
+    expect(result.mods.map((mod) => mod.id)).toEqual([5, 1, 2, 3]);
   });
 
   it('keeps section scoping in FTS and substring fallback', () => {

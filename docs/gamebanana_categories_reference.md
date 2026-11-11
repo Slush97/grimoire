@@ -106,7 +106,7 @@ Required dependency problems on an enabled mod use a yellow icon; disabled mods
 and optional-only requirements use light gray. Requirements do not appear in
 the Installed **Issues** menu.
 
-For Browse Mod hero filters, include the hero category and all descendant IDs so nested categories still match. Browse Sound and Wip filtering uses catalog title matching where their trees do not provide equivalent hero categories. Browse card title matching also uses the cached category tree's hero roster and existing aliases, so it recognizes additions beyond the bundled roster without per-card requests. Explicit hero categories take precedence over titles.
+Browse's local catalog hero filter matches either the selected hero's category subtree or the hero name in the submission title. Sounds and WiPs use the same title matcher without interpreting their unrelated category IDs as Mod hero categories. Name matching reuses whole-name aliases and handles spaces, underscores and hyphens, while text search and other filters still narrow the combined results. This adds no API requests. Browse cards use the cached category tree's hero roster and aliases to recognize additions beyond the bundled roster. Explicit hero categories take precedence over titles when choosing a card's displayed hero icons.
 
 Browse title matching accepts `Deadman` or `Danny` for Deadman Danny, `Harrow` for Nurse Harrow, and both `Rat King` and `RatKing`. These are whole-name matches, so unrelated words such as `harrowing` do not identify a hero.
 

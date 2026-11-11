@@ -102,8 +102,8 @@ function applyContentFilters(
  *
  * Heroes are the exception. The list endpoint also returns `_aSubCategory`, whose
  * profile URL carries the id, so `sub_category_id` is real and a hero (a Skins
- * subcategory) matches exactly. Sound and Wip have no hero categories, so there
- * the title is all there is and it is matched as a whole word.
+ * subcategory) matches exactly. Hero names in titles also match, including
+ * Sound and Wip submissions whose categories do not identify a hero.
  */
 export function applyCategoryFilter(
     conditions: string[],
@@ -119,7 +119,11 @@ export function applyCategoryFilter(
             params[key] = id;
             return `@${key}`;
         });
-        conditions.push(`mods.sub_category_id IN (${placeholders.join(', ')})`);
+        const categoryMatch = `mods.sub_category_id IN (${placeholders.join(', ')})`;
+        if (heroName) {
+            params.heroName = heroName;
+            conditions.push(`(${categoryMatch} OR hero_name_match(mods.name, @heroName))`);
+        } else conditions.push(categoryMatch);
         return;
     }
 
@@ -188,7 +192,7 @@ export function applyBrowseScope(
 
     if (options.sections && options.sections.length > 1 && options.heroName) {
         const modConditions: string[] = [];
-        applyCategoryFilter(modConditions, params, undefined, undefined, undefined, options.heroCategoryIds);
+        applyCategoryFilter(modConditions, params, undefined, undefined, options.heroName, options.heroCategoryIds);
         params.heroName = options.heroName;
         const modMatch = modConditions[0] ?? 'hero_name_match(mods.name, @heroName)';
         conditions.push(`((mods.section = 'Mod' AND ${modMatch}) OR (mods.section <> 'Mod' AND hero_name_match(mods.name, @heroName)))`);

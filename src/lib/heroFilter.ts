@@ -43,5 +43,5 @@ export function nameMentionsHero(name: string, hero: string): boolean {
     pattern = new RegExp(`(?<!\\p{L})(?:${aliases.map(escapeRegex).join('|')})(?!\\p{L})`, 'iu');
     heroPatterns.set(hero, pattern);
   }
-  return pattern.test(name);
+  return pattern.test(name.replace(/[_-]+/g, ' ').replace(/\s+/g, ' '));
 }
