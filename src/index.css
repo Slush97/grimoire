@@ -1510,17 +1510,23 @@ body {
 }
 
 /* Preview loader (common/PreviewLoader.tsx): the hideout's news computer, a render in still layers,
-   with its pentagram fan and the marks on its screen drawn over them. Only those and the glow move,
-   by transform and opacity alone, so they keep going on the compositor while a model's load holds
-   the main thread. The phosphor and ink colors belong to the render, not to the theme. It fades in
-   after a moment, so a short load never flashes it. */
+   with what moves drawn or placed over them: the pentagram fan, the screen's marks and light, the
+   planchette and the mug's steam. Everything moves by transform and opacity alone, so it keeps going
+   on the compositor while a model's load holds the main thread, and every animation is a CSS loop:
+   nothing here is timed from script. The phosphor, ink and steam colors belong to the render, not to
+   the theme. It fades in after a moment, so a short load never flashes it. */
 .preview-loader {
   --loader-phosphor: #dcffe6;
   --loader-ink: #15422b;
+  --loader-light: #9dffc0;
+  --loader-width: min(76cqw, 78cqh, max(300px, 58cqmin));
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--loader-width) * 0.03);
   container-type: size;
   pointer-events: none;
   color: var(--color-accent);
@@ -1529,8 +1535,9 @@ body {
 
 .preview-loader__pc {
   position: relative;
-  width: min(74cqw, 76cqh, max(280px, 34cqmin));
-  aspect-ratio: 760 / 750;
+  flex: none;
+  width: var(--loader-width);
+  aspect-ratio: 1000 / 987;
 }
 
 .preview-loader__layer {
@@ -1552,15 +1559,63 @@ body {
   to { opacity: 0.9; }
 }
 
+/* The screen's light on the desk, wavering as a tube does, and the beams it throws with it. */
+.preview-loader__screenlight,
+.preview-loader__rays {
+  animation: previewLoaderFlicker 3.7s linear infinite;
+  will-change: opacity;
+}
+
+@keyframes previewLoaderFlicker {
+  0%, 100% { opacity: 0.5; }
+  8% { opacity: 0.68; }
+  9% { opacity: 0.46; }
+  22% { opacity: 0.72; }
+  40% { opacity: 0.6; }
+  41% { opacity: 0.8; }
+  60% { opacity: 0.55; }
+  75% { opacity: 0.74; }
+  76% { opacity: 0.58; }
+}
+
+.preview-loader__rays {
+  position: absolute;
+  width: 78%;
+  aspect-ratio: 1.5;
+  translate: -50% -4%;
+  background: conic-gradient(from 138deg at 50% 0%,
+    transparent 0deg, color-mix(in srgb, var(--loader-light) 26%, transparent) 7deg, transparent 15deg,
+    color-mix(in srgb, var(--loader-light) 16%, transparent) 24deg, transparent 33deg,
+    color-mix(in srgb, var(--loader-light) 28%, transparent) 42deg, transparent 51deg,
+    color-mix(in srgb, var(--loader-light) 16%, transparent) 60deg, transparent 69deg,
+    color-mix(in srgb, var(--loader-light) 24%, transparent) 77deg, transparent 84deg, transparent 360deg);
+  mask-image: radial-gradient(ellipse 60% 100% at 50% 0%, black 4%, transparent 68%);
+}
+
+/* A while into a load the planchette starts to move by itself: glides, rests, glides back. The
+   offsets are its path on the mat, through the ground axes the bake measured. */
+.preview-loader__planchette {
+  animation: previewLoaderPlanchette 11s ease-in-out 5s infinite;
+  will-change: transform;
+}
+
+@keyframes previewLoaderPlanchette {
+  0%, 8%, 100% { transform: translate(0, 0); }
+  22%, 34% { transform: translate(-4.05%, 0.65%); }
+  48%, 56% { transform: translate(-2.08%, -2.48%); }
+  72%, 84% { transform: translate(3.5%, -0.34%); }
+}
+
 .preview-loader .preview-loader__mini {
   display: none;
   width: min(40cqw, 40cqh, 32px);
   aspect-ratio: 1;
 }
 
-/* A box too small to read the computer in gets the fan alone. */
+/* A box too small to read the scene in gets the fan alone. */
 @container (max-width: 150px) or (max-height: 130px) {
-  .preview-loader__pc { display: none; }
+  .preview-loader__pc,
+  .preview-loader__status { display: none; }
   .preview-loader .preview-loader__mini { display: block; }
 }
 
@@ -1592,7 +1647,7 @@ body {
   stroke-linejoin: round;
 }
 
-/* In the computer the fan turns as fast as the game's (its clip is 0.64 s a turn) and is drawn finer. */
+/* In the computer the fan turns as fast as in the game (its clip is 0.64 s a turn) and is drawn finer. */
 .preview-loader__fan {
   animation-duration: 0.64s;
 }
@@ -1611,13 +1666,19 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* The screen: a bar that fills with the load, or a cursor while nothing reports how far it is. */
+/* The screen, laid on its glass by the matrix the component sets. It shows a bar when the load
+   reports how far it is, and otherwise one of a few programs. */
 .preview-loader__screen {
   position: absolute;
   translate: -50% -50%;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.preview-loader__screen :is(i, b, em, span) {
+  display: block;
+  background: var(--loader-ink);
 }
 
 .preview-loader__bar {
@@ -1629,24 +1690,174 @@ body {
 }
 
 .preview-loader__bar > span {
-  display: block;
   width: 100%;
   height: 100%;
-  background: var(--loader-ink);
   transform-origin: left;
   transition: transform 400ms ease-out;
 }
 
-.preview-loader__cursor {
-  width: 15%;
-  height: 22%;
-  min-height: 3px;
-  background: var(--loader-ink);
-  animation: previewCursorBlink 1.1s steps(1, end) infinite;
+/* Three lines typed one after another, then cleared. */
+.preview-loader__type {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16%;
+  width: 62%;
+  height: 58%;
 }
 
-@keyframes previewCursorBlink {
-  50% { opacity: 0; }
+.preview-loader__type > i {
+  height: 15%;
+  min-height: 2px;
+  transform-origin: left;
+  animation: previewLoaderType1 4.6s linear infinite;
+}
+
+.preview-loader__type > i:nth-child(2) { width: 74%; animation-name: previewLoaderType2; }
+.preview-loader__type > i:nth-child(3) { width: 48%; animation-name: previewLoaderType3; }
+
+@keyframes previewLoaderType1 {
+  0% { transform: scaleX(0); animation-timing-function: steps(7, end); }
+  20%, 92% { transform: scaleX(1); animation-timing-function: steps(1, end); }
+  93%, 100% { transform: scaleX(0); }
+}
+
+@keyframes previewLoaderType2 {
+  0%, 26% { transform: scaleX(0); animation-timing-function: steps(6, end); }
+  44%, 92% { transform: scaleX(1); animation-timing-function: steps(1, end); }
+  93%, 100% { transform: scaleX(0); }
+}
+
+@keyframes previewLoaderType3 {
+  0%, 52% { transform: scaleX(0); animation-timing-function: steps(4, end); }
+  64%, 92% { transform: scaleX(1); animation-timing-function: steps(1, end); }
+  93%, 100% { transform: scaleX(0); }
+}
+
+/* An eye that looks about and blinks. */
+.preview-loader__eye {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60%;
+  aspect-ratio: 1.9;
+  border: max(1.5px, calc(var(--loader-width) * 0.006)) solid var(--loader-ink);
+  border-radius: 50%;
+  animation: previewLoaderBlink 4.3s linear infinite;
+}
+
+.preview-loader__eye > i {
+  width: 28%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  animation: previewLoaderLook 5.2s ease-in-out infinite;
+}
+
+@keyframes previewLoaderBlink {
+  0%, 91%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.08); }
+}
+
+@keyframes previewLoaderLook {
+  0%, 12%, 100% { transform: translateX(0); }
+  22%, 44% { transform: translateX(-75%); }
+  56%, 82% { transform: translateX(80%); }
+}
+
+/* A rally: the ball crosses in one loop and rises and falls in another, and both paddles follow it. */
+.preview-loader__pong {
+  position: relative;
+  width: 76%;
+  height: 62%;
+}
+
+.preview-loader__pong > i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5%;
+  height: 34%;
+  animation: previewLoaderPaddle 1.9s ease-in-out infinite alternate;
+}
+
+.preview-loader__pong > i:nth-child(2) { left: auto; right: 0; }
+
+.preview-loader__pong > b {
+  position: absolute;
+  top: 0;
+  left: 6%;
+  width: 9%;
+  height: 100%;
+  background: none;
+  animation: previewLoaderBallX 1.15s linear infinite alternate;
+}
+
+.preview-loader__pong em {
+  width: 100%;
+  aspect-ratio: 1;
+  animation: previewLoaderBallY 1.9s ease-in-out infinite alternate;
+}
+
+@keyframes previewLoaderPaddle { to { transform: translateY(194%); } }
+@keyframes previewLoaderBallX { to { transform: translateX(878%); } }
+@keyframes previewLoaderBallY { to { transform: translateY(640%); } }
+
+/* The steam of the mug: three puffs rising out of it in turn. */
+.preview-loader__steam {
+  position: absolute;
+  width: 5.5%;
+  aspect-ratio: 1;
+  translate: -50% -100%;
+}
+
+.preview-loader__steam > i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(255 255 255 / 0.55), transparent);
+  opacity: 0;
+  animation: previewLoaderSteam 3.6s ease-out infinite;
+  will-change: transform, opacity;
+}
+
+.preview-loader__steam > i:nth-child(2) { animation-delay: -1.2s; left: 22%; }
+.preview-loader__steam > i:nth-child(3) { animation-delay: -2.4s; left: -18%; }
+
+@keyframes previewLoaderSteam {
+  0% { transform: translate(0, 20%) scale(0.5); opacity: 0; }
+  25% { opacity: 0.8; }
+  100% { transform: translate(24%, -210%) scale(1.5); opacity: 0; }
+}
+
+/* The line under the scene, in the colors of the app: what says this is a load, and how far it is. */
+.preview-loader__status {
+  flex: none;
+  width: calc(var(--loader-width) * 0.4);
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-hl) 12%, transparent);
+}
+
+.preview-loader__status > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-accent);
+  transform-origin: left;
+  transition: transform 400ms ease-out;
+}
+
+.preview-loader__status--sweep > span {
+  width: 38%;
+  transition: none;
+  animation: previewLoaderSweep 1.5s ease-in-out infinite;
+}
+
+@keyframes previewLoaderSweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(264%); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1654,8 +1865,18 @@ body {
   .fan-spinner,
   .preview-loader__fan { animation-duration: 8s; }
   .preview-loader__glow,
-  .preview-loader__cursor { animation: none; }
-  .preview-loader__bar > span { transition: none; }
+  .preview-loader__screenlight,
+  .preview-loader__rays,
+  .preview-loader__planchette,
+  .preview-loader__steam > i,
+  .preview-loader__screen *,
+  .preview-loader__eye { animation: none; }
+  .preview-loader__screenlight,
+  .preview-loader__rays { opacity: 0.6; }
+  .preview-loader__steam > i:first-child { opacity: 0.6; transform: translate(8%, -70%); }
+  .preview-loader__bar > span,
+  .preview-loader__status > span { transition: none; }
+  .preview-loader__status--sweep > span { width: 100%; opacity: 0.5; animation: none; }
 }
 
 /* Skeletons (common/Skeleton.tsx). One sweep for the whole screen: the glint

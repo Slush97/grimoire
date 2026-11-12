@@ -1,21 +1,37 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { FanSpinner, PreviewLoader } from './PreviewLoader';
+import { SCREEN_PROGRAMS } from './previewLoaderArt';
 
 describe('PreviewLoader', () => {
-  it('shows a cursor on its screen while the load reports no position', () => {
+  it('sweeps its line and runs a screen program while the load reports no position', () => {
     for (const progress of [undefined, null]) {
       const html = renderToStaticMarkup(<PreviewLoader progress={progress} />);
-      expect(html).toContain('preview-loader__cursor');
+      expect(html).toContain('preview-loader__status--sweep');
       expect(html).not.toContain('preview-loader__bar');
+      expect(SCREEN_PROGRAMS.some((program) => html.includes(`preview-loader__${program}`))).toBe(true);
     }
   });
 
-  it('fills the bar on its screen with the progress, kept between 0 and 1', () => {
-    expect(renderToStaticMarkup(<PreviewLoader progress={0.25} />)).toContain('scaleX(0.25)');
-    expect(renderToStaticMarkup(<PreviewLoader progress={0} />)).toContain('scaleX(0)');
-    expect(renderToStaticMarkup(<PreviewLoader progress={3} />)).toContain('scaleX(1)');
-    expect(renderToStaticMarkup(<PreviewLoader progress={-1} />)).toContain('scaleX(0)');
+  it('gives each loader the next screen program in turn', () => {
+    const seen = SCREEN_PROGRAMS.map(() => {
+      const html = renderToStaticMarkup(<PreviewLoader />);
+      return SCREEN_PROGRAMS.find((program) => html.includes(`preview-loader__${program}`));
+    });
+    expect(new Set(seen).size).toBe(SCREEN_PROGRAMS.length);
+  });
+
+  it('fills the line and the bar on its screen with the progress, kept between 0 and 1', () => {
+    const count = (html: string, text: string) => html.split(text).length - 1;
+    expect(count(renderToStaticMarkup(<PreviewLoader progress={0.25} />), 'scaleX(0.25)')).toBe(2);
+    expect(count(renderToStaticMarkup(<PreviewLoader progress={3} />), 'scaleX(1)')).toBe(2);
+    expect(count(renderToStaticMarkup(<PreviewLoader progress={-1} />), 'scaleX(0)')).toBe(2);
+    expect(renderToStaticMarkup(<PreviewLoader progress={0.25} />)).not.toContain('preview-loader__status--sweep');
+  });
+
+  it('shows the program it is given, whatever the progress', () => {
+    expect(renderToStaticMarkup(<PreviewLoader program="pong" progress={0.5} />)).toContain('preview-loader__pong');
+    expect(renderToStaticMarkup(<PreviewLoader program="bar" />)).toContain('preview-loader__bar');
   });
 
   it('is hidden from assistive technology unless it is given a label', () => {

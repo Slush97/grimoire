@@ -14,7 +14,11 @@ The images are bundled locally so previews and capture work offline. Copyright r
 ## Preview loader
 
 The loader of a 3D preview (`src/components/common/PreviewLoader.tsx`) shows the news computer from the
-game's hideout. Its layers in `src/assets/preview-loader/` are renders of Valve's model
-`models/hideout/news_computer.vmdl_c`, exported from the game's files with `vpkmerge model export` and drawn
-without its fan, so the app can turn the pentagram itself. They are Valve artwork too, bundled so the loader
-is there before anything has been read from the game. Copyright remains with Valve.
+game's hideout, with the hideout's mug of cocoa beside it. Its layers in `src/assets/preview-loader/` are
+renders of Valve's models `models/hideout/news_computer.vmdl_c` and `models/hideout/hideout_mug_marshmellow.vmdl_c`,
+exported from the game's files with `vpkmerge model export`. The fan and the planchette are left out of the
+main layer, so the app can turn the pentagram and move the planchette itself. They are Valve artwork too,
+bundled so the loader is there before anything has been read from the game. Copyright remains with Valve.
+
+`scripts/loader-lab.mts` builds a standalone page that plays the loader on a loop, with controls for its
+size, progress, screen programs and layers.
