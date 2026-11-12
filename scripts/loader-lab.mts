@@ -42,7 +42,11 @@ function markup(phrase: number, program: ScreenProgram, progress?: number): stri
     .replace(/file:\/\/[^"]+\.webp/g, (url) => keep(fileURLToPath(url), 'webp'))
     .replace(/src="(\/heroes\/[^"]+\.png)"/g, (_, path: string) => `src="${keep(resolve(root, 'public', `.${path}`), 'png')}"`);
 }
-const screenOf = (html: string) => /<div class="preview-loader__screen"[^>]*>(.*?)<\/div><div class="preview-loader__steam"/.exec(html)?.[1] ?? '';
+const screenOf = (html: string) => {
+  const screen = /<div class="preview-loader__screen"[^>]*>([\s\S]*?)<\/div><div class="preview-loader__steam"/.exec(html)?.[1];
+  if (!screen) throw new Error('The loader\'s screen was not found in its markup.');
+  return screen;
+};
 const programs: ScreenProgram[] = ['hero', ...SCREEN_PROGRAMS, 'bar'];
 /** One loader per phrase (its keys and keyframes differ), and every program's screen. `type` has one per phrase. */
 const loaders = PHRASES.map((_, phrase) => markup(phrase, 'type'));

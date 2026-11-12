@@ -1837,8 +1837,9 @@ body {
 /* The Grimoire logo as one loop: the book's leaves riffle from the right page to the left, then its
    whirlwind rises out of the spine, spins and dies away. A leaf sits in a box laid on the right page
    (x along the page, y along the spine, from the logo's own lines) and turns inside it by scaleX and
-   skewY, which stay finite where the leaf is seen edge on. The leaves share the loop and start it one
-   after another, so they are done before the whirlwind is up. */
+   skewY, which stay finite where the leaf is seen edge on. The component writes the loop's keyframes
+   (BOOK in previewLoaderArt.ts): the leaves' turns, the whirlwind's rise and fall, and the fading of
+   the pages' far edges, which the logo leaves out because its whirlwind covers them. */
 .preview-loader__book {
   position: relative;
   height: 88%;
@@ -1853,11 +1854,18 @@ body {
   fill: var(--loader-ink);
 }
 
+.preview-loader__book > .preview-loader__page-tops {
+  fill: none;
+  stroke: var(--loader-ink);
+  stroke-width: 24;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .preview-loader__whirl {
   position: absolute;
   inset: 0;
   transform-origin: 57.4% 69.7%;
-  animation: previewLoaderWhirl 6.2s ease-in-out infinite;
 }
 
 .preview-loader__whirl > svg {
@@ -1867,13 +1875,6 @@ body {
 .preview-loader__whirl > svg:nth-child(2) { animation-delay: -0.1s; }
 .preview-loader__whirl > svg:nth-child(3) { animation-delay: -0.2s; }
 .preview-loader__whirl > svg:nth-child(4) { animation-delay: -0.3s; }
-
-@keyframes previewLoaderWhirl {
-  0%, 36% { opacity: 0; transform: scale(0.12); }
-  46% { opacity: 1; transform: scale(1.05); }
-  50%, 84% { opacity: 1; transform: scale(1); }
-  95%, 100% { opacity: 0; transform: scale(0.12); }
-}
 
 @keyframes previewLoaderWhirlBand {
   from { transform: translateX(-2.6%); }
@@ -1898,17 +1899,6 @@ body {
   border-radius: 0 26% 0 0;
   background: color-mix(in srgb, var(--loader-ink) 10%, var(--loader-phosphor));
   transform-origin: 0 100%;
-  animation: previewLoaderLeaf 6.2s linear infinite backwards;
-}
-
-@keyframes previewLoaderLeaf {
-  0% { transform: scaleX(1) skewY(0deg); opacity: 0; }
-  0.5% { transform: scaleX(0.995) skewY(-5deg); opacity: 1; }
-  1.8% { transform: scaleX(0.944) skewY(-25.5deg); }
-  3.4% { transform: scaleX(0.624) skewY(-38.4deg); }
-  5% { transform: scaleX(0.176) skewY(-42deg); }
-  6.6% { transform: scaleX(-0.288) skewY(-37.9deg); opacity: 1; }
-  7.1%, 100% { transform: scaleX(-0.288) skewY(-37.9deg); opacity: 0; }
 }
 
 /* The hero the preview is loading, as an old tube would pull the picture in: cut into strips that
@@ -2053,6 +2043,7 @@ body {
   .preview-loader__screen *,
   .preview-loader__keys > i { animation: none !important; }
   .preview-loader__whirl { opacity: 1; transform: none; }
+  .preview-loader__page-tops { display: none; }
   .preview-loader__book > span,
   .preview-loader__static > i { display: none; }
   .preview-loader__screenlight,

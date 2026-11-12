@@ -50,6 +50,56 @@ export const LOGO = {
   ],
 };
 
+/** The far edges of the logo's pages, which the logo leaves to its whirlwind to cover: drawn while it is down. */
+export const PAGE_TOPS = 'M352 322C400 380 432 450 452 512C520 470 600 438 690 421';
+
+/** How many leaves the book turns before its whirlwind rises. */
+const LEAVES = 7;
+/** Seconds a leaf takes to turn: the first and last ones, and the quickest one in the middle. */
+const LEAF_SLOW = 0.66, LEAF_FAST = 0.3;
+/** How far into one leaf's turn the next one starts, as a share of the turn. */
+const LEAF_OVERLAP = 0.55;
+/** Seconds: the whirlwind's rise, its spin, its dying away, and the rests before and after it. */
+const WHIRL_RISE = 0.6, WHIRL_SPIN = 2.3, WHIRL_DIE = 0.6, BOOK_REST = 0.3;
+
+/** A leaf's poses from flat on the right page to flat on the left: [share of its turn, scaleX, skewY in degrees].
+ *  The shares bunch its steps toward the middle, so it lifts off slowly, swings over and settles. */
+const LEAF_POSES = [[0.05, 0.995, -5], [0.34, 0.944, -25.5], [0.52, 0.624, -38.4], [0.7, 0.176, -42], [0.94, -0.288, -37.9]];
+
+/**
+ * The book's loop as CSS: its leaves riffle from the right page to the left, slowly, then faster, then
+ * slowly again, each one starting partway through the one before; then the whirlwind rises out of the
+ * spine, spins and dies away, the pages' far edges fading out under it and back.
+ */
+export const BOOK = (() => {
+  const turns = Array.from({ length: LEAVES }, (_, leaf) => LEAF_SLOW - (LEAF_SLOW - LEAF_FAST) * Math.sin(Math.PI * leaf / (LEAVES - 1)));
+  const starts: number[] = [];
+  turns.forEach((_, leaf) => starts.push(leaf ? starts[leaf - 1] + turns[leaf - 1] * LEAF_OVERLAP : 0.15));
+  const riffled = starts[LEAVES - 1] + turns[LEAVES - 1];
+  const rise = riffled + BOOK_REST, spin = rise + WHIRL_RISE, die = spin + WHIRL_SPIN, gone = die + WHIRL_DIE;
+  const duration = gone + BOOK_REST;
+  const at = (seconds: number) => `${(seconds / duration * 100).toFixed(3)}%`;
+  const pose = (scale: number, skew: number) => `transform: scaleX(${scale}) skewY(${skew}deg);`;
+  const blocks = turns.map((turn, leaf) => {
+    const from = starts[leaf], last = LEAF_POSES[LEAF_POSES.length - 1];
+    const stops = LEAF_POSES.map(([share, scale, skew], step) => {
+      const ease = step === 0 ? ' animation-timing-function: ease-in;' : step === LEAF_POSES.length - 2 ? ' animation-timing-function: ease-out;' : '';
+      return `${at(from + share * turn)} { ${pose(scale, skew)} opacity: 1;${ease} }`;
+    });
+    return `@keyframes preview-loader-leaf-${leaf} { 0%, ${at(from)} { ${pose(1, 0)} opacity: 0; } ${stops.join(' ')} ${at(from + turn)}, 100% { ${pose(last[1], last[2])} opacity: 0; } }`;
+  });
+  blocks.push(`@keyframes preview-loader-whirl { 0%, ${at(rise)} { opacity: 0; transform: scale(0.12); } ${at(spin - 0.12)} { opacity: 1; transform: scale(1.05); } `
+    + `${at(spin)}, ${at(die)} { opacity: 1; transform: scale(1); } ${at(gone)}, 100% { opacity: 0; transform: scale(0.12); } }`);
+  blocks.push(`@keyframes preview-loader-page-tops { 0%, ${at(rise + 0.1)} { opacity: 1; } ${at(spin - 0.15)}, ${at(die + 0.2)} { opacity: 0; } ${at(gone)}, 100% { opacity: 1; } }`);
+  const loop = (keyframes: string, easing: string) => `${keyframes} ${duration.toFixed(2)}s ${easing} infinite`;
+  return {
+    css: blocks.join('\n'),
+    leaves: turns.map((_, leaf) => loop(`preview-loader-leaf-${leaf}`, 'linear')),
+    whirl: loop('preview-loader-whirl', 'ease-in-out'),
+    pageTops: loop('preview-loader-page-tops', 'linear'),
+  };
+})();
+
 /** What the screen shows for a load that is not a hero's and reports no position, each loader the next one. */
 export const SCREEN_PROGRAMS = ['book', 'type', 'eye', 'pong'] as const;
 /** `hero` is the face of the hero being loaded, `bar` the progress of a load that reports it. */

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
-import { FAN, KEY_BOXES, LAYERS, LOGO, MUG, SCREEN, SCREEN_PROGRAMS, nextPhrase, nextScreenProgram, typingOf, type ScreenProgram, type Typing } from './previewLoaderArt';
+import { BOOK, FAN, KEY_BOXES, LAYERS, LOGO, MUG, PAGE_TOPS, SCREEN, SCREEN_PROGRAMS, nextPhrase, nextScreenProgram, typingOf, type ScreenProgram, type Typing } from './previewLoaderArt';
 
 // The loading state of a 3D preview: the news computer from the game's hideout, whose case fan is a
 // spinning pentagram, with a mug of cocoa beside it. The scene is a render of Valve's models, baked into
@@ -34,17 +34,16 @@ const logoPart = (d: string) => (
   <svg key={d.slice(0, 24)} viewBox={LOGO.view}><g transform={LOGO.frame}><path d={d} /></g></svg>
 );
 
-/** How many leaves the book turns before its whirlwind rises, and the seconds between two of them. */
-const LEAVES = 5, LEAF_GAP = 0.34;
-
-/** The Grimoire logo as one loop: its leaves riffle from the right page to the left, then the whirlwind
- *  rises out of the book, spins and dies away. */
+/** The Grimoire logo as one loop (see BOOK): its leaves riffle from the right page to the left, then the
+ *  whirlwind rises out of the book, spins and dies away. */
 function Book() {
   return (
     <div className="preview-loader__book">
+      <style>{BOOK.css}</style>
       {logoPart(LOGO.book)}
-      {Array.from({ length: LEAVES }, (_, leaf) => <span key={leaf}><b style={{ animationDelay: `${(0.15 + leaf * LEAF_GAP).toFixed(2)}s` }} /></span>)}
-      <div className="preview-loader__whirl">{LOGO.whirl.map(logoPart)}</div>
+      <svg className="preview-loader__page-tops" viewBox={LOGO.view} style={{ animation: BOOK.pageTops }}><path d={PAGE_TOPS} /></svg>
+      {BOOK.leaves.map((animation, leaf) => <span key={leaf}><b style={{ animation }} /></span>)}
+      <div className="preview-loader__whirl" style={{ animation: BOOK.whirl }}>{LOGO.whirl.map(logoPart)}</div>
     </div>
   );
 }
