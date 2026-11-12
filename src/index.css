@@ -1825,98 +1825,165 @@ body {
   21%, 53% { transform: translateY(173%); }
 }
 
-/* A grimoire, open, turning its pages: the right page lifts, stands on the spine and lands on the left. */
+/* The Grimoire logo: its open book, with leaves turning from the right page to the left and its
+   whirlwind swaying over them. A leaf sits in a box laid on the right page (x along the page, y along
+   the spine, from the logo's own lines), and turns inside it by scaleX and skewY, which stay finite
+   where the leaf is seen edge on. */
 .preview-loader__book {
   position: relative;
-  width: 78%;
-  height: 54%;
+  height: 88%;
+  aspect-ratio: 1010 / 890;
 }
 
-.preview-loader__book > :is(i, b) {
+.preview-loader__book > svg {
   position: absolute;
-  top: 0;
-  left: 50%;
-  width: 50%;
+  inset: 0;
+  width: 100%;
   height: 100%;
-  padding: 16% 12%;
+  fill: var(--loader-ink);
+}
+
+.preview-loader__book > .preview-loader__whirl {
+  animation: previewLoaderWhirl 1.3s ease-in-out infinite alternate;
+}
+
+.preview-loader__book > .preview-loader__whirl:nth-of-type(3) { animation-delay: -0.3s; }
+.preview-loader__book > .preview-loader__whirl:nth-of-type(4) { animation-delay: -0.6s; }
+.preview-loader__book > .preview-loader__whirl:nth-of-type(5) { animation-delay: -0.9s; }
+
+@keyframes previewLoaderWhirl {
+  from { transform: translateX(-2.2%); }
+  to { transform: translateX(2.2%); }
+}
+
+.preview-loader__book > span {
+  position: absolute;
+  left: 58.91%;
+  bottom: 15.73%;
+  width: 34.55%;
+  aspect-ratio: 349 / 306;
+  background: none;
+  transform-origin: 0 100%;
+  transform: matrix(0.888, -0.459, 0.555, 0.832, 0, 0);
+}
+
+.preview-loader__book > span > b {
+  width: 100%;
+  height: 100%;
   border: var(--loader-stroke) solid var(--loader-ink);
-  border-radius: 0 10% 10% 0 / 0 8% 8% 0;
-  background: repeating-linear-gradient(to bottom, color-mix(in srgb, var(--loader-ink) 55%, transparent) 0 9%, transparent 9% 25%) content-box,
-    color-mix(in srgb, var(--loader-ink) 9%, var(--loader-phosphor));
-  transform-origin: left;
-  transform: skewY(-5deg);
+  border-radius: 0 26% 0 0;
+  background: color-mix(in srgb, var(--loader-ink) 10%, var(--loader-phosphor));
+  transform-origin: 0 100%;
+  animation: previewLoaderLeaf 2.4s linear infinite;
 }
 
-.preview-loader__book > i:first-child {
-  left: 0;
-  border-radius: 10% 0 0 10% / 8% 0 0 8%;
-  transform-origin: right;
-  transform: skewY(5deg);
+.preview-loader__book > span + span > b { animation-delay: -1.2s; }
+
+@keyframes previewLoaderLeaf {
+  0% { transform: scaleX(1) skewY(0deg); opacity: 0; }
+  5% { transform: scaleX(0.99) skewY(-8deg); opacity: 1; }
+  16% { transform: scaleX(0.944) skewY(-25.5deg); }
+  28% { transform: scaleX(0.624) skewY(-38.4deg); }
+  40% { transform: scaleX(0.176) skewY(-42deg); }
+  52% { transform: scaleX(-0.288) skewY(-37.9deg); opacity: 1; }
+  58%, 100% { transform: scaleX(-0.288) skewY(-37.9deg); opacity: 0; }
 }
 
-.preview-loader__book > b {
-  animation: previewLoaderPage 2.6s infinite;
-}
-
-@keyframes previewLoaderPage {
-  0%, 22% { transform: skewY(-5deg) scaleX(1); animation-timing-function: ease-in; }
-  49.9% { transform: skewY(-30deg) scaleX(0.02); animation-timing-function: steps(1, end); }
-  50.1% { transform: skewY(30deg) scaleX(-0.02); animation-timing-function: ease-out; }
-  78%, 100% { transform: skewY(5deg) scaleX(-1); }
-}
-
-/* The hero the preview is loading, as the screen would show a face, with a line reading down it. */
+/* The hero the preview is loading, as an old tube would pull the picture in: cut into strips that
+   jolt sideways one after another, so a ripple runs down the face now and then, under static that
+   jumps about and the tube's lines. */
 .preview-loader__face {
   position: relative;
-  width: 56%;
+  width: 58%;
   aspect-ratio: 1;
+  animation: previewLoaderHum 2.9s steps(1, end) infinite;
 }
 
 .preview-loader__face > img {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
-  opacity: 0.9;
   filter: grayscale(1) sepia(1) hue-rotate(75deg) saturate(1.3) contrast(1.15) brightness(0.82);
+  animation: previewLoaderRipple 2s linear infinite;
 }
 
-.preview-loader__face > i {
+@keyframes previewLoaderRipple {
+  0%, 58%, 100% { transform: translateX(0); }
+  63% { transform: translateX(7%); }
+  69% { transform: translateX(-5%); }
+  75% { transform: translateX(3%); }
+  81% { transform: translateX(-1.5%); }
+  87% { transform: translateX(0); }
+}
+
+@keyframes previewLoaderHum {
+  0%, 100% { opacity: 0.9; }
+  31% { opacity: 0.72; }
+  34% { opacity: 0.92; }
+  67% { opacity: 0.8; }
+  70% { opacity: 0.95; }
+}
+
+.preview-loader__static {
   position: absolute;
-  top: 0;
-  left: -12%;
-  width: 124%;
-  height: 5%;
-  opacity: 0.6;
-  animation: previewLoaderScan 1.7s linear infinite alternate;
+  inset: 5%;
+  overflow: hidden;
+  border-radius: 14%;
+  background: repeating-linear-gradient(to bottom, color-mix(in srgb, var(--loader-ink) 16%, transparent) 0 1px, transparent 1px 3px);
 }
 
-@keyframes previewLoaderScan { to { transform: translateY(1900%); } }
+.preview-loader__static > i {
+  position: absolute;
+  inset: -40%;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 0.08 0 0 0 0 0.26 0 0 0 0 0.17 0 0 0 -2.4 1.3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.5;
+  animation: previewLoaderStatic 0.5s steps(1, end) infinite;
+}
 
-/* The steam of the mug: three puffs rising out of it in turn. */
+@keyframes previewLoaderStatic {
+  0% { transform: translate(0, 0); }
+  17% { transform: translate(-9%, 6%); }
+  33% { transform: translate(7%, -8%); }
+  50% { transform: translate(-4%, -5%); }
+  67% { transform: translate(9%, 8%); }
+  83% { transform: translate(-7%, 3%); }
+}
+
+/* The steam of the mug, drawn as the hideout draws its smoke: one long ribbon. The ribbon is three
+   turns of a wave sliding up by one turn, seen through a window that fades it out toward the top
+   and leans from side to side. */
 .preview-loader__steam {
   position: absolute;
-  width: 5.5%;
-  aspect-ratio: 1;
+  width: 4.2%;
+  height: 21%;
   translate: -50% -100%;
+  overflow: hidden;
+  mask-image: linear-gradient(to top, transparent, black 16%, black 42%, transparent);
+  transform-origin: 50% 100%;
+  animation: previewLoaderSteamLean 3.3s ease-in-out infinite alternate;
 }
 
-.preview-loader__steam > i {
+.preview-loader__steam > svg {
   position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgb(255 255 255 / 0.55), transparent);
-  opacity: 0;
-  animation: previewLoaderSteam 3.6s ease-out infinite;
-  will-change: transform, opacity;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 300%;
+  fill: none;
+  stroke: rgb(255 255 255 / 0.62);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  animation: previewLoaderSteam 2.6s linear infinite;
+  will-change: transform;
 }
 
-.preview-loader__steam > i:nth-child(2) { animation-delay: -1.2s; left: 22%; }
-.preview-loader__steam > i:nth-child(3) { animation-delay: -2.4s; left: -18%; }
+@keyframes previewLoaderSteam { to { transform: translateY(-33.333%); } }
 
-@keyframes previewLoaderSteam {
-  0% { transform: translate(0, 20%) scale(0.5); opacity: 0; }
-  25% { opacity: 0.8; }
-  100% { transform: translate(24%, -210%) scale(1.5); opacity: 0; }
+@keyframes previewLoaderSteamLean {
+  from { transform: skewX(-7deg); }
+  to { transform: skewX(6deg); }
 }
 
 /* The line under the scene, in the colors of the app: what says this is a load, and how far it is. */
@@ -1958,13 +2025,14 @@ body {
   .preview-loader__screenlight,
   .preview-loader__rays,
   .preview-loader__planchette,
-  .preview-loader__steam > i,
+  .preview-loader__steam,
+  .preview-loader__steam > svg,
   .preview-loader__screen *,
   .preview-loader__eye { animation: none; }
-  .preview-loader__book > b { display: none; }
+  .preview-loader__book > span,
+  .preview-loader__static > i { display: none; }
   .preview-loader__screenlight,
   .preview-loader__rays { opacity: 0.6; }
-  .preview-loader__steam > i:first-child { opacity: 0.6; transform: translate(8%, -70%); }
   .preview-loader__bar > span,
   .preview-loader__status > span { transition: none; }
   .preview-loader__status--sweep > span { width: 100%; opacity: 0.5; animation: none; }

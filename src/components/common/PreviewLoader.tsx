@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
-import { FAN, LAYERS, MUG, SCREEN, SCREEN_PROGRAMS, nextScreenProgram, type ScreenProgram } from './previewLoaderArt';
+import { FAN, LAYERS, LOGO, MUG, SCREEN, SCREEN_PROGRAMS, nextScreenProgram, type ScreenProgram } from './previewLoaderArt';
 
 // The loading state of a 3D preview: the news computer from the game's hideout, whose case fan is a
 // spinning pentagram, with a mug of cocoa beside it. The scene is a render of Valve's models, baked into
@@ -13,6 +13,8 @@ import { FAN, LAYERS, MUG, SCREEN, SCREEN_PROGRAMS, nextScreenProgram, type Scre
 /** The fan's drawing reaches 1.16 times the pentagram's tips (its stroke and the miter of its points). */
 const FAN_VIEW = 1.16;
 const PENTAGRAM = 'M0-1 .588.809-.951-.309H.951L-.588.809z';
+/** The steam's ribbon: three turns of one wave, so that sliding it up by a turn loops without a seam. */
+const STEAM = 'M10 0C17 10 3 20 10 30S17 50 10 60 3 80 10 90 17 110 10 120 3 140 10 150 17 170 10 180';
 
 const percent = (fraction: number) => `${(fraction * 100).toFixed(2)}%`;
 const matrix = ([a, b, c, d]: number[]) => `matrix(${a}, ${b}, ${c}, ${d}, 0, 0)`;
@@ -28,10 +30,44 @@ export function FanSpinner({ className = '', label }: { className?: string; labe
   );
 }
 
+const logoPart = (d: string, className?: string) => (
+  <svg key={d.slice(0, 24)} className={className} viewBox={LOGO.view}><g transform={LOGO.frame}><path d={d} /></g></svg>
+);
+
+/** The Grimoire logo with its pages turning in the whirlwind: two leaves, half a turn apart. */
+function Book() {
+  return (
+    <div className="preview-loader__book">
+      {logoPart(LOGO.book)}
+      <span><b /></span>
+      <span><b /></span>
+      {LOGO.whirl.map((band) => logoPart(band, 'preview-loader__whirl'))}
+    </div>
+  );
+}
+
+/** How many strips the face is cut into, each one jolting sideways a moment after the one above. */
+const FACE_STRIPS = 8;
+
+/** The hero's face as a tube would pull it in: a ripple runs down it now and then, under static. */
+function Face({ src, onNoFace }: { src: string; onNoFace: () => void }) {
+  return (
+    <>
+      <div className="preview-loader__face">
+        {Array.from({ length: FACE_STRIPS }, (_, strip) => (
+          <img key={strip} src={src} alt="" draggable={false} onError={strip === 0 ? onNoFace : undefined}
+            style={{ clipPath: `inset(${(strip * 100 / FACE_STRIPS).toFixed(2)}% 0 ${(100 - (strip + 1) * 100 / FACE_STRIPS).toFixed(2)}% 0)`, animationDelay: `${(strip * 0.09 - 2).toFixed(2)}s` }} />
+        ))}
+      </div>
+      <div className="preview-loader__static"><i /></div>
+    </>
+  );
+}
+
 function Screen({ program, progress, hero, onNoFace }: { program: ScreenProgram; progress: number; hero?: string; onNoFace: () => void }) {
   if (program === 'bar') return <div className="preview-loader__bar"><span style={{ transform: `scaleX(${progress})` }} /></div>;
-  if (program === 'hero' && hero) return <div className="preview-loader__face"><img src={getHeroChipIconPath(hero)} alt="" draggable={false} onError={onNoFace} /><i /></div>;
-  if (program === 'book' || program === 'hero') return <div className="preview-loader__book"><i /><i /><b /></div>;
+  if (program === 'hero' && hero) return <Face src={getHeroChipIconPath(hero)} onNoFace={onNoFace} />;
+  if (program === 'book' || program === 'hero') return <Book />;
   if (program === 'type') return <div className="preview-loader__type"><i /><i /><i /></div>;
   if (program === 'eye') return <div className="preview-loader__eye"><i /></div>;
   return <div className="preview-loader__pong"><i /><i /><b><em /></b></div>;
@@ -70,7 +106,9 @@ export function PreviewLoader({ progress, label, hero, program, className = '' }
           style={{ left: percent(SCREEN.left), top: percent(SCREEN.top), width: percent(SCREEN.width), aspectRatio: SCREEN.aspect, transform: matrix(SCREEN.matrix) }}>
           <Screen program={program ?? (known ? 'bar' : idle)} progress={amount} hero={noFace ? undefined : hero} onNoFace={() => setNoFace(true)} />
         </div>
-        <div className="preview-loader__steam" style={{ left: percent(MUG.left), top: percent(MUG.top) }}><i /><i /><i /></div>
+        <div className="preview-loader__steam" style={{ left: percent(MUG.left), top: percent(MUG.top) }}>
+          <svg viewBox="0 0 20 180" preserveAspectRatio="none"><path d={STEAM} /></svg>
+        </div>
       </div>
       <div className={`preview-loader__status ${known ? '' : 'preview-loader__status--sweep'}`}>
         <span style={known ? { transform: `scaleX(${amount})` } : undefined} />
