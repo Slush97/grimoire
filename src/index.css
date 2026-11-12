@@ -2090,9 +2090,52 @@ body {
   to { transform: scale(1.1); }
 }
 
+/* "gamer": the cabinet's light, its fan and the keys run through the rainbow. The light inside the
+   cabinet is green in the render, so turning its hue takes it through every color: a copy of the back
+   layer cut to the cabinet's window, and the cabinet's side of the glow, both turning together. */
+@keyframes loaderToyHue {
+  to { filter: hue-rotate(360deg); }
+}
+
+/* The render's greens are pale, and a turned pale color is a grey one: these are deepened as they turn. */
+@keyframes loaderToyHueDeep {
+  from { filter: saturate(3) hue-rotate(0deg); }
+  to { filter: saturate(3) hue-rotate(360deg); }
+}
+
+.loader-toy__rgb-room {
+  clip-path: polygon(29.7% 31.7%, 36.9% 27.7%, 37.3% 36%, 37.9% 46%, 37.6% 56.2%, 32.3% 62.8%, 32% 62.8%, 31% 46%, 30.1% 38%);
+  animation: loaderToyHueDeep 4s linear infinite;
+}
+
+.preview-loader__glow.loader-toy__rgb-glow {
+  mask-image: linear-gradient(to right, black 39%, transparent 46%), linear-gradient(to bottom, transparent 20%, black 27%);
+  mask-composite: intersect;
+  animation: previewLoaderGlow 2.4s ease-in-out infinite alternate, loaderToyHueDeep 4s linear infinite;
+}
+
+/* The rest of the glow (the screen's and the candle's) keeps its own color. */
+.loader-toy[data-rgb] .preview-loader__glow:not(.loader-toy__rgb-glow) {
+  mask-image: linear-gradient(to right, transparent 39%, black 46%), linear-gradient(to bottom, black 20%, transparent 27%);
+}
+
+.loader-toy[data-rgb] .preview-loader__seat { animation: loaderToyHue 4s linear infinite; }
+.loader-toy[data-rgb] .preview-loader__fan { color: #7dff8a; }
+
+/* A wave over the keyboard: each key's light a little further round than the one to its left. */
+.loader-toy[data-rgb] .preview-loader__keylight {
+  opacity: 1;
+  animation: loaderToyHueDeep 2.4s linear infinite;
+  animation-delay: calc(var(--key-x, 0) * -6s);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .loader-toy .preview-loader__pc,
   .loader-toy .preview-loader__keys > i { animation: none !important; transition: none; }
+  .loader-toy__rgb-room,
+  .preview-loader__glow.loader-toy__rgb-glow,
+  .loader-toy[data-rgb] .preview-loader__seat,
+  .loader-toy[data-rgb] .preview-loader__keylight { animation: none; }
 }
 
 /* Skeletons (common/Skeleton.tsx). One sweep for the whole screen: the glint

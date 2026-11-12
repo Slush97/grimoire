@@ -61,6 +61,7 @@ export type ToyShow =
   | { kind: 'hero'; hero: string; storm: boolean }
   | { kind: 'book'; mood: 'calm' | 'stuck' | 'awesome' }
   | { kind: 'phrases' }
+  | { kind: 'rgb' }
   | { kind: 'clear' }
   | { kind: 'leave' };
 
@@ -83,6 +84,7 @@ export function toyCommand(line: string): ToyShow | null {
     case 'grimoire is awesome': return { kind: 'book', mood: 'awesome' };
     case 'grimoire': case 'book': return { kind: 'book', mood: 'calm' };
     case 'help': return { kind: 'phrases' };
+    case 'gamer': case 'rgb': return { kind: 'rgb' };
     case 'clear': case 'cls': return { kind: 'clear' };
     case 'exit': case 'quit': case 'bye': return { kind: 'leave' };
   }
@@ -159,16 +161,18 @@ export function knockOnLogo(): void {
 export interface ToyScreen {
   text: string;
   /** The answer on the screen, which the next key clears. Null while a line is being typed. */
-  answer: Exclude<ToyShow, { kind: 'clear' | 'leave' }> | null;
+  answer: Exclude<ToyShow, { kind: 'rgb' | 'clear' | 'leave' }> | null;
   /** How many answers there have been: which phrase the computer types when asked for its own. */
   answers: number;
   /** How many lines it did not know, each one a jolt of its picture. */
   jolts: number;
+  /** Whether its lights run through the rainbow, as a gaming computer's do. A line turns it on and off. */
+  rgb: boolean;
   /** Set once a line asks to leave. */
   left: boolean;
 }
 
-export const TOY_BLANK: ToyScreen = { text: '', answer: null, answers: 0, jolts: 0, left: false };
+export const TOY_BLANK: ToyScreen = { text: '', answer: null, answers: 0, jolts: 0, rgb: false, left: false };
 
 /** A key on the screen: a character, a backspace, the enter that runs the line, or an answer put up unasked. */
 export type ToyKey = { char: string } | { show: NonNullable<ToyScreen['answer']> } | 'backspace' | 'enter';
@@ -183,6 +187,7 @@ export function toyType(screen: ToyScreen, key: ToyKey): ToyScreen {
     const command = toyCommand(typing.text);
     if (!command) return { ...typing, text: '', jolts: typing.jolts + 1 };
     if (command.kind === 'clear') return { ...typing, text: '' };
+    if (command.kind === 'rgb') return { ...typing, text: '', rgb: !typing.rgb };
     if (command.kind === 'leave') return { ...typing, text: '', left: true };
     return { ...typing, text: '', answer: command, answers: typing.answers + 1 };
   }

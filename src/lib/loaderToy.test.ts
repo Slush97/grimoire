@@ -120,6 +120,14 @@ describe('toyType', () => {
     expect(toyType(typed('exit'), 'enter').left).toBe(true);
   });
 
+  it('turns its rainbow lights on at "gamer", and off at the next', () => {
+    const lit = toyType(typed('gamer'), 'enter');
+    expect(lit).toMatchObject({ text: '', answer: null, rgb: true, jolts: 0 });
+    expect(toyType(typed('rgb', lit), 'enter').rgb).toBe(false);
+    // An answer on the screen does not put them out.
+    expect(toyType(typed('lash', lit), 'enter')).toMatchObject({ rgb: true, answer: { kind: 'hero', hero: 'Lash' } });
+  });
+
   it('puts up an answer nobody asked for', () => {
     expect(toyType(typed('half a li'), { show: { kind: 'phrases' } })).toMatchObject({ text: '', answer: { kind: 'phrases' }, answers: 1 });
   });

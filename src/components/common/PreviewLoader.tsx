@@ -126,11 +126,15 @@ export function LoaderSteam({ className = '', onAnimationEnd }: { className?: st
   );
 }
 
-/** The computer itself: its layers, with `screen` on its glass and each key styled by `keyStyle`. `children` are drawn over it. */
-export function LoaderScene({ screen, keyStyle, children }: { screen: ReactNode; keyStyle?: (key: number) => CSSProperties | undefined; children?: ReactNode }) {
+/** The computer itself: its layers, with `screen` on its glass and each key styled by `keyStyle`.
+ *  `under` is drawn over the back layer alone, and `children` over everything. */
+export function LoaderScene({ screen, keyStyle, under, children }: {
+  screen: ReactNode; keyStyle?: (key: number) => CSSProperties | undefined; under?: ReactNode; children?: ReactNode;
+}) {
   return (
     <div className="preview-loader__pc">
       <img className="preview-loader__layer" src={LAYERS.back} alt="" draggable={false} />
+      {under}
       <img className="preview-loader__layer preview-loader__screenlight" src={LAYERS.screenLight} alt="" draggable={false} />
       {/* Over the screen's light, which was rendered without the caps and lights what is under them. */}
       <Keys keyStyle={keyStyle} />

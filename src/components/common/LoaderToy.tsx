@@ -5,7 +5,7 @@ import { getHeroChipIconPath } from '../../lib/lockerUtils';
 import { CAP_CHARS, TOY_BLANK, loaderToy, phraseListener, toyCap, toyChar, toyLines, toyType, type ToyScreen } from '../../lib/loaderToy';
 import { Modal } from './Modal';
 import { Book, Face, Glyphs, LoaderScene, LoaderSteam, Typed } from './PreviewLoader';
-import { FAN, KEY_BOXES, PHRASES, SCREEN, typingOf } from './previewLoaderArt';
+import { FAN, KEY_BOXES, LAYERS, PHRASES, SCREEN, typingOf } from './previewLoaderArt';
 import { IconButton } from './ui';
 
 // The news computer as a toy: the loader's scene (PreviewLoader.tsx) in a window of its own, where the
@@ -195,18 +195,26 @@ function LoaderToy({ line }: { line: string }) {
   const [puffs, setPuffs] = useState<number[]>([]);
   const puffed = useRef(0);
 
-  const keyStyle = (key: number): CSSProperties | undefined => {
-    if (held.has(key)) return { transform: 'translateY(var(--loader-press))' };
+  const keyStyle = (key: number): CSSProperties => {
+    // Where the key is across the keyboard, for the rainbow that runs over the keys.
+    const across = { '--key-x': KEY_BOXES[key][0] } as CSSProperties;
+    if (held.has(key)) return { ...across, transform: 'translateY(var(--loader-press))' };
     const animation = typing?.key(key);
-    return animation ? { animation } : undefined;
+    return animation ? { ...across, animation } : across;
   };
 
   return (
     <Modal onClose={loaderToy.close} size="none" labelledBy={titleId} panelClassName="always-dark relative h-full max-h-[52rem] max-w-[52rem]">
       <h2 id={titleId} className="sr-only">{t('layout.newsComputer')}</h2>
-      <div ref={root} aria-hidden className="preview-loader loader-toy" data-mood={mood}>
+      <div ref={root} aria-hidden className="preview-loader loader-toy" data-mood={mood} data-rgb={screen.rgb || undefined}>
         {typing && <style>{typing.css}</style>}
-        <LoaderScene keyStyle={keyStyle} screen={<div ref={tube} className="loader-toy__tube"><Tube screen={screen} /></div>}>
+        <LoaderScene keyStyle={keyStyle} screen={<div ref={tube} className="loader-toy__tube"><Tube screen={screen} /></div>}
+          under={screen.rgb && (
+            <>
+              <img className="preview-loader__layer loader-toy__rgb-room" src={LAYERS.back} alt="" draggable={false} />
+              <img className="preview-loader__layer preview-loader__glow loader-toy__rgb-glow" src={LAYERS.glow} alt="" draggable={false} />
+            </>
+          )}>
           {puffs.map((puff) => <LoaderSteam key={puff} className="loader-toy__puff" onAnimationEnd={() => setPuffs((all) => all.filter((other) => other !== puff))} />)}
           <div className="loader-toy__hit loader-toy__hit--round" onPointerDown={() => kick('fan')}
             style={{ left: percent(FAN.left - FAN.width * 0.6), top: percent(FAN.top - FAN.width * 0.6), width: percent(FAN.width * 1.2), aspectRatio: 1 }} />
