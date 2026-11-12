@@ -1982,6 +1982,16 @@ body {
 
 .loader-toy .preview-loader__planchette { animation-delay: 0s; }
 
+/* The planchette under the real mouse: where the pointer is (`--toy-mouse-x/y`, set by the component),
+   and a little down while a button is. Its wandering waits until the pointer has gone. */
+.loader-toy[data-mouse] :is(.preview-loader__planchette, .loader-toy__rgb-mouse) {
+  animation: none;
+  transform: translate(var(--toy-mouse-x, 0%), var(--toy-mouse-y, 0%));
+  transition: transform 140ms ease-out, translate 60ms ease-out;
+}
+
+.loader-toy[data-click] .preview-loader__planchette { translate: 0 0.35%; }
+
 /* The chamber glows with the fan's pace. */
 .loader-toy .preview-loader__glow { filter: brightness(calc(1 + var(--toy-heat) * 1.1)); }
 
@@ -2122,6 +2132,24 @@ body {
 .loader-toy[data-rgb] .preview-loader__seat { animation: loaderToyHue 4s linear infinite; }
 .loader-toy[data-rgb] .preview-loader__fan { color: #7dff8a; }
 
+/* And the mouse has its light too: a glow on the mat under the planchette, going where it goes. */
+.loader-toy__rgb-mouse {
+  position: absolute;
+  inset: 0;
+  animation: previewLoaderPlanchette 11s ease-in-out infinite;
+}
+
+.loader-toy__rgb-mouse > i {
+  position: absolute;
+  width: 19%;
+  aspect-ratio: 1.75;
+  translate: -50% -42%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(110 255 135 / 0.85), rgb(110 255 135 / 0.3) 58%, transparent);
+  mix-blend-mode: screen;
+  animation: loaderToyHue 3s linear infinite;
+}
+
 /* A wave over the keyboard: each key's light a little further round than the one to its left. */
 .loader-toy[data-rgb] .preview-loader__keylight {
   opacity: 1;
@@ -2133,6 +2161,8 @@ body {
   .loader-toy .preview-loader__pc,
   .loader-toy .preview-loader__keys > i { animation: none !important; transition: none; }
   .loader-toy__rgb-room,
+  .loader-toy__rgb-mouse,
+  .loader-toy__rgb-mouse > i,
   .preview-loader__glow.loader-toy__rgb-glow,
   .loader-toy[data-rgb] .preview-loader__seat,
   .loader-toy[data-rgb] .preview-loader__keylight { animation: none; }

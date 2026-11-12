@@ -23,6 +23,8 @@ export const LAYERS = {
 // on a plane of the scene. From the bake; they change only with the render.
 export const FAN = { left: 0.3248, top: 0.324, width: 0.1245, matrix: [0.964, 0.0401, 0.0669, 0.9978] };
 export const SCREEN = { left: 0.5285, top: 0.4313, width: 0.1567, aspect: 1.232, matrix: [0.9983, 0.0589, -0.0283, 0.9977] };
+/** The planchette's middle, and what a meter along the mat's two ground axes is in the render. */
+export const PLANCHETTE = { left: 0.799, top: 0.7789, perMeterX: [0.5995, 0.0695], perMeterZ: [0.0476, 0.3793] };
 /** The middle of the mug's opening, where its steam rises from. */
 export const MUG = { left: 0.176, top: 0.672 };
 /** Each cap's box in the keys layer, [left, top, width, height], in rows from the back one, then the space bar's. */
