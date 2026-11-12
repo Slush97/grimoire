@@ -1,17 +1,17 @@
 {
   "sourceLanguage": "en",
-  "totalKeys": 3491,
+  "totalKeys": 3493,
   "languages": [
     {
       "code": "bg",
       "name": "български",
       "translatedKeys": 1798,
-      "pct": 52
+      "pct": 51
     },
     {
       "code": "en",
       "name": "English",
-      "translatedKeys": 3491,
+      "translatedKeys": 3493,
       "pct": 100
     },
     {
@@ -23,7 +23,7 @@
     {
       "code": "ru",
       "name": "русский",
-      "translatedKeys": 3486,
+      "translatedKeys": 3488,
       "pct": 100
     }
   ]

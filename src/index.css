@@ -1982,12 +1982,12 @@ body {
 
 .loader-toy .preview-loader__planchette { animation-delay: 0s; }
 
-/* The planchette under the real mouse: where the pointer is (`--toy-mouse-x/y`, set by the component),
-   and a little down while a button is. Its wandering waits until the pointer has gone. */
+/* The planchette under the real mouse: where the component has it (`--toy-mouse-x/y`, a frame at a
+   time as it glides after the pointer), and a little down while a button is. Its wandering waits until the pointer has gone. */
 .loader-toy[data-mouse] :is(.preview-loader__planchette, .loader-toy__rgb-mouse) {
   animation: none;
   transform: translate(var(--toy-mouse-x, 0%), var(--toy-mouse-y, 0%));
-  transition: transform 140ms ease-out, translate 60ms ease-out;
+  transition: translate 60ms ease-out;
 }
 
 .loader-toy[data-click] .preview-loader__planchette { translate: 0 0.35%; }

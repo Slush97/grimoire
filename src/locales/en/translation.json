@@ -3666,6 +3666,8 @@
   },
   "layout": {
     "newsComputer": "News computer",
+    "newsComputerMute": "Mute the computer",
+    "newsComputerUnmute": "Unmute the computer",
     "rateLimited": "GameBanana is rate-limiting Grimoire. Pause a moment before retrying.",
     "fixNow": "Fix now",
     "perfRestored": "Performance config restored.",

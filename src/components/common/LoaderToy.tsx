@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useReducer, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
+import { Volume2, VolumeX, X } from 'lucide-react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
 import type { ToySound } from '../../lib/loaderToySound';
 import { useAppStore } from '../../stores/appStore';
@@ -26,6 +26,10 @@ const FAN_KICK = 2.2, FAN_MOST = 9, FAN_SETTLE = 1.6;
 const AWESOME_PACE = 5;
 /** How far the planchette goes from its place for a pointer at the window's edge, in meters along and across its mat. */
 const MOUSE_REACH = [0.07, 0.055];
+/** Seconds: how quickly the planchette closes on the pointer, and how long after the pointer has left the app it goes home. */
+const MOUSE_GLIDE = 0.075, MOUSE_HOME = 1.5;
+/** Where the mute button's state is kept between openings. */
+const MUTED_KEY = 'grimoire.newsComputer.muted';
 
 /** The jolt of the picture: at a click on the glass, and at a line the computer does not know. */
 const JOLT: Keyframe[] = [
@@ -87,8 +91,18 @@ function LoaderToy({ line }: { line: string }) {
   const downs = useRef(new Map<string, { cap: number; at: number }>());
   const [held, setHeld] = useState<ReadonlySet<number>>(() => new Set());
   const showHeld = useCallback(() => setHeld(new Set([...downs.current.values()].map((down) => down.cap))), []);
-  // Its sounds: a clack at each key and the fan's hum, at the app's own volume. Loaded as it opens.
+  // Its sounds: a clack at each key, the hum of its fan and of its tube and a tap on its glass, at the
+  // app's own volume. Loaded as it opens. Its own button mutes them, and stays as it was left.
   const sound = useRef<ToySound | null>(null);
+  const audible = useAppStore((state) => state.soundVolume > 0);
+  const [muted, setMuted] = useState(() => localStorage.getItem(MUTED_KEY) === '1');
+  const mutedNow = useRef(muted);
+  const mute = (next: boolean) => {
+    setMuted(next);
+    mutedNow.current = next;
+    localStorage.setItem(MUTED_KEY, next ? '1' : '0');
+    sound.current?.mute(next);
+  };
   const press = useCallback((by: string, cap: number) => {
     downs.current.set(by, { cap, at: performance.now() });
     sound.current?.key();
@@ -155,6 +169,7 @@ function LoaderToy({ line }: { line: string }) {
     tube.current?.animate(JOLT, { duration: 900, easing: 'ease-out' });
     // A burst of static with it, so that an empty screen jolts too.
     tube.current?.querySelector('.preview-loader__static > i')?.animate([{ opacity: 1 }, { opacity: 1, offset: 0.5 }, { opacity: 0.5 }], { duration: 900 });
+    sound.current?.jolt();
   }, []);
   useEffect(() => { if (screen.jolts) jolt(); }, [screen.jolts, jolt]);
 
@@ -194,7 +209,7 @@ function LoaderToy({ line }: { line: string }) {
     let closed = false;
     void import('../../lib/loaderToySound').then(({ openToySound }) => {
       if (closed) return;
-      sound.current = openToySound(useAppStore.getState().soundVolume);
+      sound.current = openToySound(useAppStore.getState().soundVolume, mutedNow.current);
       sound.current.fan(fanPace.current);
     });
     return () => {
@@ -204,23 +219,60 @@ function LoaderToy({ line }: { line: string }) {
     };
   }, []);
 
-  // The planchette is the computer's mouse, and goes where the real one does: the pointer's place in
-  // the window, laid on the mat. It dips at a click. With the pointer gone it glides home, then
-  // wanders by itself as it does in the loader.
+  // The planchette is the computer's mouse, and goes where the real one does: the pointer's place across
+  // the window, laid on the mat and held at the mat's edges when the pointer is past the window's. It
+  // glides after the pointer, a frame at a time, so a jump of the pointer is no jump of the planchette.
+  // It dips at a click. Once the pointer has left the app it glides home, and wanders again from there.
   useEffect(() => {
-    let home = 0;
-    const onMove = (event: PointerEvent) => {
+    let target = [0, 0], at = [0, 0], held = false, frame = 0, last = 0, leaving = 0;
+    const show = (scene: HTMLElement) => {
+      scene.style.setProperty('--toy-mouse-x', `${at[0].toFixed(3)}%`);
+      scene.style.setProperty('--toy-mouse-y', `${at[1].toFixed(3)}%`);
+    };
+    const step = (now: number) => {
+      frame = 0;
       const scene = root.current;
       if (!scene) return;
+      const ease = 1 - Math.exp(-Math.min(0.1, (now - last) / 1000) / MOUSE_GLIDE);
+      last = now;
+      at = [at[0] + (target[0] - at[0]) * ease, at[1] + (target[1] - at[1]) * ease];
+      const there = Math.hypot(target[0] - at[0], target[1] - at[1]) < 0.004;
+      if (there) at = target;
+      show(scene);
+      if (!there) frame = requestAnimationFrame(step);
+      // Home, with nobody holding it: its own wandering starts from this very spot.
+      else if (!held) delete scene.dataset.mouse;
+    };
+    const glide = () => {
+      if (frame) return;
+      last = performance.now();
+      frame = requestAnimationFrame(step);
+    };
+    const onMove = (event: PointerEvent) => {
+      const scene = root.current, planchette = scene?.querySelector<HTMLElement>('.preview-loader__planchette');
+      if (!scene || !planchette) return;
+      if (!scene.dataset.mouse) {
+        // It is taken from wherever its wandering has it, not from its home.
+        const wandered = new DOMMatrixReadOnly(getComputedStyle(planchette).transform);
+        at = [wandered.m41 / planchette.offsetWidth * 100, wandered.m42 / planchette.offsetHeight * 100];
+        show(scene);
+        scene.dataset.mouse = 'held';
+      }
+      held = true;
+      clearTimeout(leaving);
       const box = scene.getBoundingClientRect();
-      const x = (event.clientX - box.left) / box.width * 2 - 1, y = (event.clientY - box.top) / box.height * 2 - 1;
-      const inside = Math.abs(x) <= 1 && Math.abs(y) <= 1;
-      const along = inside ? x * MOUSE_REACH[0] : 0, across = inside ? y * MOUSE_REACH[1] : 0;
-      scene.style.setProperty('--toy-mouse-x', `${((along * PLANCHETTE.perMeterX[0] + across * PLANCHETTE.perMeterZ[0]) * 100).toFixed(2)}%`);
-      scene.style.setProperty('--toy-mouse-y', `${((along * PLANCHETTE.perMeterX[1] + across * PLANCHETTE.perMeterZ[1]) * 100).toFixed(2)}%`);
-      clearTimeout(home);
-      if (inside) scene.dataset.mouse = 'held';
-      else if (scene.dataset.mouse) home = window.setTimeout(() => { delete scene.dataset.mouse; }, 400);
+      const across = (place: number) => Math.max(-1, Math.min(1, place * 2 - 1));
+      const x = across((event.clientX - box.left) / box.width) * MOUSE_REACH[0], z = across((event.clientY - box.top) / box.height) * MOUSE_REACH[1];
+      target = [(x * PLANCHETTE.perMeterX[0] + z * PLANCHETTE.perMeterZ[0]) * 100, (x * PLANCHETTE.perMeterX[1] + z * PLANCHETTE.perMeterZ[1]) * 100];
+      glide();
+    };
+    const onLeave = () => {
+      clearTimeout(leaving);
+      leaving = window.setTimeout(() => {
+        held = false;
+        target = [0, 0];
+        glide();
+      }, MOUSE_HOME * 1000);
     };
     const onButton = (event: PointerEvent) => {
       const scene = root.current;
@@ -231,11 +283,14 @@ function LoaderToy({ line }: { line: string }) {
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerdown', onButton);
     window.addEventListener('pointerup', onButton);
+    document.documentElement.addEventListener('pointerleave', onLeave);
     return () => {
-      clearTimeout(home);
+      clearTimeout(leaving);
+      cancelAnimationFrame(frame);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerdown', onButton);
       window.removeEventListener('pointerup', onButton);
+      document.documentElement.removeEventListener('pointerleave', onLeave);
     };
   }, []);
   // The light under the planchette wanders with it: started at the planchette's own moment.
@@ -274,7 +329,7 @@ function LoaderToy({ line }: { line: string }) {
           {puffs.map((puff) => <LoaderSteam key={puff} className="loader-toy__puff" onAnimationEnd={() => setPuffs((all) => all.filter((other) => other !== puff))} />)}
           <div className="loader-toy__hit loader-toy__hit--round" onPointerDown={kickFan}
             style={{ left: percent(FAN.left - FAN.width * 0.6), top: percent(FAN.top - FAN.width * 0.6), width: percent(FAN.width * 1.2), aspectRatio: 1 }} />
-          <div className="loader-toy__hit" onPointerDown={jolt}
+          <div className="loader-toy__hit" onPointerDown={() => { sound.current?.tap(); jolt(); }}
             style={{ left: percent(SCREEN.left - SCREEN.width / 2), top: percent(SCREEN.top - SCREEN.width / SCREEN.aspect / 2), width: percent(SCREEN.width), aspectRatio: SCREEN.aspect }} />
           <div className="loader-toy__hit" style={{ left: '6.5%', top: '62%', width: '18%', height: '18%' }}
             onPointerDown={() => { if (!calm()) setPuffs((all) => [...all.slice(-5), ++puffed.current]); }} />
@@ -285,6 +340,8 @@ function LoaderToy({ line }: { line: string }) {
           ))}
         </LoaderScene>
       </div>
+      {audible && <IconButton icon={muted ? VolumeX : Volume2} size="sm" label={muted ? t('layout.newsComputerUnmute') : t('layout.newsComputerMute')}
+        aria-pressed={muted} className="absolute right-11 top-2" onClick={() => mute(!muted)} />}
       <IconButton icon={X} size="sm" label={t('common.actions.close')} className="absolute right-2 top-2" onClick={loaderToy.close} />
     </Modal>
   );

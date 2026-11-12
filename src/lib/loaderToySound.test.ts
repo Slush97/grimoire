@@ -36,7 +36,7 @@ describe('openToySound', () => {
   it('is silent, and harmless, at no volume or where there is no audio', () => {
     for (const volume of [0, 0.7, Number.NaN]) {
       const sound = openToySound(volume);
-      expect(() => { sound.key(); sound.fan(4); sound.close(); }).not.toThrow();
+      expect(() => { sound.key(); sound.tap(); sound.jolt(); sound.fan(4); sound.mute(true); sound.close(); }).not.toThrow();
     }
   });
 });

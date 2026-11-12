@@ -21,8 +21,10 @@ main layer, so the app can turn the pentagram and move the planchette itself. Th
 bundled so the loader is there before anything has been read from the game. Copyright remains with Valve.
 
 The same computer opens as a hidden toy (`src/components/common/LoaderToy.tsx`), which also has sound: the
-clack of its keys (`sounds/ui/ui_keybind_press_01` to `_06`) and the hum of its fan (six seconds of
-`sounds/ambient/hideout/amb_hideout_watch_projector_fan`, made to loop), in `src/assets/preview-loader/sounds/`.
+clack of its keys (`sounds/ui/ui_keybind_press_01` to `_06`), the hum of its fan (six seconds of
+`sounds/ambient/hideout/amb_hideout_watch_projector_fan`, made to loop) and of its tube (four seconds of
+`sounds/ambient/hideout/amb_hideout_practice_sign_close_lp`), and a tap on its glass
+(`sounds/physics/bullet_impacts/glass_bulletproof_01` to `_08`), in `src/assets/preview-loader/sounds/`.
 These are Valve's sounds, taken from the game's files, and copyright remains with Valve. They play at the
 app's own sound volume and only while the toy is open.
 
