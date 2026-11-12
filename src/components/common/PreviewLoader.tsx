@@ -42,7 +42,7 @@ function Book() {
       <style>{BOOK.css}</style>
       {logoPart(LOGO.book)}
       <svg className="preview-loader__page-tops" viewBox={LOGO.view} style={{ animation: BOOK.pageTops }}><path d={PAGE_TOPS} /></svg>
-      {BOOK.leaves.map((animation, leaf) => <span key={leaf}><b style={{ animation }} /></span>)}
+      {BOOK.leaves.map((animation, leaf) => <span key={leaf} style={BOOK.leafBox}><b style={{ animation }} /></span>)}
       <div className="preview-loader__whirl" style={{ animation: BOOK.whirl }}>{LOGO.whirl.map(logoPart)}</div>
     </div>
   );

@@ -53,25 +53,58 @@ export const LOGO = {
 /** The far edges of the logo's pages, which the logo leaves to its whirlwind to cover: drawn while it is down. */
 export const PAGE_TOPS = 'M352 322C400 380 432 450 452 512C520 470 600 438 690 421';
 
+// The book in the logo's own units: its spine from the near end to the far one, and where the right and
+// left pages reach from the spine. A leaf is hinged on the spine and as wide as the right page.
+const SPINE_NEAR = [615, 790], SPINE_FAR = [452, 512], PAGE_RIGHT = [310, -160], PAGE_LEFT = [-240, -180];
+/** The corner of LOGO.view, and its size. */
+const [VIEW_X, VIEW_Y, VIEW_WIDTH, VIEW_HEIGHT] = LOGO.view.split(' ').map(Number);
+
 /** How many leaves the book turns before its whirlwind rises. */
 const LEAVES = 7;
 /** Seconds a leaf takes to turn: the first and last ones, and the quickest one in the middle. */
-const LEAF_SLOW = 0.66, LEAF_FAST = 0.3;
+const LEAF_SLOW = 0.72, LEAF_FAST = 0.34;
 /** How far into one leaf's turn the next one starts, as a share of the turn. */
-const LEAF_OVERLAP = 0.55;
+const LEAF_OVERLAP = 0.5;
+/** How many poses a turn is written as. They are close enough that the steps between them do not show. */
+const LEAF_STEPS = 14;
+/** The share of a turn over which a leaf fades in as it lifts off the right page, and the shares between
+ *  which it fades out on its way down. The left page is seen nearly edge on, where a leaf is only a
+ *  dark line, so it is gone before it gets there. */
+const LEAF_FADE_IN = 0.12, LEAF_FADE_OUT = [0.6, 0.84];
+/** How far the pages stand open from lying flat, in radians: where a leaf starts and ends its half circle. */
+const PAGE_REST = 0.55;
 /** Seconds: the whirlwind's rise, its spin, its dying away, and the rests before and after it. */
 const WHIRL_RISE = 0.6, WHIRL_SPIN = 2.3, WHIRL_DIE = 0.6, BOOK_REST = 0.3;
-
-/** A leaf's poses from flat on the right page to flat on the left: [share of its turn, scaleX, skewY in degrees].
- *  The shares bunch its steps toward the middle, so it lifts off slowly, swings over and settles. */
-const LEAF_POSES = [[0.05, 0.995, -5], [0.34, 0.944, -25.5], [0.52, 0.624, -38.4], [0.7, 0.176, -42], [0.94, -0.288, -37.9]];
 
 /**
  * The book's loop as CSS: its leaves riffle from the right page to the left, slowly, then faster, then
  * slowly again, each one starting partway through the one before; then the whirlwind rises out of the
  * spine, spins and dies away, the pages' far edges fading out under it and back.
+ *
+ * A leaf lies in a box on the right page (x along the page, y along the spine) and turns in it by
+ * scaleX and skewY, which stay finite where the leaf is seen edge on. Its free edge follows half an
+ * ellipse from the right page over the spine to the left one, at an eased pace: it lifts off slowly,
+ * swings over and settles, and is only seen while it is off the pages.
  */
 export const BOOK = (() => {
+  const width = Math.hypot(PAGE_RIGHT[0], PAGE_RIGHT[1]);
+  const spine = [SPINE_FAR[0] - SPINE_NEAR[0], SPINE_FAR[1] - SPINE_NEAR[1]], length = Math.hypot(spine[0], spine[1]);
+  // The box's axes on the screen: x along the right page, y back down the spine.
+  const axisX = [PAGE_RIGHT[0] / width, PAGE_RIGHT[1] / width], axisY = [-spine[0] / length, -spine[1] / length];
+  const det = axisX[0] * axisY[1] - axisY[0] * axisX[1];
+  // The ellipse through both pages: across (from one page to the other) and up (over the spine).
+  const across = [(PAGE_RIGHT[0] - PAGE_LEFT[0]) / (2 * Math.cos(PAGE_REST)), (PAGE_RIGHT[1] - PAGE_LEFT[1]) / (2 * Math.cos(PAGE_REST))];
+  const up = [(PAGE_RIGHT[0] + PAGE_LEFT[0]) / (2 * Math.sin(PAGE_REST)), (PAGE_RIGHT[1] + PAGE_LEFT[1]) / (2 * Math.sin(PAGE_REST))];
+  const poses = Array.from({ length: LEAF_STEPS + 1 }, (_, step) => {
+    const share = step / LEAF_STEPS, eased = share * share * share * (share * (share * 6 - 15) + 10);
+    const angle = PAGE_REST + (Math.PI - 2 * PAGE_REST) * eased;
+    const edge = [(across[0] * Math.cos(angle) + up[0] * Math.sin(angle)) / width, (across[1] * Math.cos(angle) + up[1] * Math.sin(angle)) / width];
+    // The edge in the box's axes: how far along the page, and how far it leans along the spine.
+    const along = (edge[0] * axisY[1] - axisY[0] * edge[1]) / det, lean = (axisX[0] * edge[1] - edge[0] * axisX[1]) / det;
+    const opacity = Math.max(0, Math.min(1, share / LEAF_FADE_IN, (LEAF_FADE_OUT[1] - share) / (LEAF_FADE_OUT[1] - LEAF_FADE_OUT[0])));
+    return { share, style: `transform: scaleX(${along.toFixed(4)}) skewY(${(Math.atan(lean) * 180 / Math.PI).toFixed(2)}deg); opacity: ${opacity.toFixed(2)};` };
+  });
+
   const turns = Array.from({ length: LEAVES }, (_, leaf) => LEAF_SLOW - (LEAF_SLOW - LEAF_FAST) * Math.sin(Math.PI * leaf / (LEAVES - 1)));
   const starts: number[] = [];
   turns.forEach((_, leaf) => starts.push(leaf ? starts[leaf - 1] + turns[leaf - 1] * LEAF_OVERLAP : 0.15));
@@ -79,21 +112,23 @@ export const BOOK = (() => {
   const rise = riffled + BOOK_REST, spin = rise + WHIRL_RISE, die = spin + WHIRL_SPIN, gone = die + WHIRL_DIE;
   const duration = gone + BOOK_REST;
   const at = (seconds: number) => `${(seconds / duration * 100).toFixed(3)}%`;
-  const pose = (scale: number, skew: number) => `transform: scaleX(${scale}) skewY(${skew}deg);`;
   const blocks = turns.map((turn, leaf) => {
-    const from = starts[leaf], last = LEAF_POSES[LEAF_POSES.length - 1];
-    const stops = LEAF_POSES.map(([share, scale, skew], step) => {
-      const ease = step === 0 ? ' animation-timing-function: ease-in;' : step === LEAF_POSES.length - 2 ? ' animation-timing-function: ease-out;' : '';
-      return `${at(from + share * turn)} { ${pose(scale, skew)} opacity: 1;${ease} }`;
-    });
-    return `@keyframes preview-loader-leaf-${leaf} { 0%, ${at(from)} { ${pose(1, 0)} opacity: 0; } ${stops.join(' ')} ${at(from + turn)}, 100% { ${pose(last[1], last[2])} opacity: 0; } }`;
+    const stops = poses.map(({ share, style }, step) => `${step === 0 ? '0%, ' : ''}${at(starts[leaf] + share * turn)}${step === LEAF_STEPS ? ', 100%' : ''} { ${style} }`);
+    return `@keyframes preview-loader-leaf-${leaf} { ${stops.join(' ')} }`;
   });
   blocks.push(`@keyframes preview-loader-whirl { 0%, ${at(rise)} { opacity: 0; transform: scale(0.12); } ${at(spin - 0.12)} { opacity: 1; transform: scale(1.05); } `
     + `${at(spin)}, ${at(die)} { opacity: 1; transform: scale(1); } ${at(gone)}, 100% { opacity: 0; transform: scale(0.12); } }`);
   blocks.push(`@keyframes preview-loader-page-tops { 0%, ${at(rise + 0.1)} { opacity: 1; } ${at(spin - 0.15)}, ${at(die + 0.2)} { opacity: 0; } ${at(gone)}, 100% { opacity: 1; } }`);
   const loop = (keyframes: string, easing: string) => `${keyframes} ${duration.toFixed(2)}s ${easing} infinite`;
+  const percent = (fraction: number) => `${(fraction * 100).toFixed(2)}%`;
   return {
     css: blocks.join('\n'),
+    /** Where a leaf's box sits in the book: hinged at the spine's near end and laid on the right page. */
+    leafBox: {
+      left: percent((SPINE_NEAR[0] - VIEW_X) / VIEW_WIDTH), bottom: percent((VIEW_Y + VIEW_HEIGHT - SPINE_NEAR[1]) / VIEW_HEIGHT),
+      width: percent(width / VIEW_WIDTH), aspectRatio: `${width.toFixed(1)} / ${length.toFixed(1)}`,
+      transform: `matrix(${axisX[0].toFixed(4)}, ${axisX[1].toFixed(4)}, ${axisY[0].toFixed(4)}, ${axisY[1].toFixed(4)}, 0, 0)`,
+    },
     leaves: turns.map((_, leaf) => loop(`preview-loader-leaf-${leaf}`, 'linear')),
     whirl: loop('preview-loader-whirl', 'ease-in-out'),
     pageTops: loop('preview-loader-page-tops', 'linear'),

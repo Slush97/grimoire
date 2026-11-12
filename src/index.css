@@ -1883,21 +1883,18 @@ body {
 
 .preview-loader__book > span {
   position: absolute;
-  left: 58.91%;
-  bottom: 15.73%;
-  width: 34.55%;
-  aspect-ratio: 349 / 306;
   background: none;
   transform-origin: 0 100%;
-  transform: matrix(0.888, -0.459, 0.555, 0.832, 0, 0);
 }
 
 .preview-loader__book > span > b {
   width: 100%;
   height: 100%;
-  border: var(--loader-stroke) solid var(--loader-ink);
-  border-radius: 0 26% 0 0;
-  background: color-mix(in srgb, var(--loader-ink) 10%, var(--loader-phosphor));
+  border: calc(var(--loader-stroke) * 0.75) solid var(--loader-ink);
+  border-left-width: 0;
+  border-radius: 0 9% 5% 0;
+  background: color-mix(in srgb, var(--loader-ink) 8%, var(--loader-phosphor));
+  opacity: 0;
   transform-origin: 0 100%;
 }
 
