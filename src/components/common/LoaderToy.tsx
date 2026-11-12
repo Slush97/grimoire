@@ -2,6 +2,8 @@ import { useCallback, useEffect, useId, useReducer, useRef, useState, useSyncExt
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
+import type { ToySound } from '../../lib/loaderToySound';
+import { useAppStore } from '../../stores/appStore';
 import { CAP_CHARS, TOY_BLANK, loaderToy, phraseListener, toyCap, toyChar, toyLines, toyType, type ToyScreen } from '../../lib/loaderToy';
 import { Modal } from './Modal';
 import { Book, Face, Glyphs, LoaderScene, LoaderSteam, Typed } from './PreviewLoader';
@@ -85,8 +87,11 @@ function LoaderToy({ line }: { line: string }) {
   const downs = useRef(new Map<string, { cap: number; at: number }>());
   const [held, setHeld] = useState<ReadonlySet<number>>(() => new Set());
   const showHeld = useCallback(() => setHeld(new Set([...downs.current.values()].map((down) => down.cap))), []);
+  // Its sounds: a clack at each key and the fan's hum, at the app's own volume. Loaded as it opens.
+  const sound = useRef<ToySound | null>(null);
   const press = useCallback((by: string, cap: number) => {
     downs.current.set(by, { cap, at: performance.now() });
+    sound.current?.key();
     showHeld();
   }, [showHeld]);
   const release = useCallback((by: string) => {
@@ -108,7 +113,8 @@ function LoaderToy({ line }: { line: string }) {
       const cap = toyCap(event.code);
       if (cap === null) return;
       event.preventDefault();
-      press(event.code, cap);
+      // A key held down repeats what it types, not its press.
+      if (!event.repeat) press(event.code, cap);
       if (event.code === 'Backspace') type('backspace');
       else if (event.code === 'Enter' || event.code === 'NumpadEnter') type('enter');
       else {
@@ -168,6 +174,7 @@ function LoaderToy({ line }: { line: string }) {
       const pace = rest + (fanPace.current - rest) * Math.exp(-passed / FAN_SETTLE);
       fanPace.current = Math.abs(pace - rest) < 0.01 ? rest : pace;
       for (const animation of scene.querySelector('.preview-loader__fan')?.getAnimations() ?? []) animation.playbackRate = fanPace.current;
+      sound.current?.fan(fanPace.current);
       scene.style.setProperty('--toy-heat', Math.min(1, (fanPace.current - 1) / (FAN_MOST - 1)).toFixed(3));
       if (fanPace.current !== rest) frame.current = requestAnimationFrame(step);
     };
@@ -183,6 +190,19 @@ function LoaderToy({ line }: { line: string }) {
     settle();
   }, [mood, settle]);
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  useEffect(() => {
+    let closed = false;
+    void import('../../lib/loaderToySound').then(({ openToySound }) => {
+      if (closed) return;
+      sound.current = openToySound(useAppStore.getState().soundVolume);
+      sound.current.fan(fanPace.current);
+    });
+    return () => {
+      closed = true;
+      sound.current?.close();
+      sound.current = null;
+    };
+  }, []);
 
   // The planchette is the computer's mouse, and goes where the real one does: the pointer's place in
   // the window, laid on the mat. It dips at a click. With the pointer gone it glides home, then
