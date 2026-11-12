@@ -3785,7 +3785,15 @@ export default function Installed() {
             count={visibleEnabled.length}
             collapsed={enabledCollapsed}
             onToggle={() => setEnabledCollapsed((collapsed) => !collapsed)}
-            actions={<InstalledProfilesMenu onApplied={handleProfileApplied} />}
+            actions={
+              <InstalledProfilesMenu
+                onApplied={() => {
+                  handleProfileApplied();
+                  // A profile can carry its own Locker effects.
+                  void refreshLockerOverrideCount();
+                }}
+              />
+            }
           >
             {() => visibleEnabled.length > 0 && renderSortableSection('enabled')}
           </InstalledSection>

@@ -30,7 +30,12 @@ import { app } from 'electron';
 import { getCitadelPath, getGrimoirePath } from './deadlock';
 import { invalidateVpkParseCache } from './vpk';
 import { runVpkmerge, vpkmergeBinaryPath, verifyVpkOutput } from './modMerger';
-import { LOCKER_COLORS_KEY, lockerColorsVpkPath, ensureGrimoireConfigured } from './lockerVpk';
+import {
+    LOCKER_COLORS_KEY,
+    lockerColorsVpkPath,
+    ensureGrimoireConfigured,
+    sameLockerSelections,
+} from './lockerVpk';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { TRIPPY_ANIMATION_STYLES, TRIPPY_STYLES } from '../../../src/types/mod';
 import type {
@@ -730,6 +735,24 @@ export async function previewHeroColor(
     } finally {
         await fs.unlink(tmpPng).catch(() => {});
     }
+}
+
+/**
+ * Make the applied ability colors exactly `desired` (a profile's saved set).
+ * Skips the rebuild when the Locker already matches, so switching between
+ * profiles with the same colors costs nothing.
+ */
+export async function setLockerColors(
+    deadlockPath: string,
+    desired: LockerColorSelection[],
+): Promise<void> {
+    const wanted = desired.map(withScales);
+    if (sameLockerSelections(currentColorSelections(), wanted)) return;
+    if (wanted.length > 0) {
+        vpkmergeBinaryPath();
+        ensureGrimoireConfigured(deadlockPath);
+    }
+    await rebuildLockerColors(deadlockPath, wanted);
 }
 
 /** Clear every applied ability color (rebuild to empty, deleting the VPK). */

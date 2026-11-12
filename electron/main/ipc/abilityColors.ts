@@ -8,6 +8,7 @@ import {
     getHeroColorSupport,
     previewHeroColor,
 } from '../services/heroColors';
+import { saveLockerToActiveProfile } from '../services/profileLocker';
 import type {
     ActiveHeroColor,
     ApplyHeroColorResult,
@@ -35,7 +36,9 @@ ipcMain.handle(
     ): Promise<ApplyHeroColorResult> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return applyHeroColor(deadlockPath, heroName, hue, saturation, brightness);
+        const result = await applyHeroColor(deadlockPath, heroName, hue, saturation, brightness);
+        saveLockerToActiveProfile();
+        return result;
     },
 );
 
@@ -52,7 +55,7 @@ ipcMain.handle(
     ): Promise<ApplyHeroPrismResult> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return applyHeroPrism(
+        const result = await applyHeroPrism(
             deadlockPath,
             heroName,
             hue,
@@ -61,6 +64,8 @@ ipcMain.handle(
             animated,
             gradient,
         );
+        saveLockerToActiveProfile();
+        return result;
     },
 );
 
@@ -84,7 +89,9 @@ ipcMain.handle(
     async (_, heroName: string): Promise<ApplyHeroColorResult> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return revertHeroColor(deadlockPath, heroName);
+        const result = await revertHeroColor(deadlockPath, heroName);
+        saveLockerToActiveProfile();
+        return result;
     },
 );
 
