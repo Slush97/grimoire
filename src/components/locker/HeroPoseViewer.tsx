@@ -706,6 +706,8 @@ export function Controls({ interaction, reset, label, model, fitKey, readSavedVi
     if (length > allowed) camera.position.copy(controls.target).addScaledVector(offset, allowed / length);
   });
   const pendingFit = useRef(true);
+  /** When the pending fit was asked for. */
+  const fitAsked = useRef(0);
   // What the fit frames: the engine stage and its actors, not the effects a recolour swaps
   const stageFitKey = movement?.engine ? `engine:${(movement.engine.actors ?? []).map((actor) => `${actor.id}:${actor.hero}`).join('|')}` : 'overlay';
   // The viewer outlives a hero, so each model that arrives restores its view's camera.
@@ -727,6 +729,7 @@ export function Controls({ interaction, reset, label, model, fitKey, readSavedVi
   }, [camera, cameraCommit]);
   useEffect(() => {
     pendingFit.current = true;
+    fitAsked.current = performance.now();
   }, [camera, model, fitKey, reset, viewportSize.width, viewportSize.height, focusMaterial, movement?.kind, movement?.loop, stageFitKey, hideout]);
   // Fit after the mounted figure has updated its pose and wrapper transforms.
   // OrbitControls can mount after this component's effects, so retry until its
@@ -734,6 +737,10 @@ export function Controls({ interaction, reset, label, model, fitKey, readSavedVi
   useFrame(() => {
     const controls = controlsRef.current;
     if (!pendingFit.current || !controls || viewportSize.width <= 0 || viewportSize.height <= 0) return;
+    // A staged actor is out of sight while its programs are linked (StagedActorsPrecompile), and has no
+    // bounds to frame until it shows. The fit waits for it, for as long as the stage itself does: fitted
+    // without it, the camera would frame the hero alone and leave the other one off the screen.
+    if (movement?.engine?.actors?.some((actor) => !actor.scene.visible) && performance.now() - fitAsked.current < STAGE_WAIT_MS) return;
     model.updateWorldMatrix(true, false);
     // SkinnedMesh refreshes its attached bind inverse in updateMatrixWorld,
     // not updateWorldMatrix. Without this pass the first bounds include the
