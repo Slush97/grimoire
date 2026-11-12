@@ -2368,8 +2368,12 @@ export default function HeroPoseViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceParticlesKey, sourceParticlesEnabled, particleModelReady]);
 
+  // The whole preview is not there to show yet: the placeholder covers the viewer.
+  const placeholderShown = revealed === null || buildingHideout || waitingForRoom && !roomWaitOver || stageHold && (stagePhase === 'long' || !heroDrawn);
+
   const toolbar = (
     <HeroViewerToolbar
+      hidden={!failed && (placeholderShown || slowSwitch)}
       heroName={heroName}
       actionPreview={!!movementPreview}
       animated={features.riggedPreviewEnabled} clips={clips.map((c) => c.name)}
@@ -2585,7 +2589,7 @@ export default function HeroPoseViewer({
       )}
       {/* The placeholder, which fades out in place once the viewer has all of the preview to show. */}
       {!failed && <ViewerPlaceholder hero={heroName}
-        up={revealed === null || buildingHideout || waitingForRoom && !roomWaitOver || stageHold && (stagePhase === 'long' || !heroDrawn)}
+        up={placeholderShown}
         progress={!hideoutWarm && (buildingHideout || waitingForRoom)
           ? hideoutWarmingProgress({ building: buildingHideout, built: hideoutBuilt, build: buildProgress, room: roomProgress }) : undefined} />}
       {failed ? <HeroPoseFailureState message={t('locker.pose.cannotPose')} />
