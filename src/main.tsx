@@ -4,14 +4,14 @@ import './index.css'
 import { hydrateDownloadedLocales } from './i18n'
 import App from './App.tsx'
 import { initAutoHideScrollbars } from './lib/autoHideScrollbars'
-import { applyOledMode } from './lib/applyOledMode'
+import { applyTheme } from './lib/applyTheme'
 
 initAutoHideScrollbars()
 
-// Seed the OLED theme before first paint. Main passes the saved setting
-// through the preload's argv, so an OLED user never sees the default grey
+// Seed the theme before first paint. Main passes the saved setting through
+// the preload's argv, so an OLED or light user never sees the default grey
 // canvas while settings load over IPC.
-applyOledMode(window.electronAPI.initialOledMode)
+applyTheme(window.electronAPI.initialTheme)
 
 // Register any downloaded language packs before first paint so a non-English
 // user lands on their language without a flash. Best-effort: if it fails or is

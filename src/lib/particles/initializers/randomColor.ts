@@ -27,6 +27,11 @@ export class RandomColor extends ParticleFunctionInitializer {
 
   private sampledPosition = Vector3.zero;
 
+  /** Each live particle's draw between the two colours, by particle id, to recolour it in place (adoptLive). */
+  private draws = new Map<number, number>();
+  /** This spawn's draws by particle index, until the particles have their ids (spawned). */
+  private readonly pending = new Map<number, number>();
+
   constructor(parse: ParticleDefinitionParser) {
     super(parse);
     this.colorMin = parse.color24('m_ColorMin', Vector3.one);
@@ -50,8 +55,10 @@ export class RandomColor extends ParticleFunctionInitializer {
     const tint = this.tint(state);
 
     for (let i = 0; i < run.length; i++) {
-      const color = state.random.nextBetweenV(this.colorMin, this.colorMax);
-      this.writeColor(colors, i, color, tint);
+      // state.random.nextBetweenV, with its draw kept
+      const draw = state.random.next();
+      this.pending.set(run.start + i, draw);
+      this.writeColor(colors, i, lerpV(this.colorMin, this.colorMax, draw), tint);
     }
   }
 
@@ -64,8 +71,34 @@ export class RandomColor extends ParticleFunctionInitializer {
       const draws = state.threadRandom.next();
 
       for (let i = 0; i < block.length; i++) {
+        this.pending.set(run.start + offset + i, draws[i]);
         const color = lerpV(this.colorMin, this.colorMax, draws[i]);
         this.writeColor(colors, offset + i, color, tint);
+      }
+    }
+  }
+
+  /** Ids wrap at 4096, so a dead particle's draw gives way to the next one with its id. */
+  spawned(ids: Int32Array, first: number, count: number): void {
+    for (let index = first; index < first + count; index++) {
+      const draw = this.pending.get(index);
+      if (draw !== undefined) this.draws.set(ids[index], draw);
+    }
+    this.pending.clear();
+  }
+
+  /** The live particles take the new colours with their own draws, in their spawn and current colour. */
+  adoptLive(previous: ParticleFunctionInitializer, particles: ParticleCollection, state: ParticleSystemState): void {
+    if (!(previous instanceof RandomColor) || !isVectorField(this.fieldOutput)) return;
+    this.draws = previous.draws;
+    const tint = this.tint(state);
+    const ids = particles.currentSpan.readIntegers(ParticleField.ParticleId);
+    for (const span of [particles.currentSpan, particles.initialSpan]) {
+      const { values } = span.tryGetVectors(this.fieldOutput);
+      if (values === null) continue;
+      for (let i = 0; i < ids.length; i++) {
+        const draw = this.draws.get(ids[i]);
+        if (draw !== undefined) this.writeColor(values, i, lerpV(this.colorMin, this.colorMax, draw), tint);
       }
     }
   }

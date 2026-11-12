@@ -48,6 +48,15 @@ export default function PreferencesSection() {
 
           <FilterDivider className="h-px bg-hl/5" />
 
+          <Toggle id="settings-preferences-settings-preferences-groupClickOpensDetails-toggle"
+            checked={settings?.installedGroupClickOpensDetails ?? false}
+            onChange={(checked) => update({ installedGroupClickOpensDetails: checked })}
+            label={t('settings.preferences.groupClickOpensDetails')}
+            description={t('settings.toggles.groupClickOpensDetails')}
+          />
+
+          <FilterDivider className="h-px bg-hl/5" />
+
           <Toggle id="settings-preferences-settings-preferences-confirmProfileUpdate-toggle"
             checked={settings?.confirmProfileUpdate ?? true}
             onChange={(checked) => update({ confirmProfileUpdate: checked })}

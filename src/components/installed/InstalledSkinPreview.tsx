@@ -10,12 +10,15 @@ import { installedPropTarget, type PropPreviewTarget } from '../../lib/installed
 import { PIN_PREVIEW_EVENT, pinInstalledPreview, type PreviewPin } from '../../lib/installedPreviewPin';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { IconButton } from '../common/ui';
+import { installedMotionTarget, type MotionPreviewTarget } from '../../lib/installedMotionPreview';
 import type { SkinEditSource } from '../../types/skinEditor';
 import type { Mod } from '../../types/mod';
 
 const HeroPoseViewer = lazy(() => import('../locker/HeroPoseViewer'));
 const PropModelViewer = lazy(() => import('./PropModelViewer'));
-type PreviewTarget = { kind: 'hero'; source: SkinEditSource } | ({ kind: 'prop' } & PropPreviewTarget);
+const MovementModViewer = lazy(() => import('./MotionModViewers').then(module => ({ default: module.MovementModViewer })));
+const AnimationModViewer = lazy(() => import('./MotionModViewers').then(module => ({ default: module.AnimationModViewer })));
+type PreviewTarget = { kind: 'hero'; source: SkinEditSource } | ({ kind: 'prop' } & PropPreviewTarget) | MotionPreviewTarget;
 type Shown = { key: string; target: PreviewTarget; name: string; counter?: string };
 type Peek = Shown & { pin: PreviewPin; left: number; top: number; width: number; height: number };
 type Box = { x: number; y: number; width: number; height: number };
@@ -117,9 +120,13 @@ function PreviewCache({ hideNsfw, pin, setPin, box, setBox }: {
   const resolve = useCallback((keys: readonly string[], index: number): Shown | null => {
     const mod = mods.find((item) => item.metaKey === keys[index]);
     if (!mod || (hideNsfw && mod.nsfw)) return null;
-    const hero = installedSkinPreviewTarget(mod, mods, taxonomyContext);
-    const prop = hero ? null : installedPropTarget(mod);
-    const target: PreviewTarget | null = hero ? { kind: 'hero', source: hero } : prop ? { kind: 'prop', ...prop } : null;
+    let target: PreviewTarget | null = installedMotionTarget(mod);
+    if (!target) {
+      const hero = installedSkinPreviewTarget(mod, mods, taxonomyContext);
+      const prop = hero ? null : installedPropTarget(mod);
+      target = hero ? { kind: 'hero', source: hero } : prop ? { kind: 'prop', ...prop } : null;
+    }
+
     if (!target) return null;
     return keys.length > 1
       ? { key: JSON.stringify(target), target, name: variantLabel(mod), counter: `${index + 1}/${keys.length}` }
@@ -362,7 +369,11 @@ function PreviewCache({ hideNsfw, pin, setPin, box, setBox }: {
           <ErrorBoundary><Suspense fallback={<p role="status" className="p-4 text-xs text-text-secondary">{t('foundry.skin.loading')}</p>}>
             {item.target.kind === 'hero'
               ? <HeroPoseViewer {...item.target.source} compact active={shown} turn={turn} />
-              : <PropModelViewer metaKey={item.target.metaKey} cacheKey={item.target.cacheKey} entry={item.target.entry} active={shown} turn={turn} />}
+              : item.target.kind === 'movement'
+                ? <MovementModViewer choice={item.target.choice} active={shown} turn={turn} />
+                : item.target.kind === 'animation'
+                  ? <AnimationModViewer metaKey={item.target.metaKey} active={shown} turn={turn} expanded={isPinned} />
+                  : <PropModelViewer metaKey={item.target.metaKey} cacheKey={item.target.cacheKey} entry={item.target.entry} active={shown} turn={turn} />}
           </Suspense></ErrorBoundary>
           {!isPinned && peek && shown && <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 border-t border-border bg-bg-secondary/95 py-1 pr-1 pl-3 text-xs">
             <span className="min-w-0 flex-1 truncate">{peek.name}</span>

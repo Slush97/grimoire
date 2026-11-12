@@ -36,6 +36,7 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
+import { hideCreatorNow } from '../lib/hiddenContent';
 import { browseNsfwFilter, browseRemoteFilters, type BrowseContentMode } from '../lib/browseFilters';
 import { heroCategoryIdsForName } from '../lib/heroNames';
 import { categorySubtreeIds } from '../lib/heroFilter';
@@ -2223,9 +2224,12 @@ export default function Browse() {
     if (!creator) return;
     setCreatorToHide(null);
 
+    const hidden = hideCreatorNow(creator, selectedMod && {
+      id: selectedMod.id, name: selectedMod.name, section: selectedDetailsSection, submitterId: selectedMod.submitter?.id,
+    });
     await updateHiddenCreators((current) => [
       ...current.filter((entry) => entry.id !== creator.id),
-      creator,
+      hidden,
     ]);
     if (selectedMod?.submitter?.id === creator.id) closeSelectedMod();
     if (submitter?.id === creator.id) clearArtist();
@@ -2262,7 +2266,7 @@ export default function Browse() {
   // The details modal knows only id + name; the section is whichever one it
   // was opened in, which differs from the grid's for a cross-section link.
   const hideMod = useStableCallback(async ({ id, name }: { id: number; name: string }) => {
-    const mod: HiddenMod = { id, name, section: selectedDetailsSection };
+    const mod: HiddenMod = { id, name, section: selectedDetailsSection, hiddenAt: Date.now() };
     if (!id || hiddenModKeys.has(hiddenModKey(mod.section, id))) return;
     if (selectedMod?.id === id) closeSelectedMod();
     await updateHiddenMods((current) => [...withoutHiddenMod(mod)(current), mod]);

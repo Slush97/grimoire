@@ -438,7 +438,7 @@ export default function SoulContainerImportModal({
 
           {/* Preview surface: kept square so the orb and the hero-scale view
               read consistently and the canvas never stretches. */}
-          <div className="relative w-full aspect-square rounded-lg border border-border bg-bg-tertiary/40 overflow-hidden">
+          <div className="always-dark relative w-full aspect-square rounded-lg border border-border bg-bg-tertiary/40 overflow-hidden">
             {scene ? (
               <ErrorBoundary>
                 <Suspense fallback={null}>

@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 // CachedMod is single-sourced in src/types/electron.ts; re-exported because
 // syncService and searchService import it from this module.
-import type { CachedMod } from '../../../src/types/electron';
+import type { CachedMod, HiddenContentPreviews, HiddenPreviewMod } from '../../../src/types/electron';
 import { nameMentionsHero } from '../../../src/lib/heroFilter';
 export type { CachedMod };
 
@@ -393,6 +393,47 @@ export function getModById(id: number, section = 'Mod'): CachedMod | null {
     const row = stmt.get(id, section) as Record<string, unknown> | undefined;
     if (!row) return null;
     return mapRowToMod(row);
+}
+
+/** How many of a hidden creator's uploads Settings shows beside their name. */
+export const HIDDEN_CREATOR_PREVIEW_COUNT = 3;
+const HIDDEN_PREVIEW_SECTIONS = new Set(['Mod', 'Sound', 'Wip']);
+const MAX_HIDDEN_PREVIEW_ENTRIES = 500;
+
+function hiddenPreview(row: Record<string, unknown>): HiddenPreviewMod {
+    const mod = mapRowToMod(row);
+    return { id: mod.id, section: mod.section, name: mod.name, thumbnailUrl: mod.thumbnailUrl, isNsfw: mod.isNsfw, submitterName: mod.submitterName };
+}
+
+/**
+ * Previews for Settings' hidden creator and hidden mod lists, from the cached
+ * catalog alone: no request leaves the machine. Arguments come from the
+ * renderer, so anything that is not a plausible id or section is skipped.
+ */
+export function getHiddenContentPreviews(creatorIds: unknown, mods: unknown): HiddenContentPreviews {
+    const database = initDatabase();
+    const result: HiddenContentPreviews = { creators: {}, mods: {} };
+    const validId = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
+
+    const count = database.prepare('SELECT COUNT(*) AS total FROM mods WHERE submitter_id = ?');
+    const uploads = database.prepare('SELECT * FROM mods WHERE submitter_id = ? ORDER BY like_count DESC, id DESC LIMIT ?');
+    for (const id of [...new Set(Array.isArray(creatorIds) ? creatorIds : [])].filter(validId).slice(0, MAX_HIDDEN_PREVIEW_ENTRIES)) {
+        const total = (count.get(id) as { total: number }).total;
+        if (!total) continue;
+        result.creators[id] = {
+            count: total,
+            mods: (uploads.all(id, HIDDEN_CREATOR_PREVIEW_COUNT) as Record<string, unknown>[]).map(hiddenPreview),
+        };
+    }
+
+    const byId = database.prepare('SELECT * FROM mods WHERE id = ? AND section = ?');
+    for (const candidate of (Array.isArray(mods) ? mods : []).slice(0, MAX_HIDDEN_PREVIEW_ENTRIES)) {
+        const { id, section } = (candidate ?? {}) as { id?: unknown; section?: unknown };
+        if (!validId(id) || typeof section !== 'string' || !HIDDEN_PREVIEW_SECTIONS.has(section)) continue;
+        const row = byId.get(id, section) as Record<string, unknown> | undefined;
+        if (row) result.mods[`${section}:${id}`] = hiddenPreview(row);
+    }
+    return result;
 }
 
 /**

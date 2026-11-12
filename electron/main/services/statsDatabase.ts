@@ -12,10 +12,11 @@ import type {
     HeroStatsSnapshot,
     AggregatedStats,
     PlayerSteamProfile,
-    PlayerMMR,
+    PlayerRank,
     PlayerMatch,
     PlayerHeroStat,
 } from '../../../src/types/deadlock-stats'
+import { badgeScore } from '../../../src/lib/rankScore'
 
 let db: Database.Database | null = null
 
@@ -339,9 +340,12 @@ export function updatePlayerProfile(profile: PlayerProfileUpdate): void {
 // ============================================
 
 /**
- * Save an MMR snapshot (one per day per player)
+ * Save a rank snapshot (one per day per player). Skipped while the API has
+ * no rank for the player, which it reports as badge 0.
  */
-export function saveMMRSnapshot(mmr: PlayerMMR): void {
+export function saveRankSnapshot(rank: PlayerRank): void {
+    const score = badgeScore(rank.badge)
+    if (score === null) return
     const database = initDatabase()
     const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
 
@@ -358,15 +362,13 @@ export function saveMMRSnapshot(mmr: PlayerMMR): void {
     `
         )
         .run({
-            account_id: mmr.account_id,
-            // Column names are legacy; the API renamed these fields
-            // (mmr -> player_score, rank_badge -> division, rank_tier ->
-            // division_tier). Binding the old names was binding undefined,
-            // which better-sqlite3 rejects, so snapshots never saved.
-            mmr: mmr.player_score,
-            rank: mmr.rank,
-            rank_badge: mmr.division,
-            rank_tier: mmr.division_tier,
+            account_id: rank.account_id,
+            // Column names predate the API's rank endpoint: mmr holds the
+            // ladder position, rank_badge the tier and rank_tier the subrank.
+            mmr: score,
+            rank: rank.badge,
+            rank_badge: rank.rank,
+            rank_tier: rank.subrank,
             snapshot_date: today,
         })
 }

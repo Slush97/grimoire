@@ -216,7 +216,7 @@ export function UnknownMatchPanel({
                 </div>
               </div>
               {autoMatchEnabled && (
-                <div className="border-t border-hl/5 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
+                <div className="border-t border-hl/5 px-4 py-3 bg-shade/10 flex flex-wrap justify-end gap-2">
                   <Button variant="secondary" size="sm" icon={RotateCcw} onClick={handleRetry}>
                     {t('common.actions.retry')}
                   </Button>

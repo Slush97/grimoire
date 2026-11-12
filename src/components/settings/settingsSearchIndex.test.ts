@@ -16,6 +16,9 @@ describe('Settings search', () => {
     expect(searchSettings(entries, 'backups')[0]).toMatchObject({ section: 'preferences', label: 'Keep removed mod files for 24 hours' });
     expect(searchSettings(entries, 'FRAME RATE')[0]).toMatchObject({ section: 'performance' });
     expect(searchSettings(entries, 'date')[0]).toMatchObject({ section: 'appearance', label: 'Date Format' });
+    expect(searchSettings(entries, 'theme')[0]).toMatchObject({ section: 'appearance', label: 'Theme', target: 'settings-theme' });
+    expect(searchSettings(entries, 'oled')[0]).toMatchObject({ label: 'Theme' });
+    expect(searchSettings(entries, 'light')[0]).toMatchObject({ label: 'Theme' });
     expect(searchSettings(entries, 'preferences download').length).toBeGreaterThan(0);
     expect(searchSettings(entries, '  \n  ')).toEqual([]);
     expect(searchSettings(entries, 'no-such-setting-987')).toEqual([]);

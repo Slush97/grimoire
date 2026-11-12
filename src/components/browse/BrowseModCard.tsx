@@ -769,7 +769,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                   e.stopPropagation();
                   onVolumeChange(volume > 0 ? 0 : 1);
                 }}
-                className="flex h-6 w-6 items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-white/70 transition-colors hover:bg-hl/10 hover:text-white cursor-pointer"
+                className="flex h-6 w-6 items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-text-primary/70 transition-colors hover:bg-hl/10 hover:text-text-primary cursor-pointer"
                 title={volume > 0 ? t('audioPreview.mute') : t('audioPreview.unmute')}
                 aria-label={volume > 0 ? t('audioPreview.mute') : t('audioPreview.unmute')}
               >

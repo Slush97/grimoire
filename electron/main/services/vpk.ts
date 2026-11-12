@@ -307,15 +307,20 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
             const extension = extResult.str;
             let extensionProperlyTerminated = false;
 
-            // Read paths for this extension
+            // Read paths for this extension. Some packers write a root-level file's
+            // directory as an empty string instead of a space. An extension always has
+            // at least one directory, so an empty first one is the root, not the end.
+            // Every tree walk in this file and the worker copy in workers.ts does this.
+            let firstPath = true;
             while (offset < treeBuffer.length) {
                 const pathResult = readNullTerminatedString(treeBuffer, offset);
                 offset += pathResult.bytesRead;
 
-                if (pathResult.str === '') {
+                if (pathResult.str === '' && !firstPath) {
                     extensionProperlyTerminated = true;
                     break; // End of paths for this extension
                 }
+                firstPath = false;
 
                 // Space means root directory in VPK format
                 const dirPath = pathResult.str === ' ' ? '' : pathResult.str;
@@ -463,10 +468,12 @@ export function parseVpkEntryStats(vpkPath: string): VpkEntryStat[] | null {
             if (extResult.str === '') break;
             const extension = extResult.str;
 
+            let firstPath = true;
             while (offset < treeBuffer.length) {
                 const pathResult = readNullTerminatedString(treeBuffer, offset);
                 offset += pathResult.bytesRead;
-                if (pathResult.str === '') break;
+                if (pathResult.str === '' && !firstPath) break;
+                firstPath = false;
                 const dirPath = pathResult.str === ' ' ? '' : pathResult.str;
 
                 while (offset < treeBuffer.length) {
@@ -563,10 +570,12 @@ function buildVpkEntryIndex(vpkPath: string, mtimeMs: number, size: number): Vpk
             if (extResult.str === '') break;
             const extension = extResult.str;
 
+            let firstPath = true;
             while (offset < tree.length) {
                 const pathResult = readNullTerminatedString(tree, offset);
                 offset += pathResult.bytesRead;
-                if (pathResult.str === '') break;
+                if (pathResult.str === '' && !firstPath) break;
+                firstPath = false;
                 const dirPath = pathResult.str === ' ' ? '' : pathResult.str;
 
                 while (offset < tree.length) {

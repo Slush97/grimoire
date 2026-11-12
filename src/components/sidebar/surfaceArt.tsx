@@ -7,6 +7,10 @@ import type { AppearanceBg } from '../../types/mod';
 // gets (no drift between "what I picked" and "what shows up"). The Sidebar owns
 // the layout/foreground (icons, labels, slider); these render only the backdrop
 // layer (image + gradients) from a resolved appearance descriptor.
+//
+// Art is always shown under a dark scrim, so a surface that wears it keeps the
+// dark tokens in the light theme too. The `art-backdrop` class on the layer is
+// what tells index.css: its parent, the control itself, turns dark.
 
 /** The active-tab highlight backdrop: a hero render under a left-to-right fade,
  *  or the plain accent glow when there's no hero/image. */
@@ -19,7 +23,7 @@ export function SidebarActiveBackdrop({
 }) {
   if (heroSrc) {
     return (
-      <span aria-hidden className="sidebar-active-backdrop pointer-events-none absolute inset-0">
+      <span aria-hidden className="art-backdrop sidebar-active-backdrop pointer-events-none absolute inset-0">
         <img
           src={heroSrc}
           alt=""
@@ -56,7 +60,7 @@ export function LaunchButtonBackdrop({
   imageStyle?: CSSProperties;
 }) {
   return (
-    <span aria-hidden className="pointer-events-none absolute inset-0">
+    <span aria-hidden className="art-backdrop pointer-events-none absolute inset-0">
       <img
         src={src}
         alt=""

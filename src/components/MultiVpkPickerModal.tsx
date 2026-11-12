@@ -65,7 +65,7 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                             values={{ name: data.modName, count: data.vpkFileNames.length }}
                             components={{
                                 name: <span className="font-medium text-text-primary" />,
-                                code: <code className="font-mono text-text-primary/90 bg-black/30 px-1 py-0.5 rounded" />,
+                                code: <code className="font-mono text-text-primary/90 bg-shade/30 px-1 py-0.5 rounded" />,
                             }}
                         />{' '}
                         {t('multiVpk.uncheckHint')}

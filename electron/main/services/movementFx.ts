@@ -2,7 +2,7 @@ import { nativeImage } from 'electron';
 import { promises as fs, constants } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { movementFxSchema, movementFxPreviewSchema, movementFxSaveSchema, type MovementFxChoice, type MovementFxPreview } from '../../../src/lib/movementFx';
+import { movementFxSchema, movementFxPreviewSchema, movementFxSaveSchema, movementBakeArgs, type MovementFxChoice, type MovementFxPreview } from '../../../src/lib/movementFx';
 import { bindMeleeAttachment, resolveMeleeAttachment } from '../../../src/lib/movementAttachment';
 import { codenamesForHero } from './heroCodenames';
 import { getCitadelPath, metaKeyFor } from './deadlock';
@@ -17,12 +17,16 @@ import { notifyModChanges } from './modChangeObservation';
 import type { FxDescriptor } from '../../../src/components/locker/fxDescriptor';
 import { movementEngineHeroDir, movementFxCacheRoot as root } from './movementFxPaths';
 import { resolveMovementGameData } from '../../../src/lib/movementGameData';
+import { MOVEMENT_STAGING, movementActors } from '../../../src/lib/movementStaging';
 import type { MovementEnginePreview } from '../../../src/lib/movementFx';
 import { PackageStack } from './heroParticleSources';
 import { exportParticleBundle as exportSourceParticleBundle } from './heroParticleBundle';
 import { MODEL_ENTRY_OVERRIDES } from './heroPoseModels';
-import { getString, isCollection, type KVObject } from '../../../src/lib/particles/kv';
-import { PARTICLE_BUNDLE_VERSION } from '../../../src/lib/particles/host/bundle';
+import { getArray, getString, isCollection, type KVObject } from '../../../src/lib/particles/kv';
+import { PARTICLE_BUNDLE_VERSION, bundleSystemKey } from '../../../src/lib/particles/host/bundle';
+import { STAMP_TEMPLATE, parseTypedKV, planMovementRecolour, type RecolourPlan } from '../../../src/lib/movementRecolour';
+import { readParticleTextureInfo } from '../../../src/lib/particles/render/sheet';
+import { parseVpkDirectoryCached } from './vpk';
 
 const VERSION = 'movement-v5';
 const inFlight = new Map<string, Promise<string>>();
@@ -72,23 +76,19 @@ async function ensure(game: string, choice: MovementFxChoice, key: string): Prom
       await fs.mkdir(root(), { recursive: true });
       const temp = await fs.mkdtemp(join(root(), '.build-'));
       try {
-        const args = ['workshop', 'movement', '--vpk', base, '--kind', choice.kind, '--color', choice.color, '--encode-vpk', join(temp, 'effect_dir.vpk')];
-        if (choice.palette.mode === 'gradient') args.push('--end-color', choice.palette.end);
-        if (choice.palette.mode === 'rainbow') args.push('--rainbow');
-        if (choice.kind === 'dash') {
-          args.push('--brightness', String(choice.brightness));
-          if (choice.illuminated) args.push('--illuminated');
-          if (choice.outline && choice.image) args.push('--outline-color', choice.outlineColor);
-        }
-        if (choice.image) {
-          const image = nativeImage.createFromDataURL(choice.image);
+        const stamp = async (dataUrl: string, name: string) => {
+          const image = nativeImage.createFromDataURL(dataUrl);
           const { width, height } = image.getSize();
           if (image.isEmpty() || width > 512 || height > 512) throw new Error('Choose a PNG image up to 512 pixels.');
-          const file = join(temp, 'stamp.png');
+          const file = join(temp, name);
           await fs.writeFile(file, image.toPNG());
-          args.push('--image', file);
-        }
-        await runVpkmerge(args);
+          return file;
+        };
+        const stamps = {
+          image: choice.image ? await stamp(choice.image, 'stamp.png') : undefined,
+          stunImage: choice.stunImage ? await stamp(choice.stunImage, 'stun.png') : undefined,
+        };
+        await runVpkmerge(['workshop', 'movement', '--vpk', base, ...movementBakeArgs(choice, stamps), '--encode-vpk', join(temp, 'effect_dir.vpk')]);
         await verifyVpkOutput(join(temp, 'effect_dir.vpk'));
         await fs.writeFile(join(temp, 'ready'), VERSION);
         await fs.rm(dir, { recursive: true, force: true });
@@ -118,6 +118,15 @@ async function withBake<T>(game: string, input: unknown, work: (dir: string, cho
   }
 }
 
+/** The system each quick preview draws. */
+const PREVIEW_ROOT: Record<MovementFxChoice['kind'], string> = {
+  dash: 'particles/generic/air_dash.vpcf_c',
+  'heavy-melee': 'particles/abilities/melee/melee_heavy_activate_charge.vpcf_c',
+  parry: 'particles/abilities/melee/melee_parry.vpcf_c',
+};
+/** What a saved effect is called on its Installed card. */
+const SAVED_NAME: Record<MovementFxChoice['kind'], string> = { dash: 'Custom dash trails', 'heavy-melee': 'Custom heavy melee', parry: 'Custom parry' };
+
 const previewBuilds = new Map<string, Promise<void>>();
 let bindings: { fingerprint: string; data: Promise<[unknown, unknown]> } | undefined;
 async function meleeAttachment(game: string, heroName: string): Promise<string | undefined> {
@@ -141,7 +150,7 @@ export async function previewMovementFx(game: string, input: unknown): Promise<M
     if (!previewBuilds.has(key)) {
       const build = (async () => {
         try { await fs.access(file); return; } catch { /* Generate the bounded authored graph on demand. */ }
-        const entry = choice.kind === 'dash' ? 'particles/generic/air_dash.vpcf_c' : 'particles/abilities/melee/melee_heavy_activate_charge.vpcf_c';
+        const entry = PREVIEW_ROOT[choice.kind];
         const pending = join(dir, 'effect.pending.json');
         try {
           await exportParticleBundle(join(dir, 'effect_dir.vpk'), entry, pending, join(dir, 'effect-tex'), undefined,
@@ -159,45 +168,123 @@ export async function previewMovementFx(game: string, input: unknown): Promise<M
 }
 
 const engineBuilds = new Map<string, Promise<MovementEnginePreview>>();
-const ENGINE_VERSION = `engine-${PARTICLE_BUNDLE_VERSION}`;
+const plans = new Map<string, Promise<RecolourPlan>>();
+// .4: the game's own effects, recoloured live in the renderer by the plan the preview carries
+// .5: the stunned indicator is the game's stunned.vpcf (the orbit's parent), not the orbit alone
+const ENGINE_VERSION = `engine-${PARTICLE_BUNDLE_VERSION}.5`;
+
+/**
+ * What a kind's bake rewrites (src/lib/movementRecolour.ts): every system it walks with its parry part
+ * and colour fields, read once per game build into the engine's cache entry.
+ */
+function recolourPlan(game: string, dir: string, kind: MovementFxChoice['kind'], key: string): Promise<RecolourPlan> {
+  let plan = plans.get(key);
+  if (!plan) {
+    plan = (async () => {
+      const file = join(dir, 'plan.json');
+      const cached = await fs.readFile(file, 'utf8').then((text) => JSON.parse(text) as RecolourPlan, () => null);
+      if (cached?.kind === kind) return cached;
+      const pak = basePak(game);
+      const entries = parseVpkDirectoryCached(pak);
+      if (!entries) throw new Error('The game package could not be read.');
+      const built = await planMovementRecolour(kind, entries, async (entry) => parseTypedKV(await runVpkmergeStdout(['soundevents', entry, '--from-vpk', pak])));
+      await fs.writeFile(file, JSON.stringify(built));
+      return built;
+    })();
+    const pending = plan;
+    plans.set(key, pending);
+    void pending.catch(() => { if (plans.get(key) === pending) plans.delete(key); });
+  }
+  return plan;
+}
 
 /**
  * The faithful runtime's preview of a movement effect on a hero: the game data that stages it (the
- * hero's melee or dash ability, read through the package stack, the baked effect first) and a particle
- * bundle of every effect it names on the hero's model, under the bake's cache entry.
+ * hero's melee or dash ability) and a particle bundle of every effect it names on the hero's model, all
+ * the game's own, with the plan the renderer recolours them by: a colour change needs no bake. One cache
+ * entry per kind and game build.
  */
 export async function previewMovementEngine(game: string, input: unknown): Promise<MovementEnginePreview> {
   const request = movementFxPreviewSchema.parse(input);
-  return withBake(game, request.choice, async (dir, choice, key) => {
+  const choice = request.choice;
+  const key = createHash('sha256').update(JSON.stringify([ENGINE_VERSION, choice.kind, await fingerprint(basePak(game)), await fingerprint(vpkmergeBinaryPath())])).digest('hex');
+  const dir = join(root(), key);
+  // Finish an eviction already in progress before using the entry
+  await sweeping?.catch(() => {});
+  leases.set(key, (leases.get(key) ?? 0) + 1);
+  try {
+    await fs.mkdir(dir, { recursive: true });
+    const now = new Date();
+    await fs.writeFile(join(dir, 'ready'), ENGINE_VERSION);
+    await fs.utimes(join(dir, 'ready'), now, now);
     const heroDir = movementEngineHeroDir(request.heroName);
     const outDir = join(dir, 'engine', heroDir);
     const id = `${key}:${heroDir}`;
     if (!engineBuilds.has(id)) {
       const build = (async (): Promise<MovementEnginePreview> => {
+        const plan = recolourPlan(game, dir, choice.kind, key);
+        void plan.catch(() => {});
         const cached = await fs.readFile(join(outDir, 'preview.json'), 'utf8').then((text) => JSON.parse(text) as MovementEnginePreview & { version?: string }, () => null);
         if (cached?.version === ENGINE_VERSION) return cached;
         await fs.rm(outDir, { recursive: true, force: true });
         await fs.mkdir(outDir, { recursive: true });
         const vpkmerge = { stdout: (args: string[]) => runVpkmergeStdout(args) };
-        const stack = new PackageStack([join(dir, 'effect_dir.vpk'), basePak(game), join(game, 'game', 'core', 'pak01_dir.vpk')], vpkmerge, join(outDir, '.scratch'));
+        const stack = new PackageStack([basePak(game), join(game, 'game', 'core', 'pak01_dir.vpk')], vpkmerge, join(outDir, '.scratch'));
         try {
           const [heroes, abilities] = await Promise.all([stack.decode('scripts/heroes.vdata_c'), stack.decode('scripts/abilities.vdata_c')]);
           const data = resolveMovementGameData(heroes, abilities, codenamesForHero(request.heroName));
           if (!data) throw new Error(`No heroes.vdata entry for ${request.heroName}.`);
-          const systems = choice.kind === 'dash'
-            ? [data.dash?.particle]
+          const systems = choice.kind === 'dash' ? [data.dash?.particle]
+            : choice.kind === 'parry' ? [data.parry?.active, data.parry?.success, data.parry?.victim]
             : [data.melee?.holdBegin, data.melee?.attack, data.melee?.swing, data.melee?.impact];
-          const hero = isCollection(heroes?.[data.heroKey] ?? null) ? heroes![data.heroKey] as KVObject : {};
-          const vdataModel = getString(hero, 'm_strModelName');
-          const modelEntry = MODEL_ENTRY_OVERRIDES[request.heroName] ?? (vdataModel ? `${vdataModel.replace(/\\/g, '/')}_c` : '');
-          if (!/^models\/[a-zA-Z0-9_./-]+\.vmdl_c$/.test(modelEntry)) throw new Error(`No model for ${request.heroName}.`);
-          const effects = systems.filter((system): system is string => !!system).map((system, i) => ({
+          const modelOf = (heroName: string) => {
+            const heroKey = resolveMovementGameData(heroes, abilities, codenamesForHero(heroName))?.heroKey;
+            const hero = heroKey && isCollection(heroes?.[heroKey] ?? null) ? heroes![heroKey] as KVObject : {};
+            const vdataModel = getString(hero, 'm_strModelName');
+            const entry = MODEL_ENTRY_OVERRIDES[heroName] ?? (vdataModel ? `${vdataModel.replace(/\\/g, '/')}_c` : '');
+            if (!/^models\/[a-zA-Z0-9_./-]+\.vmdl_c$/.test(entry)) throw new Error(`No model for ${heroName}.`);
+            return entry;
+          };
+          const modelEntry = modelOf(request.heroName);
+          // Other heroes the preview stages (the parried attacker): their models, for the effects bound to them,
+          // and their own movement data
+          const staged = movementActors(choice.kind);
+          const actors = Object.fromEntries(staged.map((actor) => [actor.id, modelOf(actor.hero)]));
+          const actorData = Object.fromEntries(staged.flatMap((actor) => {
+            const resolved = resolveMovementGameData(heroes, abilities, codenamesForHero(actor.hero));
+            return resolved ? [[actor.id, resolved]] : [];
+          }));
+          // The actors' effects are the game's: their heavy melee and, for a parried attacker, the stunned indicator
+          // (A heavy melee's target swings nothing: only the parried attacker plays its own melee)
+          const actorSystems = [...(choice.kind === 'parry' ? Object.values(actorData).flatMap((resolved) => [resolved.melee?.holdBegin, resolved.melee?.attack, resolved.melee?.swing]) : []),
+            ...(staged.length > 0 && choice.kind === 'parry' ? [MOVEMENT_STAGING.parryStunIndicator.system] : [])]
+            .filter((system): system is string => !!system);
+          const heroSystems = systems.filter((system): system is string => !!system).map(bundleSystemKey);
+          systems.push(...actorSystems);
+          const effects = [...new Set(systems)].filter((system): system is string => !!system).map((system, i) => ({
             id: `${i}`, system, source: 'anim-event' as const, evidence: 'movement staging', configuration: 'preview', attachment: null, attachmentCp1: null,
           }));
-          await exportSourceParticleBundle(stack, { heroKey: data.heroKey, modelEntry, effects, notes: [] }, { hero: request.heroName, outDir, vpkmerge });
+          const bundle = await exportSourceParticleBundle(stack, { heroKey: data.heroKey, modelEntry, effects, notes: [] }, { hero: request.heroName, outDir, vpkmerge, actors });
+          // The plan's systems among the hero's: the actors' effects stay the game's, as in game, where the bake
+          // recolours only what the player plays
+          const reached = new Set<string>();
+          const walk = (system: string) => {
+            if (reached.has(system) || !bundle.systems[system]) return;
+            reached.add(system);
+            for (const child of getArray(bundle.systems[system].data, 'm_Children') ?? []) {
+              const ref = isCollection(child) ? getString(child, 'm_ChildRef') : null;
+              if (ref) walk(bundleSystemKey(ref));
+            }
+          };
+          heroSystems.forEach(walk);
+          const planned = await plan;
+          const recoloured = Object.fromEntries(Object.entries(planned.systems).filter(([entry]) => reached.has(bundleSystemKey(entry)))
+            .map(([entry, system]) => [bundleSystemKey(entry), system]));
+          const template = stack.read(`${STAMP_TEMPLATE}_c`);
           const preview: MovementEnginePreview & { version: string } = {
-            version: ENGINE_VERSION, key: `${key}:${heroDir}`, data,
+            version: ENGINE_VERSION, key: id, data, actors: actorData,
             bundleUrl: `grimoire-hero://f/${key}/engine/${heroDir}/bundle.json`, textureBaseUrl: `grimoire-hero://f/${key}/engine/${heroDir}/tex/`,
+            recolour: { systems: recoloured, stamp: template ? readParticleTextureInfo(template) : null },
           };
           await fs.writeFile(join(outDir, 'preview.json'), JSON.stringify(preview));
           return preview;
@@ -208,7 +295,11 @@ export async function previewMovementEngine(game: string, input: unknown): Promi
       engineBuilds.set(id, build);
     }
     try { return await engineBuilds.get(id)!; } finally { engineBuilds.delete(id); }
-  });
+  } finally {
+    const count = (leases.get(key) ?? 1) - 1;
+    if (count) leases.set(key, count); else leases.delete(key);
+    void sweep().catch((error: unknown) => console.warn('[movementFx] Cache sweep:', error));
+  }
 }
 
 export async function exportMovementFx(game: string, input: unknown) {
@@ -219,7 +310,7 @@ export async function saveMovementFx(game: string, input: unknown): Promise<void
   const request = movementFxSaveSchema.parse(input);
   await withBake(game, request.choice, async (dir, choice) => {
     const source = join(dir, 'effect_dir.vpk');
-    const name = choice.kind === 'dash' ? 'Custom dash trails' : 'Custom heavy melee';
+    const name = SAVED_NAME[choice.kind];
     await assertVpkSafety(source, { context: 'installation', name });
     await runExclusiveModMutation(async () => {
       const before = await scanMods(game);

@@ -162,19 +162,19 @@ sequenceDiagram
     participant DB as stats.db
 
     UI->>Store: loadPlayerStats(accountId)
-    Store->>IPC: electronAPI.stats.getMMR()
-    IPC->>API: GET /v1/players/mmr?account_ids=X
-    API-->>IPC: { account_id, mmr, rank_badge }
-    IPC->>DB: saveMMRSnapshot()
-    IPC-->>Store: PlayerMMR
-    Store-->>UI: Update playerMMR state
+    Store->>IPC: electronAPI.stats.getPlayerRank()
+    IPC->>API: GET /v1/players/rank?account_ids=X
+    API-->>IPC: { account_id, badge, rank, subrank, last_match }
+    IPC->>DB: saveRankSnapshot()
+    IPC-->>Store: PlayerRank
+    Store-->>UI: Update rank state
 ```
 
 ### API Endpoint Reference
 
 | Endpoint | Data Fetched | DB Table | Transform |
 |----------|--------------|----------|-----------|
-| `/v1/players/mmr` | Current MMR/rank | mmr_snapshots | Daily dedupe |
+| `/v1/players/rank` | Current rank | mmr_snapshots | Daily dedupe |
 | `/v1/players/{id}/match-history` | Match records | match_history | ON CONFLICT ignore |
 | `/v1/players/hero-stats` | Per-hero stats | hero_stats_snapshots | Weekly snapshot |
 | `/v1/players/steam` | Profile data | players | Name/avatar update |
@@ -212,11 +212,11 @@ const sublevel = badgeLevel % 10           // 2-6 → I-V
 |-------|--------------|-----------|-------|
 | 1 | 12-16 | Initiate I-V | Silver |
 | 2 | 21-26 | Seeker I-VI | Bronze |
-| 3 | 31-36 | Alchemist I-VI | Gold |
-| 4 | 41-46 | Arcanist I-VI | Green |
-| 5 | 51-56 | Ritualist I-VI | Cyan |
-| 6 | 61-66 | Emissary I-VI | Blue |
-| 7 | 71-76 | Archon I-VI | Purple |
+| 3 | 31-36 | Acolyte I-VI | Gold |
+| 4 | 41-46 | Sentinel I-VI | Green |
+| 5 | 51-56 | Mystic I-VI | Cyan |
+| 6 | 61-66 | Ritualist I-VI | Blue |
+| 7 | 71-76 | Emissary I-VI | Purple |
 | 8 | 81-86 | Oracle I-VI | Pink |
 | 9 | 91-96 | Phantom I-VI | Red |
 | 10 | 101-106 | Ascendant I-VI | Orange |

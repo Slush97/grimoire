@@ -14,14 +14,27 @@ export interface BundleTextureEntry {
  * the stored mip chain when the bundle has one.
  */
 export class BundleTextureSource {
-  private readonly bundle: ParticleBundle;
+  private bundle: ParticleBundle;
   private readonly baseUrl: string;
   private readonly entries = new Map<string, BundleTextureEntry>();
+  /** Entries a newer bundle replaced: effects still drawing with them keep them until disposal. */
+  private readonly retired: BundleTextureEntry[] = [];
   private disposed = false;
 
   constructor(bundle: ParticleBundle, baseUrl: string) {
     this.bundle = bundle;
     this.baseUrl = baseUrl;
+  }
+
+  /** Serves a newer bundle (a live recolour): textures it changes load again, the rest stay loaded. */
+  setBundle(bundle: ParticleBundle): void {
+    const previous = this.bundle;
+    this.bundle = bundle;
+    for (const [key, entry] of [...this.entries]) {
+      if (previous.textures[key] === bundle.textures[key]) continue;
+      this.entries.delete(key);
+      this.retired.push(entry);
+    }
   }
 
   get(vtexPath: string): BundleTextureEntry | null {
@@ -45,7 +58,8 @@ export class BundleTextureSource {
     // level cannot load, so one missing file costs this texture its mips, never its image
     const mips = texture.mips && texture.mips.length > 0 ? texture.mips : null;
     const loadAll = (files: readonly string[]) => Promise.all(files.map((file) => this.load(`${this.baseUrl}${file}`)));
-    const loaded = mips ? loadAll(mips).catch(() => loadAll([texture.file])) : loadAll([texture.file]);
+    const loaded = texture.url ? Promise.all([this.load(texture.url)])
+      : mips ? loadAll(mips).catch(() => loadAll([texture.file])) : loadAll([texture.file]);
     loaded.then((bitmaps) => {
       if (this.disposed) {
         for (const bitmap of bitmaps) bitmap.close();
@@ -66,20 +80,25 @@ export class BundleTextureSource {
 
   /** One PNG as stored: no premultiplied alpha, no colour conversion, top row first. */
   private async load(url: string): Promise<ImageBitmap> {
+    const options: ImageBitmapOptions = { imageOrientation: 'none', premultiplyAlpha: 'none', colorSpaceConversion: 'none' };
+    // A data URL decodes here: no fetch, so no content policy stands in its way
+    const data = /^data:([^;,]+);base64,/.exec(url);
+    if (data) return createImageBitmap(new Blob([Uint8Array.from(atob(url.slice(data[0].length)), (char) => char.charCodeAt(0))], { type: data[1] }), options);
     const response = await fetch(url);
     if (!response.ok) throw new Error(`${response.status} ${url}`);
-    return createImageBitmap(await response.blob(), { imageOrientation: 'none', premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+    return createImageBitmap(await response.blob(), options);
   }
 
   dispose(): void {
     this.disposed = true;
 
-    for (const entry of this.entries.values()) {
+    for (const entry of [...this.entries.values(), ...this.retired]) {
       entry.texture?.dispose();
       const bitmaps = entry.texture ? [entry.texture.image as ImageBitmap, ...((entry.texture.mipmaps ?? []) as unknown as ImageBitmap[])] : [];
       for (const bitmap of new Set(bitmaps)) bitmap?.close?.();
     }
 
     this.entries.clear();
+    this.retired.length = 0;
   }
 }

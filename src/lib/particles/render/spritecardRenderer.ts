@@ -378,8 +378,10 @@ export abstract class ParticleSpritecardRenderer extends ParticleFunctionRendere
       u.g_tSceneColor.value = this.context.sceneColor ?? this.context.blackTexture;
     }
 
-    renderer.getDrawingBufferSize(drawingBuffer);
-    (u.uViewportSize.value as THREE.Vector2).copy(drawingBuffer);
+    // The viewport of the framebuffer this draws into, which may not be the canvas's (post processing)
+    renderer.getCurrentViewport(viewport);
+    (u.uScreenRect.value as THREE.Vector4).copy(viewport);
+    (u.uViewportSize.value as THREE.Vector2).set(viewport.z, viewport.w);
   }
 
   /**
@@ -648,7 +650,7 @@ export abstract class ParticleSpritecardRenderer extends ParticleFunctionRendere
   }
 }
 
-const drawingBuffer = new THREE.Vector2();
+const viewport = new THREE.Vector4();
 
 /** Every uniform the spritecard shaders declare, at the defaults their GLSL 4.60 initializers give. */
 function createSpritecardUniforms(layerCount: number): Uniforms {
@@ -715,6 +717,7 @@ function createSpritecardUniforms(layerCount: number): Uniforms {
     uSceneDepth: { value: null },
     uSceneDepthNearFar: { value: new THREE.Vector2(1, 1000) },
     uViewportSize: { value: new THREE.Vector2(1, 1) },
+    uScreenRect: { value: new THREE.Vector4(0, 0, 1, 1) },
     uSaturateColor: { value: true },
     uUnsignedBlendAlpha: { value: false },
     uClampLayers: { value: false },

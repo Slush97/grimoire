@@ -358,7 +358,7 @@ export default function SpiritUrnImportModal({
 
           {/* Preview surface: kept square so the urn reads consistently and the
               canvas never stretches. */}
-          <div className="relative w-full aspect-square rounded-lg border border-border bg-bg-tertiary/40 overflow-hidden">
+          <div className="always-dark relative w-full aspect-square rounded-lg border border-border bg-bg-tertiary/40 overflow-hidden">
             {scene ? (
               <ErrorBoundary>
                 <Suspense fallback={null}>

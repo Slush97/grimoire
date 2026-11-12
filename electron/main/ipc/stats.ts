@@ -53,14 +53,14 @@ ipcMain.handle('stats:addTrackedPlayer', async (_, accountId: number, isPrimary 
 
     statsDb.addTrackedPlayer(profile, isPrimary)
 
-    // Also fetch and save initial MMR
+    // Also fetch and save the initial rank
     try {
-        const mmrData = await statsApi.getPlayerMMR([accountId])
-        if (mmrData.length > 0) {
-            statsDb.saveMMRSnapshot(mmrData[0])
+        const ranks = await statsApi.getPlayerRank([accountId])
+        if (ranks.length > 0) {
+            statsDb.saveRankSnapshot(ranks[0])
         }
     } catch (err) {
-        console.warn('[stats:addTrackedPlayer] Failed to fetch initial MMR:', err)
+        console.warn('[stats:addTrackedPlayer] Failed to fetch initial rank:', err)
     }
 
     return profile
@@ -158,23 +158,31 @@ ipcMain.handle(
 // Player Data (API)
 // ============================================
 
-ipcMain.handle('stats:getPlayerMMR', async (_, accountIds: number[]) => {
-    const mmrData = await statsApi.getPlayerMMR(accountIds)
+ipcMain.handle('stats:getPlayerRank', async (_, accountIds: number[]) => {
+    const ranks = await statsApi.getPlayerRank(accountIds)
 
     // Save snapshots for tracked players
-    for (const mmr of mmrData) {
+    for (const rank of ranks) {
         try {
-            statsDb.saveMMRSnapshot(mmr)
+            statsDb.saveRankSnapshot(rank)
         } catch (err) {
-            console.warn('[stats:getPlayerMMR] Failed to save snapshot:', err)
+            console.warn('[stats:getPlayerRank] Failed to save snapshot:', err)
         }
     }
 
-    return mmrData
+    return ranks
 })
 
-ipcMain.handle('stats:getPlayerMMRHistory', async (_, accountId: number) => {
-    return statsApi.getPlayerMMRHistory(accountId)
+ipcMain.handle('stats:getMatchScoreboard', async (_, matchId: number) => {
+    return statsApi.getMatchScoreboard(matchId)
+})
+
+ipcMain.handle('stats:getRankedSeasons', async () => {
+    return statsApi.getRankedSeasons()
+})
+
+ipcMain.handle('stats:getSeasonRankDistribution', async () => {
+    return statsApi.getSeasonRankDistribution()
 })
 
 ipcMain.handle('stats:getHeroes', async () => {
@@ -285,8 +293,8 @@ ipcMain.handle('stats:getActiveMatches', async () => {
 // Leaderboards (API)
 // ============================================
 
-ipcMain.handle('stats:getLeaderboard', async (_, region: LeaderboardRegion) => {
-    return statsApi.getLeaderboard(region)
+ipcMain.handle('stats:getLeaderboard', async (_, region: LeaderboardRegion, leaderboardId?: number) => {
+    return statsApi.getLeaderboard(region, leaderboardId)
 })
 
 ipcMain.handle(
@@ -320,10 +328,6 @@ ipcMain.handle('stats:getBadgeDistribution', async () => {
     return statsApi.getBadgeDistribution()
 })
 
-ipcMain.handle('stats:getMMRDistribution', async () => {
-    return statsApi.getMMRDistribution()
-})
-
 // ============================================
 // Builds (API)
 // ============================================
@@ -355,21 +359,21 @@ ipcMain.handle('stats:getAllSettings', (): Record<string, string> => {
 ipcMain.handle('stats:syncPlayerData', async (_, accountId: number) => {
     // Sync all data for a player
     const results = {
-        mmr: null as unknown,
+        rank: null as unknown,
         heroStats: null as unknown,
         matchHistory: null as unknown,
         errors: [] as string[],
     }
 
-    // Fetch MMR
+    // Fetch rank
     try {
-        const mmrData = await statsApi.getPlayerMMR([accountId])
-        if (mmrData.length > 0) {
-            statsDb.saveMMRSnapshot(mmrData[0])
-            results.mmr = mmrData[0]
+        const ranks = await statsApi.getPlayerRank([accountId])
+        if (ranks.length > 0) {
+            statsDb.saveRankSnapshot(ranks[0])
+            results.rank = ranks[0]
         }
     } catch (err) {
-        results.errors.push(`MMR: ${err}`)
+        results.errors.push(`Rank: ${err}`)
     }
 
     // Fetch hero stats
@@ -436,26 +440,6 @@ ipcMain.handle('stats:getApiInfo', async () => {
 })
 
 // ============================================
-// Extended MMR Endpoints
-// ============================================
-
-ipcMain.handle('stats:getHeroMMR', async (_, accountIds: number[], heroId: number) => {
-    return statsApi.getHeroMMR(accountIds, heroId)
-})
-
-ipcMain.handle('stats:getHeroMMRHistory', async (_, accountId: number, heroId: number) => {
-    return statsApi.getHeroMMRHistory(accountId, heroId)
-})
-
-ipcMain.handle('stats:getMMRDistributionGlobal', async (_, filters?: statsApi.AnalyticsFilter) => {
-    return statsApi.getMMRDistributionGlobal(filters)
-})
-
-ipcMain.handle('stats:getHeroMMRDistribution', async (_, heroId: number, filters?: statsApi.AnalyticsFilter) => {
-    return statsApi.getHeroMMRDistribution(heroId, filters)
-})
-
-// ============================================
 // Player Social Stats
 // ============================================
 
@@ -465,10 +449,6 @@ ipcMain.handle('stats:getEnemyStats', async (_, accountId: number, filters?: sta
 
 ipcMain.handle('stats:getMateStats', async (_, accountId: number, filters?: statsApi.PlayerStatsFilter & { same_party?: boolean }) => {
     return statsApi.getMateStats(accountId, filters)
-})
-
-ipcMain.handle('stats:getPartyStats', async (_, accountId: number, filters?: statsApi.PlayerStatsFilter) => {
-    return statsApi.getPartyStats(accountId, filters)
 })
 
 ipcMain.handle('stats:searchSteamProfiles', async (_, query: string) => {

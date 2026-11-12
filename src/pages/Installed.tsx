@@ -7,6 +7,7 @@ import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
 import { installedDoorStuckTarget, installedSkinTarget } from '../lib/installedSkinTarget';
 import { pinInstalledPreview } from '../lib/installedPreviewPin';
 import { installedPropTarget } from '../lib/installedPropPreview';
+import { installedMotionTarget } from '../lib/installedMotionPreview';
 import { restoreMovementFxDraft } from '../lib/foundryDrafts';
 import {
   DndContext,
@@ -280,6 +281,7 @@ interface InstalledEntryCardProps {
   viewMode: ViewMode;
   hideNsfwPreviews: boolean;
   soundVolume: number;
+  groupClickOpensDetails: boolean;
   conflicts: ModConflict[];
   updateAvailable: boolean;
   staleSourceCount: number;
@@ -296,6 +298,8 @@ interface InstalledEntryCardProps {
   onViewAuthor: (mod: Mod) => void;
   /** Opens the variant picker for a group, by its shared grouping key. */
   onOpenPicker: (groupKey: string) => void;
+  /** Opens the GameBanana details for a group, anchored like details navigation. */
+  onOpenGroupDetails: (entry: ModEntry) => void;
   onToggle: (entry: ModEntry) => Promise<boolean>;
   swapTargets?: readonly EntrySwapTarget[];
   onSwap: (entry: ModEntry, outgoingEntryKey: string) => Promise<void>;
@@ -347,6 +351,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   viewMode,
   hideNsfwPreviews,
   soundVolume,
+  groupClickOpensDetails,
   conflicts,
   updateAvailable,
   staleSourceCount,
@@ -362,6 +367,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onOpenDetails,
   onViewAuthor,
   onOpenPicker,
+  onOpenGroupDetails,
   onToggle,
   swapTargets,
   onSwap,
@@ -396,7 +402,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   const target = installedDoorStuckTarget(previewMod, taxonomyContext);
   // Every file the Alt preview can show, in picker order. Alt+wheel steps through them.
   const previewKeys = useMemo(() => (entry.kind === 'single' ? [entry.mod] : entry.variants)
-    .filter(variant => installedSkinTarget(variant, taxonomyContext) || installedPropTarget(variant))
+    .filter(variant => installedMotionTarget(variant) || installedSkinTarget(variant, taxonomyContext) || installedPropTarget(variant))
     .map(variant => variant.metaKey), [entry, taxonomyContext]);
   const previewKey = previewKeys.includes(previewMod.metaKey) ? previewMod.metaKey : previewKeys[0] ?? previewMod.metaKey;
   const previewHint = previewKeys.length > 1 ? t('installed.card.previewHintVariants')
@@ -484,7 +490,11 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   }
   // Group entry. Stand-in `mod` is the primary so the card visuals look
   // right; the `group` prop tells ModCard to swap filename for file
-  // selection metadata and route clicks to the picker.
+  // selection metadata and offer the file picker in the card menu. A click
+  // opens the picker, or the GameBanana page when the setting is on. A local
+  // group's primary can carry GameBanana metadata, so the group key decides.
+  const hasDetailsPage = !entry.groupKey.startsWith('local:') && !!entry.gameBananaId;
+  const groupOpensPicker = !(groupClickOpensDetails && hasDetailsPage);
   const safetyTarget = entry.variants.find(v => v.safety?.report.verdict === 'blocked' || v.safety?.report.verdict === 'incomplete')
     ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust' && !v.safety.trusted)
     ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust');
@@ -519,7 +529,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       soundVolume={soundVolume}
       updateAvailable={updateAvailable}
       entryKey={entry.key}
-      onOpenDetails={() => onOpenPicker(entry.groupKey)}
+      onOpenDetails={groupOpensPicker ? () => onOpenPicker(entry.groupKey) : () => onOpenGroupDetails(entry)}
       onViewAuthor={entry.gameBananaId ? () => onViewAuthor(entry.primary) : undefined}
       // Imprints are per file; a group card shows the primary's imprint.
       onViewImprint={entry.primary.imprinted ? () => onViewImprint(entry.primary) : undefined}
@@ -572,6 +582,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
           variant.fileName
         ),
         onOpenPicker: () => onOpenPicker(entry.groupKey),
+        onViewDetails: hasDetailsPage ? () => onOpenGroupDetails(entry) : undefined,
+        opensPicker: groupOpensPicker,
       }}
     />
   );
@@ -878,6 +890,7 @@ export default function Installed() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location, mods, navigate]);
   const installedHideNsfwPreviews = shouldBlurNsfw(settings);
+  const groupClickOpensDetails = settings?.installedGroupClickOpensDetails ?? false;
   // Disabled-section sort, deliberately separate from the top-bar sort above.
   // That one spans both sections and turns the whole page read-only (a sorted
   // enabled list no longer maps to load order). The disabled library is a
@@ -2629,6 +2642,9 @@ export default function Installed() {
   const openEntryPicker = useStableCallback((groupKey: string) => {
     setPickerGroupId(groupKey);
   });
+  const openEntryGroupDetails = useStableCallback((entry: ModEntry) => {
+    void openModDetails(entryDetailsAnchor(entry, (id) => updatesAvailable.has(id)));
+  });
   // Open an artist's page inside Grimoire by entering Browse's artist mode (the
   // grid scoped to that submitter), the same surface the artist card in a mod's
   // details opens.
@@ -3410,6 +3426,7 @@ export default function Installed() {
     viewMode,
     hideNsfwPreviews: installedHideNsfwPreviews,
     soundVolume,
+    groupClickOpensDetails,
     conflicts: entryConflicts.get(entry.key) ?? EMPTY_CONFLICTS,
     updateAvailable:
       entry.kind === 'single'
@@ -3430,6 +3447,7 @@ export default function Installed() {
     onOpenDetails: openEntryDetails,
     onViewAuthor: viewEntryAuthor,
     onOpenPicker: openEntryPicker,
+    onOpenGroupDetails: openEntryGroupDetails,
     onToggle: toggleEntry,
     swapTargets: swapTargets.get(entry.key),
     onSwap: beginSwap,

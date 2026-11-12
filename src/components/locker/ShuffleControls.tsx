@@ -89,7 +89,7 @@ export function ShuffleBulkButton({ allIncluded, count, onClick }: ShuffleBulkBu
       onClick={onClick}
       title={title}
       aria-label={title}
-      className={`inline-flex items-center gap-1.5 self-center rounded-lg border px-3 py-1.5 text-xs font-medium text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+      className={`inline-flex items-center gap-1.5 self-center rounded-lg border px-3 py-1.5 text-xs font-medium text-text-primary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
         allIncluded
           ? 'border-accent bg-accent/20 hover:bg-accent/30'
           : 'border-accent/40 bg-accent/10 hover:border-accent/60 hover:bg-accent/20'

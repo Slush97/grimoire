@@ -43,9 +43,23 @@ async function approvals(): Promise<Set<string>> {
     } catch { return new Set(); }
 }
 
+/** A report the user can accept: findings they reviewed, or an archive the scan could not read. */
+function decidable(report: ModSafetyReport): boolean {
+    return (report.verdict === 'requires-trust' || report.verdict === 'blocked') && /^[a-f0-9]{64}$/.test(report.fingerprint);
+}
+
+/**
+ * Enabling an unread archive anyway is stored apart from allowing reviewed
+ * findings. Neither covers the other: a later scanner that reads those bytes
+ * asks again with what it found, and allowing a version says nothing about a
+ * copy that no longer reads.
+ */
+function approvalKey(report: ModSafetyReport): string {
+    return report.verdict === 'blocked' ? createHash('sha256').update(`unread:${report.fingerprint}`).digest('hex') : report.fingerprint;
+}
+
 export async function isModSafetyTrusted(report: ModSafetyReport): Promise<boolean> {
-    return report.verdict === 'no-findings' || (report.verdict === 'requires-trust'
-        && !!report.fingerprint && (await approvals()).has(report.fingerprint));
+    return report.verdict === 'no-findings' || (decidable(report) && (await approvals()).has(approvalKey(report)));
 }
 
 /**
@@ -64,16 +78,16 @@ function settlePrompts(fingerprint: string, accepted: boolean): boolean {
 }
 
 async function saveApproval(report: ModSafetyReport): Promise<boolean> {
-    if (report.verdict !== 'requires-trust' || !report.fingerprint) throw new Error('MOD_SAFETY_BLOCKED');
+    if (!decidable(report)) throw new Error('MOD_SAFETY_BLOCKED');
     const write = trustWrite.then(async () => {
         const trusted = await approvals();
-        trusted.add(report.fingerprint);
+        trusted.add(approvalKey(report));
         const file = join(app.getPath('userData'), 'mod-safety-trust.json');
         const temp = `${file}.${randomUUID()}.tmp`;
         await fs.writeFile(temp, JSON.stringify([...trusted]), { mode: 0o600 });
         await fs.rename(temp, file);
         for (const value of snapshots.values()) {
-            if (value.report.fingerprint === report.fingerprint) value.trusted = true;
+            if (value.report.fingerprint === report.fingerprint && value.report.verdict === report.verdict) value.trusted = true;
         }
         notifyModSafetyChanged();
     });
@@ -268,12 +282,12 @@ export async function assertVpkSafety(path: string, options: {
     if (trusted) return;
     if (report.verdict === 'requires-trust' && options.allowUntrusted) return;
     if (options.prompt !== false) {
-        const accepted = await ask(options.name ?? basename(path), report, report.verdict === 'requires-trust', false, options.context, options.signal);
+        const accepted = await ask(options.name ?? basename(path), report, decidable(report), false, options.context, options.signal);
         options.signal?.throwIfAborted();
         if (accepted) {
             const current = await inspectVpkSafety(path);
             options.signal?.throwIfAborted();
-            if (current.fingerprint === report.fingerprint && current.verdict === 'requires-trust') {
+            if (current.fingerprint === report.fingerprint && current.verdict === report.verdict && decidable(current)) {
                 await saveApproval(current);
                 return;
             }

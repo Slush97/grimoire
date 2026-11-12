@@ -3,7 +3,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { cachedModSafetyReport, prunePathEntries, scanModSafety } from './modSafetyScan';
-import { safetyChunkedVpk, safetyLayout, safetyResource, safetyVpk } from './modSafetyFixtures';
+import { safetyChunkedVpk, safetyLayout, safetyPanoramaText, safetyResource, safetyResourceBlocks, safetyVpk } from './modSafetyFixtures';
 import { VPKMERGE_BINARY_BY_PLATFORM, type SupportedPlatform } from './vpkmergeBinary';
 import * as policy from './modSafetyPolicy';
 
@@ -184,6 +184,37 @@ describe('VPK safety inspection', () => {
         expect(report.findings).toContainEqual({ entry: `panorama/layout/${'x'.repeat(extra)}hud_128.vxml_c`, reason: 'local-file' });
         expect(report.findings.some((finding) => finding.reason === 'unreadable-archive')).toBe(false);
     });
+    it('reads a layout compiled as text, with no decoder', async () => {
+        // Community build mods ship citadel_popup_build_browser.vxml_c this way (issue 577).
+        const layout = (xml: string) => safetyResource(safetyPanoramaText(xml));
+        expect(await scan(safetyVpk([{ path: 'panorama/layout/static.vxml_c',
+            bytes: layout('<root><styles><include src="s2r://panorama/styles/x.vcss_c"/></styles><Panel/></root>') }])))
+            .toMatchObject({ verdict: 'no-findings', findings: [] });
+        const report = await scan(safetyVpk([
+            { path: 'panorama/layout/popup.vxml_c', bytes: layout('<root><Panel><HTMLPanel url="https://example.invalid"/></Panel></root>') },
+            { path: 'panorama/scripts/popup.vjs_c', bytes: safetyResource(Buffer.from('run(1);')) },
+        ]));
+        expect(report.verdict).toBe('requires-trust');
+        expect(report.findings).toEqual([
+            { entry: 'panorama/layout/popup.vxml_c', reason: 'browser' },
+            { entry: 'panorama/scripts/popup.vjs_c', reason: 'executable' },
+        ]);
+    });
+    it('reads the text of a layout that also carries a compiled block', async () => {
+        const path = join(root, 'test_dir.vpk');
+        const compiled = safetyLayout('run(1);').subarray(28);
+        await fs.writeFile(path, safetyVpk([{ path: 'panorama/layout/hud.vxml_c', bytes: safetyResourceBlocks([
+            ['DATA', safetyPanoramaText('<root><Panel><HTMLPanel url="https://example.invalid"/></Panel></root>')], ['LaCo', compiled],
+        ]) }]));
+        // Without a decoder the compiled block is unread, so the check is incomplete, but the text finding stands.
+        const report = await scanModSafety(path);
+        expect(report.verdict).toBe('incomplete');
+        expect(report.findings).toContainEqual({ entry: 'panorama/layout/hud.vxml_c', reason: 'browser' });
+    });
+    it('blocks a layout with neither a compiled block nor text', async () => {
+        expect((await scan(safetyVpk([{ path: 'panorama/layout/empty.vxml_c', bytes: safetyResource(Buffer.alloc(6)) }]))).verdict).toBe('blocked');
+        expect((await scan(safetyVpk([{ path: 'panorama/layout/other.vxml_c', bytes: safetyResource(Buffer.from('inert'), 'RED2') }]))).verdict).toBe('blocked');
+    });
     it('still blocks layouts the decoder runs on but rejects', async () => {
         const path = join(root, 'test_dir.vpk');
         await fs.writeFile(path, safetyVpk([{ path: 'panorama/layout/test.vxml_c', bytes: safetyResource(Buffer.from('inert'), 'LaCo') }]));
@@ -215,7 +246,7 @@ describe('VPK safety inspection', () => {
         const result = await scan(safetyVpk([{ path: 'panorama/styles/test.vcss_c', bytes: safetyResource(css) }]));
         expect(result.verdict).toBe('no-findings');
     });
-    it.each(['../escape.js', '/root.js', 'C:/outside.js', 'CON.js', 'folder/../x.js'])('rejects unsafe entry paths: %s', async path => {
+    it.each(['../escape.js', 'C:/outside.js', 'CON.js', 'folder/../x.js'])('rejects unsafe entry paths: %s', async path => {
         expect((await scan(safetyVpk([{ path, bytes: Buffer.from('run()') }]))).verdict).toBe('blocked');
     });
     it('reads extensionless entries, which the VPK format stores with a blank extension', async () => {
@@ -226,6 +257,48 @@ describe('VPK safety inspection', () => {
     });
     it.each(['../README', 'folder/../LICENSE', 'CON', 'notes/README '])('rejects unsafe extensionless paths: %s', async path => {
         expect((await scan(safetyVpk([{ path, bytes: Buffer.from('inert') }]))).verdict).toBe('blocked');
+    });
+    it('reads a root folder spelled as an empty string', async () => {
+        // A community Ivy skin packed tools_thumbnail_cache.sqlite3 this way, after its model.
+        expect(await scan(safetyVpk([
+            { path: 'models/heroes_wip/ivy/ivy.vmdl_c', bytes: Buffer.from('model') },
+            { path: 'tools_thumbnail_cache.sqlite3', bytes: Buffer.from('cache') },
+        ], 2, ''))).toMatchObject({ verdict: 'no-findings', findings: [] });
+        // A root script spelled that way is still read, and what follows it too. The tree
+        // has no other way to write a leading slash, so `/test.js` is this same file.
+        const report = await scan(safetyVpk([
+            { path: 'test.js', bytes: Buffer.from('run("file:///example.txt");') },
+            { path: 'panorama/scripts/hud.js', bytes: Buffer.from('run(1);') },
+        ], 1, ''));
+        expect(report.verdict).toBe('requires-trust');
+        expect(report.findings).toContainEqual({ entry: 'test.js', reason: 'local-file' });
+        expect(report.findings).toContainEqual({ entry: 'panorama/scripts/hud.js', reason: 'executable' });
+    });
+    it('blocks an empty root folder that would hide a file from one way of reading it', async () => {
+        // Read with the empty folder as the root, this is one passive file, `vjs_c.txt`.
+        // Read with the empty folder ending the extension, `vjs_c` is an extension and the
+        // record's first bytes (its CRC, "a\0x\0") are a folder `a` holding a script `x`.
+        const hidden = { path: 'vjs_c.txt', bytes: Buffer.from('passive'), crc: Buffer.from('a\0x\0').readUInt32LE() };
+        expect((await scan(safetyVpk([hidden], 1, ''))).verdict).toBe('blocked');
+        // The same record under a properly spelled root has only one reading.
+        expect((await scan(safetyVpk([hidden]))).verdict).toBe('no-findings');
+        // So does an ordinary record under an empty root.
+        expect((await scan(safetyVpk([{ path: 'vjs_c.txt', bytes: Buffer.from('passive') }], 1, ''))).verdict).toBe('no-findings');
+    });
+    it('fingerprints an archive it cannot read by its bytes and the chunks beside it', async () => {
+        const path = join(root, 'odd_dir.vpk');
+        await fs.writeFile(path, 'not an archive');
+        const first = await scanModSafety(path);
+        expect(first).toMatchObject({ verdict: 'blocked', findings: [{ entry: 'odd_dir.vpk', reason: 'unreadable-archive' }] });
+        expect(first.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+        expect((await scanModSafety(path)).fingerprint).toBe(first.fingerprint);
+        await fs.writeFile(join(root, 'odd_000.vpk'), 'chunk');
+        const chunked = await scanModSafety(path);
+        expect(chunked.fingerprint).not.toBe(first.fingerprint);
+        await fs.writeFile(join(root, 'odd_extra.vpk'), 'not a chunk');
+        expect((await scanModSafety(path)).fingerprint).toBe(chunked.fingerprint);
+        await fs.writeFile(path, 'still not an archive');
+        expect((await scanModSafety(path)).fingerprint).not.toBe(chunked.fingerprint);
     });
     it('rejects duplicate case-insensitive paths', async () => {
         expect((await scan(safetyVpk([{ path: 'a.js', bytes: Buffer.from('run()') }, { path: 'A.js', bytes: Buffer.from('run()') }]))).verdict).toBe('blocked');

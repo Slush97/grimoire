@@ -6,31 +6,43 @@
 // ============================================
 
 /**
- * MMR data from /players/mmr endpoint
- * API returns array of these
+ * Rank from /players/rank: the badge after the player's latest ranked match.
+ * All zero with a null last_match when no recent ranked match reports one.
  */
-export interface PlayerMMR {
+export interface PlayerRank {
   account_id: number
-  match_id: number
-  start_time: number
-  player_score: number  // This is the "MMR" value
-  rank: number
-  division: number      // Badge level (was rank_badge)
-  division_tier: number // Subtier within division
+  badge: number   // tier * 10 + subrank
+  rank: number    // tier, 1 (Initiate) to 11 (Eternus)
+  subrank: number // 1 to 6
+  last_match: LastRankedMatch | null
 }
 
-/**
- * One entry from /players/{id}/mmr-history. The API returns a flat array of
- * these (one per ranked match), same field names as PlayerMMR.
- */
-export interface PlayerMMRHistoryEntry {
-  account_id: number
+/** One season from /assets/ranked-seasons, trimmed to what the rank card uses. */
+export interface RankedSeason {
+  name: string
+  intervals: { interval: number; start_timestamp: number; end_timestamp: number; leaderboard_id?: number }[]
+  /** First entry carries sub_rank_xp: points per subrank 1-6, the same for every tier. */
+  rank_info: { sub_rank_xp?: number[] }[]
+}
+
+/** Players per badge from /players/rank/distribution. */
+export interface RankDistributionEntry {
+  badge: number
+  players: number
+}
+
+export interface LastRankedMatch {
   match_id: number
   start_time: number
-  player_score: number
-  rank: number
-  division: number
-  division_tier: number
+  player_rank_initial_display_rank: number
+  player_rank_initial_flat_progress: number | null
+  player_rank_final_flat_progress: number | null
+  player_rank_desired_progress_change: number | null
+  player_rank_initial_calibration_games: number | null
+  player_rank_initial_demotion_protection_games: number | null
+  player_rank_consumed_demotion_protection: boolean | null
+  player_rank_initial_win_streak: number | null
+  rank_interval: number | null
 }
 
 /**
@@ -106,6 +118,11 @@ export interface PlayerMatch {
   objectives_mask_team0: number
   objectives_mask_team1: number
   username: string
+  // Set on ranked matches only: the badge shown after the match
+  // (tier * 10 + subrank) and the rank progress it awarded.
+  ranked_display_badge?: number | null
+  ranked_delta?: number | null
+  ranked_used_demotion_protection?: boolean | null
   // Computed fields (added by service layer)
   hero_name?: string
   match_outcome?: 'Win' | 'Loss'
@@ -186,6 +203,49 @@ export interface MatchMetadata {
   objectives: MatchObjective[]
 }
 
+/** A match trimmed for the scoreboard dialog (built in lib/matchScoreboard). */
+export interface MatchScoreboard {
+  match_id: number
+  start_time: number
+  duration_s: number
+  winning_team: number
+  mode: 'ranked' | 'standard' | 'brawl'
+  banned_hero_ids: number[]
+  /** Team souls at each stats sample, oldest first. */
+  souls: { t: number; team0: number; team1: number }[]
+  players: ScoreboardPlayer[]
+  /** The items any player ended with, by item id. */
+  items: Record<number, ScoreboardItem>
+}
+
+export interface ScoreboardPlayer {
+  account_id: number
+  name: string | null
+  team: number
+  hero_id: number
+  kills: number
+  deaths: number
+  assists: number
+  net_worth: number
+  last_hits: number
+  denies: number
+  level: number
+  damage: number | null
+  healing: number | null
+  /** Badge the player entered a ranked match with. */
+  badge: number | null
+  mvp_rank: number | null
+  /** Final build, weapon then vitality then spirit. */
+  items: number[]
+}
+
+export interface ScoreboardItem {
+  name: string
+  slot: 'weapon' | 'vitality' | 'spirit' | null
+  tier: number | null
+  image: string | null
+}
+
 export interface ActiveMatchPlayer {
   account_id: number
   hero_id: number
@@ -216,9 +276,10 @@ export interface LeaderboardEntry {
   possible_account_ids: number[]
   rank: number
   top_hero_ids: number[]
-  badge_level: number
-  ranked_rank: number
-  ranked_subrank: number
+  // No longer sent since the 2026-11 API rework. Kept optional for older responses.
+  badge_level?: number
+  ranked_rank?: number
+  ranked_subrank?: number
   // Computed fields for backwards compatibility
   account_id?: number
   persona_name?: string
@@ -479,7 +540,7 @@ export interface StatsSettings {
 // ============================================
 
 /**
- * Trimmed hero record from assets.deadlock-api.com/v2/heroes, the source of
+ * Trimmed hero record from api.deadlock-api.com/v1/assets/heroes, the source of
  * truth for hero id -> name/icon mapping and for which heroes are real
  * (in_development=true marks test heroes like Gunslinger/hero_testhero).
  * Fetched live via stats:getHeroes; HERO_NAMES below is the offline fallback.
@@ -495,7 +556,7 @@ export interface HeroAsset {
 }
 
 /**
- * Trimmed rank record from assets.deadlock-api.com/v2/ranks. `tier` is the
+ * Trimmed rank record from api.deadlock-api.com/v1/assets/ranks. `tier` is the
  * division number (0 Obscurus .. 11 Eternus). Ranked score maps onto
  * divisions at 6 points per division: division d spans [(d-1)*6, d*6).
  */

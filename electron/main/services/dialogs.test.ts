@@ -132,13 +132,13 @@ describe('dialog directory memory', () => {
     it('remembers a save destination parent and preserves settings changed during the dialog', async () => {
         const directory = join(mocks.userData, 'Exports');
         mocks.showSaveDialog.mockImplementation(async () => {
-            saveSettings({ ...loadSettings(), oledMode: true });
+            saveSettings({ ...loadSettings(), theme: 'oled' });
             return { canceled: false, filePath: join(directory, 'mod_dir.vpk') };
         });
 
         await showSaveDialog({ defaultPath: 'mod_dir.vpk' });
 
-        expect(loadSettings()).toMatchObject({ lastDialogDirectory: directory, oledMode: true });
+        expect(loadSettings()).toMatchObject({ lastDialogDirectory: directory, theme: 'oled' });
     });
 
     it('ignores canceled dialogs even when they return a path', async () => {

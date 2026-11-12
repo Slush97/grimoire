@@ -21,12 +21,17 @@ export function movementFrame(kind: MovementFxChoice['kind'], elapsed: number, l
     distance: kind === 'dash' ? MOVEMENT_DISTANCE * smooth(time, .5, .9) * (1 - smooth(time, 2.2, 2.6)) : 0 };
 }
 
-/** Resolve naming and directory variants within this hero's resources. */
-export function selectMovementClips(paths: readonly string[], entry: string, aliases: readonly string[] = [], embedded: readonly string[] = []): [string, string][] {
+/**
+ * The clip each movement action plays. `fromGraph` (movementGraphClips: what the hero's animation graph
+ * plays) wins where it names a clip the packages have; names within this hero's resources are the fallback.
+ */
+export function selectMovementClips(paths: readonly string[], entry: string, aliases: readonly string[] = [], embedded: readonly string[] = [],
+  fromGraph: Readonly<Partial<Record<string, string>>> = {}): [string, string][] {
   const canonical = (name: string) => name.replace(/(?:_v\d+|_wip)$/, '');
   const hero = canonical(entry.split('/').at(-1)?.replace('.vmdl_c', '') ?? '');
   if (!hero) return [];
   const heroes = [hero, ...aliases];
+  const available = new Set(paths);
   const candidates = paths.filter(path => path.endsWith('.vnmclip_c')
     && path.split('/').some(part => heroes.includes(canonical(part))));
   const filename = (path: string) => {
@@ -46,8 +51,15 @@ export function selectMovementClips(paths: readonly string[], entry: string, ali
     { action: 'charge', names: ['melee_start'] }, { action: 'lunge', names: ['melee_dash'] }, { action: 'punch', names: ['melee_hit'] },
     { action: 'dash', names: ['dash_air_forward', 'air_dash_forward', 'primary_airdash', 'dash_ground', 'ground_dash'] },
     { action: 'dashBack', names: ['dash_air_back', 'air_dash_back', 'dash_air_backward', 'primary_airdash_back', 'primary_airdash_bkward', 'dash_ground_back'] },
+    { action: 'parry', names: ['parry'] }, { action: 'parrySuccess', names: ['parry_success'] },
+    // A parried attacker's medium knockdown, by the clips the knockdown graph's medium states play
+    // (hero_knockdown.vnmgraph: knockdown_medium_start plays a hero's knockdown_medium_intro)
+    { action: 'knockdownStart', names: ['knockdown_medium_start', 'knockdown_medium_intro'] }, { action: 'knockdownLoop', names: ['knockdown_medium_loop'] },
+    // A struck target's flinch, as a non-additive clip (the graph's flinch_back is additive)
+    { action: 'hitReaction', names: ['flinch_back.vnmclip+non_additive'] },
   ].flatMap(({ action, names }): [string, string][] => {
-    const path = choose(names, dir);
+    const graphClip = fromGraph[action];
+    const path = graphClip && available.has(graphClip) ? graphClip : choose(names, dir);
     return path ? [[action, path]] : [];
   })];
 }

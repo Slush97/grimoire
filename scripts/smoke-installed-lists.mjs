@@ -41,7 +41,7 @@ for (let i = 0; i < count; i++) {
 await writeFile(join(profile, 'mod-metadata.json'), JSON.stringify(metadata));
 await writeFile(join(profile, 'settings.json'), JSON.stringify({
   deadlockPath: game, hasCompletedSetup: true, language: 'en', autoCheckAppUpdates: false,
-  autoCheckModUpdates: false, windowBounds: { width: 1440, height: 1000 }, oledMode: true, accentColor: '#9b5cff',
+  autoCheckModUpdates: false, windowBounds: { width: 1440, height: 1000 }, theme: 'oled', accentColor: '#9b5cff',
 }));
 const application = await _electron.launch({
   executablePath: resolve(packaged ? 'release/win-unpacked/Grimoire.exe' : 'node_modules/electron/dist/electron.exe'),

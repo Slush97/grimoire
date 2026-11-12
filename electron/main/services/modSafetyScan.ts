@@ -1,14 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, promises as fs } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
-import { basename, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { inspectModSource, MOD_SAFETY_POLICY_VERSION } from './modSafetyPolicy';
 import type { ModSafetyFinding, ModSafetyReport } from '../../../src/types/modSafety';
 
 // Bump for parser, decoder or finding changes, without invalidating user consent.
-export const MOD_SAFETY_SCANNER_VERSION = 6;
+export const MOD_SAFETY_SCANNER_VERSION = 7;
 const MAX_TREE = 16 * 1024 * 1024;
 const MAX_SOURCE = 8 * 1024 * 1024;
 const MAX_SOURCES = 64 * 1024 * 1024;
@@ -56,6 +56,44 @@ function validPath(path: string): boolean {
             && !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(p));
 }
 
+/**
+ * An empty first folder reads two ways. directory() takes it as the root, which
+ * some packers write that way, and validates every entry. The classic walk ends
+ * the extension there instead, and reads the bytes that follow as more
+ * extensions and folders. Nothing here says which one the game does, so the
+ * classic walk must not reach a file the scan did not: a record's free bytes
+ * and preload could otherwise spell entries only the game sees.
+ */
+function classicWalkStaysWithin(tree: Buffer, known: ReadonlySet<string>): boolean {
+    let cursor = 0;
+    // Length of the string at the cursor, or -1 once the tree runs out.
+    const next = () => {
+        const end = tree.indexOf(0, cursor);
+        if (end < 0) return -1;
+        const length = end - cursor;
+        cursor = end + 1;
+        return length;
+    };
+    for (;;) {
+        const extension = cursor;
+        if (next() <= 0) return true;
+        for (;;) {
+            const folder = cursor;
+            const folderLength = next();
+            if (folderLength < 0) return true;
+            if (folderLength === 0) break;
+            for (;;) {
+                const name = cursor;
+                const nameLength = next();
+                if (nameLength < 0) return true;
+                if (nameLength === 0) break;
+                if (!known.has(`${extension}:${folder}:${name}`)) return false;
+                cursor += 18 + tree.readUInt16LE(cursor + 4);
+            }
+        }
+    }
+}
+
 async function directory(path: string): Promise<{ entries: Entry[]; files: string[] }> {
     const handle = await fs.open(path, 'r');
     try {
@@ -71,6 +109,9 @@ async function directory(path: string): Promise<{ entries: Entry[]; files: strin
         const entries: Entry[] = [];
         const seen = new Map<string, Buffer>();
         const sizes = new Map<string, number>([[path, stat.size]]);
+        // Where each entry's extension, folder and name start, for classicWalkStaysWithin.
+        const known = new Set<string>();
+        let emptyRoot = false;
         let cursor = 0;
         const string = () => {
             const end = tree.indexOf(0, cursor);
@@ -79,12 +120,18 @@ async function directory(path: string): Promise<{ entries: Entry[]; files: strin
             cursor = end + 1;
             return text;
         };
-        for (let extension = string(); extension !== ''; extension = string()) {
+        for (let extensionStart = cursor, extension = string(); extension !== ''; extensionStart = cursor, extension = string()) {
             // Like the root folder, a missing extension is stored as a single space.
             requireCondition(extension === ' ' || /^[a-z0-9_+.-]+$/i.test(extension));
-            for (let folder = string(); folder !== ''; folder = string()) {
-                for (let name = string(); name !== ''; name = string()) {
-                    const entryPath = `${folder === ' ' ? '' : folder + '/'}${name}${extension === ' ' ? '' : '.' + extension}`;
+            // An extension always has a folder, so an empty first one is the root spelled
+            // without its space, not the end of the list.
+            let first = true;
+            for (let folderStart = cursor, folder = string(); folder !== '' || first; folderStart = cursor, folder = string()) {
+                if (folder === '') emptyRoot = true;
+                first = false;
+                for (let nameStart = cursor, name = string(); name !== ''; nameStart = cursor, name = string()) {
+                    known.add(`${extensionStart}:${folderStart}:${nameStart}`);
+                    const entryPath = `${folder === ' ' || folder === '' ? '' : folder + '/'}${name}${extension === ' ' ? '' : '.' + extension}`;
                     requireCondition(validPath(entryPath));
                     requireCondition(cursor + 18 <= tree.length && entries.length < MAX_ENTRIES);
                     const recordStart = cursor;
@@ -123,6 +170,7 @@ async function directory(path: string): Promise<{ entries: Entry[]; files: strin
             }
         }
         requireCondition(cursor === tree.length && entries.length > 0);
+        requireCondition(!emptyRoot || classicWalkStaysWithin(tree, known));
         return { entries, files: [...sizes.keys()] };
     } finally { await handle.close(); }
 }
@@ -145,40 +193,45 @@ async function hashFiles(files: string[]): Promise<string> {
     return hash.digest('hex');
 }
 
-function resourceData(bytes: Buffer, extension: string): Buffer {
+/** A compiled resource's blocks by tag. */
+function resourceBlocks(bytes: Buffer): Map<string, Buffer> {
     requireCondition(bytes.length >= 16 && bytes.readUInt16LE(4) === 12 && bytes.readUInt32LE(0) === bytes.length);
     const table = 8 + bytes.readUInt32LE(8);
     const count = bytes.readUInt32LE(12);
     requireCondition(count <= 64 && table >= 16 && table + count * 12 <= bytes.length);
-    const tags = new Set<string>();
-    let source: Buffer | undefined;
+    const blocks = new Map<string, Buffer>();
     for (let i = 0; i < count; i++) {
         const start = table + i * 12;
         const offset = start + 4 + bytes.readUInt32LE(start + 4);
         const length = bytes.readUInt32LE(start + 8);
         requireCondition(offset >= table + count * 12 && offset + length <= bytes.length);
         const tag = bytes.toString('ascii', start, start + 4);
-        requireCondition(!tags.has(tag));
-        tags.add(tag);
-        if (tag !== 'DATA') continue;
-        const data = bytes.subarray(offset, offset + length);
-        if (extension === 'vjs_c' || extension === 'vts_c') { source = data; continue; }
-        // Panorama styles/SVG carry a CRC and an image-name table before text.
-        requireCondition(data.length >= 6);
-        const names = data.readUInt16LE(4);
-        let p = 6;
-        const references: Buffer[] = [];
-        for (let j = 0; j < names; j++) {
-            const end = data.indexOf(0, p);
-            requireCondition(end >= p);
-            references.push(data.subarray(p, end), Buffer.from('\n'));
-            p = end + 1 + 8;
-            requireCondition(p <= data.length);
-        }
-        source = Buffer.concat([...references, data.subarray(p)]);
+        requireCondition(!blocks.has(tag));
+        blocks.set(tag, bytes.subarray(offset, offset + length));
     }
-    requireCondition(source);
-    return source;
+    return blocks;
+}
+
+/** Panorama styles, SVG and text layouts carry a CRC and an image-name table before text. */
+function panoramaText(data: Buffer): Buffer {
+    requireCondition(data.length >= 6);
+    const names = data.readUInt16LE(4);
+    let p = 6;
+    const references: Buffer[] = [];
+    for (let j = 0; j < names; j++) {
+        const end = data.indexOf(0, p);
+        requireCondition(end >= p);
+        references.push(data.subarray(p, end), Buffer.from('\n'));
+        p = end + 1 + 8;
+        requireCondition(p <= data.length);
+    }
+    return Buffer.concat([...references, data.subarray(p)]);
+}
+
+function resourceData(bytes: Buffer, extension: string): Buffer {
+    const data = resourceBlocks(bytes).get('DATA');
+    requireCondition(data);
+    return extension === 'vjs_c' || extension === 'vts_c' ? data : panoramaText(data);
 }
 
 async function decodeLayouts(vpk: string, entries: Entry[], binary: string): Promise<Map<string, string>> {
@@ -310,14 +363,20 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
             if (PROGRAMS.has(ext)) { add({ entry: entry.path, reason: 'native-code' }); continue; }
             budget.sourceBytes += entry.preload.length + entry.length;
             requireCondition(entry.length + entry.preload.length <= MAX_SOURCE && budget.sourceBytes <= MAX_SOURCES);
-            if (ext === 'vxml_c') {
-                layouts.push(entry); continue;
-            }
             const handle = await fs.open(entry.file, 'r');
             let bytes: Buffer;
             try { bytes = Buffer.concat([entry.preload, await readExactly(handle, entry.length, entry.offset)]); }
             finally { await handle.close(); }
-            if (COMPILED_TEXT.has(ext)) bytes = resourceData(bytes, ext);
+            if (ext === 'vxml_c') {
+                // The game compiles a layout into a LaCo block, which the decoder reads.
+                // Community compilers keep the XML source in DATA instead, the way a
+                // stylesheet is stored. A file can carry both, so both are read.
+                const blocks = resourceBlocks(bytes);
+                const data = blocks.get('DATA');
+                if (blocks.has('LaCo')) layouts.push(entry);
+                bytes = data ? panoramaText(data) : Buffer.alloc(0);
+                requireCondition(blocks.has('LaCo') || bytes.length > 0);
+            } else if (COMPILED_TEXT.has(ext)) bytes = resourceData(bytes, ext);
             const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/\0$/, '');
             requireCondition(!text.includes('\0'));
             const isJs = ['js', 'vjs', 'vjs_c', 'vts_c'].includes(ext);
@@ -360,9 +419,26 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
     };
 }
 
+/**
+ * An archive whose directory could not be read never reached the hash. The user
+ * may still choose to enable it, and that choice has to name these exact bytes,
+ * so it is hashed with the chunk files that sit beside it.
+ */
+async function unreadFingerprint(path: string): Promise<string> {
+    const files = [path];
+    if (/_dir\.vpk$/i.test(path)) {
+        const prefix = basename(path).slice(0, -8).toLowerCase() + '_';
+        const chunks = (await fs.readdir(dirname(path))).filter(name => name.toLowerCase().startsWith(prefix)
+            && /^\d{3}\.vpk$/i.test(name.slice(prefix.length)));
+        files.push(...chunks.sort().map(name => join(dirname(path), name)));
+    }
+    return hashFiles(files);
+}
+
 export async function scanModSafety(path: string, binary?: string, cacheDir?: string): Promise<ModSafetyReport> {
     const observed: Observed = { files: [], signature: [] };
     const report = await scanArchive(path, binary, { archives: 0, nestedBytes: 0, entries: 0, sourceBytes: 0 }, 0, cacheDir, observed);
+    if (report.verdict === 'blocked' && !report.fingerprint) report.fingerprint = await unreadFingerprint(path).catch(() => '');
     if (cacheDir && (report.verdict === 'no-findings' || report.verdict === 'requires-trust')) {
         const temp = join(cacheDir, `${randomUUID()}.tmp`);
         try {

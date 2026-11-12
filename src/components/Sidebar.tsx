@@ -119,7 +119,7 @@ function GrimoireTitleIcon() {
       alt=""
       aria-hidden
       draggable={false}
-      className="h-6 w-6 flex-shrink-0 opacity-90"
+      className="h-6 w-6 flex-shrink-0 opacity-90 light:invert"
     />
   );
 }
@@ -927,7 +927,7 @@ export default function Sidebar() {
                           : 'border-red-500/45 bg-red-500/10 text-red-200 font-bold hover:border-red-400/75 hover:bg-red-500/20 hover:text-red-100'
                         : active
                         ? sidebarHeroHighlightSrc
-                          ? 'border-hl/15 text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
+                          ? 'always-dark border-hl/15 text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
                           : 'border-accent/40 text-text-primary font-medium hover:border-accent/60'
                         : 'border-transparent text-text-primary/80 font-medium hover:bg-accent/5 hover:border-accent/25 hover:text-text-primary'
                     }`
@@ -1326,7 +1326,7 @@ export default function Sidebar() {
           className={`group relative flex w-full h-10 items-center overflow-hidden rounded-sm border text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
             settingsActive
               ? sidebarHeroHighlightSrc
-                ? 'border-hl/15 bg-transparent text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
+                ? 'always-dark border-hl/15 bg-transparent text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
                 : 'border-accent/40 bg-transparent text-text-primary font-semibold hover:border-accent/60'
               : 'border-accent/25 bg-bg-tertiary text-text-primary/90 hover:bg-accent/10 hover:border-accent/45 hover:text-text-primary'
           }`}

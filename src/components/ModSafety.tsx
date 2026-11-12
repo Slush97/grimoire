@@ -19,7 +19,7 @@ export function ModSafetyBadge({ id, name, snapshot, variant = 'inline' }: {
     const open = useModSafetyStore(s => s.openDetail);
     const enabled = useAppStore(s => s.settings?.experimentalModSafety);
     if (!enabled || !snapshot || snapshot.report.verdict === 'no-findings') return null;
-    const unchecked = snapshot.report.verdict === 'blocked';
+    const unchecked = snapshot.report.verdict === 'blocked' && !snapshot.trusted;
     const incomplete = snapshot.report.verdict === 'incomplete';
     const Icon = unchecked || incomplete ? ShieldQuestion : snapshot.trusted ? ShieldCheck : ShieldQuestion;
     const status = unchecked ? t('modSafety.unchecked') : incomplete ? t('modSafety.incomplete')
@@ -120,9 +120,11 @@ function ReviewCard({ row, expanded, busy, error, onExpand, onAllow, onKeepDisab
     };
     const reasons = [...new Set(row.report.findings.map(f => f.reason))];
     const summary = reasons.length > 1 ? reasons.filter(r => r !== 'executable') : reasons;
-    const unreadable = row.report.verdict === 'blocked';
+    // An unread archive the user enabled anyway reads as any other allowed mod.
+    const unreadable = row.report.verdict === 'blocked' && !row.trusted;
     const incomplete = row.report.verdict === 'incomplete';
-    const canAllow = !unreadable && !incomplete && !row.trusted && (!!row.mod || row.request?.canTrust);
+    // An archive that could not even be hashed has nothing to pin the choice to.
+    const canAllow = !incomplete && !row.trusted && (!unreadable || !!row.report.fingerprint) && (!!row.mod || row.request?.canTrust);
     const state = unreadable ? t('modSafety.unchecked') : incomplete ? t('modSafety.incomplete')
         : row.trusted ? t('modSafety.trusted') : t('modSafety.needsReview');
     const hero = row.mod?.sourceSection === 'Sound' && !row.mod.thumbnailUrl
@@ -150,7 +152,7 @@ function ReviewCard({ row, expanded, busy, error, onExpand, onAllow, onKeepDisab
         {expanded && <div id={contentId} className="space-y-4 border-t border-border p-4">
             {row.mod && <p className="break-all text-xs text-text-secondary">{row.mod.fileName}</p>}
             <Risks report={row.report} />
-            <p className="text-sm text-text-secondary">{unreadable ? t('modSafety.uncheckedBody')
+            <p className="text-sm text-text-secondary">{unreadable ? t(canAllow ? 'modSafety.enableAnywayHint' : 'modSafety.uncheckedBody')
                 : incomplete ? t('modSafety.incompleteBody') : row.trusted ? t('modSafety.trustedBody') : t('modSafety.allowHint')}</p>
             {row.request?.context === 'installation' && <p className="text-sm text-text-secondary">{t('modSafety.oldVersionKept')}</p>}
             {row.request?.context === 'server' && <p className="text-sm text-text-secondary">{t('modSafety.serverContent')}</p>}
@@ -161,7 +163,8 @@ function ReviewCard({ row, expanded, busy, error, onExpand, onAllow, onKeepDisab
             {error && <p role="alert" className="text-sm text-state-danger">{error}</p>}
             <div className="flex flex-wrap justify-end gap-2">
                 {!row.trusted && <Button variant="secondary" disabled={locked} onClick={onKeepDisabled}>{t('modSafety.cancel')}</Button>}
-                {canAllow && <Button isLoading={locked} onClick={onAllow}>{t('modSafety.trustVersion')}</Button>}
+                {canAllow && <Button variant={unreadable ? 'warning' : 'primary'} isLoading={locked} onClick={onAllow}>
+                    {t(unreadable ? 'modSafety.enableAnyway' : 'modSafety.trustVersion')}</Button>}
             </div>
         </div>}
     </article>;

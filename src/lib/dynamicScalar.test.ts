@@ -29,4 +29,25 @@ describe('compileScalarExpr', () => {
     expect(compileScalarExpr('')).toBeNull();
     expect(compileScalarExpr('sin(')).toBeNull();
   });
+
+  it('reads an attribute only from the table the caller passes', () => {
+    // Violet's brush: inked while she has ammo, re-inked over the second half of a reload.
+    const source = 'max($AmmoPercent,smoothstep(0.5,1,$ReloadProgress))';
+    expect(compileScalarExpr(source, { $AmmoPercent: 1, $ReloadProgress: 0 })!(0)).toBe(1);
+    expect(compileScalarExpr(source, { $AmmoPercent: 0.25, $ReloadProgress: 0 })!(0)).toBe(0.25);
+    expect(compileScalarExpr(source, { $AmmoPercent: 0, $ReloadProgress: 0.75 })!(0)).toBeCloseTo(0.5, 6);
+    expect(compileScalarExpr(source, { $AmmoPercent: 1 })).toBeNull();
+    expect(compileScalarExpr(source)).toBeNull();
+    expect(compileScalarExpr('1 - $ent_health', { $ent_health: 1 })!(0)).toBe(0);
+    expect(compileScalarExpr('$toString', {})).toBeNull();
+  });
+
+  it('evaluates the multi-argument builtins in the engine argument order', () => {
+    expect(compileScalarExpr('min(2, 3) + max(2, 3)')!(0)).toBe(5);
+    expect(compileScalarExpr('clamp(0.5 * sin(time()), 0, 0.5)')!(Math.PI / 2)).toBeCloseTo(0.5, 6);
+    expect(compileScalarExpr('clamp(-2, 0, 1)')!(0)).toBe(0);
+    expect(compileScalarExpr('smoothstep(0, 2, 1)')!(0)).toBeCloseTo(0.5, 6);
+    expect(compileScalarExpr('max(1)')).toBeNull();
+    expect(compileScalarExpr('clamp(1, 2)')).toBeNull();
+  });
 });

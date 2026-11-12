@@ -2,8 +2,9 @@ import { create } from 'zustand'
 import { shallow } from 'zustand/shallow'
 import type {
     TrackedPlayer,
-    PlayerMMR,
-    PlayerMMRHistoryEntry,
+    PlayerRank,
+    RankedSeason,
+    RankDistributionEntry,
     PlayerHeroStats,
     PlayerMatchHistory,
     AggregatedStats,
@@ -16,8 +17,10 @@ import { type Async, asyncIdle, asyncLoading, asyncLoaded, asyncError, toErrorMe
 // Everything fetched for one selected player, loaded as a single bundle so
 // the tabs share one loading/error state for player-scoped data.
 export interface PlayerDataBundle {
-    mmr: PlayerMMR | null
-    mmrHistory: PlayerMMRHistoryEntry[]
+    rank: PlayerRank | null
+    rankedSeasons: RankedSeason[]
+    // Current season, for the rank card's "top X%". Null when unavailable.
+    rankDistribution: RankDistributionEntry[] | null
     heroStats: PlayerHeroStats | null
     matchHistory: PlayerMatchHistory | null
     aggregated: AggregatedStats | null
@@ -26,8 +29,9 @@ export interface PlayerDataBundle {
 }
 
 const EMPTY_BUNDLE: PlayerDataBundle = {
-    mmr: null,
-    mmrHistory: [],
+    rank: null,
+    rankedSeasons: [],
+    rankDistribution: null,
     heroStats: null,
     matchHistory: null,
     aggregated: null,
@@ -66,17 +70,16 @@ interface PlayerState {
 }
 
 async function fetchBundle(accountId: number): Promise<PlayerDataBundle> {
-    const [mmrData, mmrHistory, heroStats, matchHistory, localMMR] = await Promise.all([
-        window.electronAPI.stats.getPlayerMMR([accountId]) as Promise<PlayerMMR[]>,
-        // Full per-match score history drives the trajectory chart; if the
-        // endpoint hiccups the chart falls back to local daily snapshots,
-        // so don't let it sink the whole bundle.
-        (window.electronAPI.stats.getPlayerMMRHistory(accountId) as Promise<
-            PlayerMMRHistoryEntry[]
-        >).catch(() => [] as PlayerMMRHistoryEntry[]),
+    const [ranks, heroStats, matchHistory, localMMR, rankedSeasons, rankDistribution] = await Promise.all([
+        window.electronAPI.stats.getPlayerRank([accountId]) as Promise<PlayerRank[]>,
         window.electronAPI.stats.getPlayerHeroStats(accountId) as Promise<PlayerHeroStats>,
         window.electronAPI.stats.getPlayerMatchHistory(accountId, 20) as Promise<PlayerMatchHistory>,
         window.electronAPI.stats.getLocalMMRHistory(accountId, 60) as Promise<MMRSnapshot[]>,
+        // Rank card extras: without them the card still shows the rank.
+        (window.electronAPI.stats.getRankedSeasons() as Promise<RankedSeason[]>)
+            .catch(() => [] as RankedSeason[]),
+        (window.electronAPI.stats.getSeasonRankDistribution() as Promise<RankDistributionEntry[]>)
+            .catch(() => null),
     ])
 
     // Persist the freshly fetched live matches into the local recorded history
@@ -91,8 +94,9 @@ async function fetchBundle(accountId: number): Promise<PlayerDataBundle> {
         window.electronAPI.stats.getLocalMatchHistory(accountId, 100) as Promise<StoredMatch[]>,
     ])
     return {
-        mmr: mmrData[0] || null,
-        mmrHistory,
+        rank: ranks[0] || null,
+        rankedSeasons,
+        rankDistribution,
         heroStats,
         matchHistory,
         aggregated,

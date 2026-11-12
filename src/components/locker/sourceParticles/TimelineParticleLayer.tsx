@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { ParticleBundle } from '../../../lib/particles/host/bundle';
@@ -6,6 +6,8 @@ import { bundleModelSource } from '../../../lib/particles/host/bundleSource';
 import { EffectTimelinePlayer, type EffectTimeline, travelAt } from '../../../lib/particles/host/effectTimeline';
 import type { ParticleEffectHost } from '../../../lib/particles/host/effectHost';
 import { Matrix4x4, Vector3 } from '../../../lib/particles/numerics';
+import type { StagedActorMount } from '../StagedActors';
+import { actorAt, actorSourceTransform } from '../../../lib/stagedActorPlacement';
 import { BundleTextureSource } from './bundleTextures';
 import { type ParticleDrawLayer, createParticleDrawLayer } from './particleDrawLayer';
 import { SceneColorPass } from './sceneColor';
@@ -19,15 +21,20 @@ import { ParticleProgramWarmup } from './particleProgramWarmup';
  * and the world is drawn moved back by that travel, so the hero stays in frame while the effects it
  * left behind move past, as the game's camera follows its player.
  */
-export function TimelineParticleLayer({ bundle, textureBaseUrl, timeline, model, playback, timeRef }: {
+export function TimelineParticleLayer({ bundle, textureBaseUrl, timeline, model, playback, timeRef, actors = [] }: {
   bundle: ParticleBundle;
   textureBaseUrl: string;
   timeline: EffectTimeline;
   model: THREE.Object3D;
   playback: { paused: boolean; speed: number };
   timeRef: RefObject<number>;
+  /** Other heroes the timeline stages, whose bones the effects bound to them follow. */
+  actors?: StagedActorMount[];
 }) {
-  const state = useRef<{ player: EffectTimelinePlayer; frame: THREE.Object3D; group: THREE.Group; bones: (THREE.Object3D | undefined)[]; layers: Map<ParticleEffectHost, ParticleDrawLayer>; warmup: ParticleProgramWarmup } | null>(null);
+  const state = useRef<{
+    bundle: ParticleBundle; textures: BundleTextureSource; player: EffectTimelinePlayer; frame: THREE.Object3D; group: THREE.Group; bones: (THREE.Object3D | undefined)[]; layers: Map<ParticleEffectHost, ParticleDrawLayer>; warmup: ParticleProgramWarmup;
+    actors: { mount: StagedActorMount; frame: THREE.Object3D; bones: (THREE.Object3D | undefined)[] }[];
+  } | null>(null);
   const depthPass = useRef<SceneDepthPass | null>(null);
   const colorPass = useRef<SceneColorPass | null>(null);
   const uptime = useRef(0);
@@ -42,7 +49,21 @@ export function TimelineParticleLayer({ bundle, textureBaseUrl, timeline, model,
     return () => { delete dataset.movementEngine; };
   }, [getThree]);
 
+  // A live recolour hands over a bundle with other definitions and the same models: the running effects
+  // take them where they are. Another hero's bundle (other models) starts the layer over
+  const bundleRef = useRef(bundle);
+  const structure = bundle.model;
+  useLayoutEffect(() => {
+    bundleRef.current = bundle;
+    const current = state.current;
+    if (!current || current.bundle === bundle || current.bundle.model !== bundle.model) return;
+    current.textures.setBundle(bundle);
+    current.player.setBundle(bundle);
+    current.bundle = bundle;
+  }, [bundle]);
+
   useEffect(() => {
+    const bundle = bundleRef.current;
     const frame = model.getObjectByName('skeleton') ?? model;
     const group = new THREE.Group();
     group.name = 'timeline particles';
@@ -69,10 +90,21 @@ export function TimelineParticleLayer({ bundle, textureBaseUrl, timeline, model,
       },
     });
 
-    const byName = new Map<string, THREE.Object3D>();
-    frame.traverse((object) => { if (object.name) byName.set(object.name.toLowerCase(), object); });
-    const bones = player.boneNames.map((name) => byName.get(name.toLowerCase()) ?? byName.get(THREE.PropertyBinding.sanitizeNodeName(name).toLowerCase()));
-    state.current = { player, frame, group, bones, layers, warmup };
+    const bonesOf = (root: THREE.Object3D, names: string[]) => {
+      const byName = new Map<string, THREE.Object3D>();
+      root.traverse((object) => { if (object.name) byName.set(object.name.toLowerCase(), object); });
+      return names.map((name) => byName.get(name.toLowerCase()) ?? byName.get(THREE.PropertyBinding.sanitizeNodeName(name).toLowerCase()));
+    };
+    const bones = bonesOf(frame, player.boneNames);
+    const staged = actors.flatMap((mount) => {
+      const actor = timeline.actors?.find((candidate) => candidate.id === mount.id);
+      if (!actor || !player.actorPose(mount.id)) return [];
+      const actorFrame = mount.scene.getObjectByName('skeleton') ?? mount.scene;
+      return [{ mount, frame: actorFrame, bones: bonesOf(actorFrame, player.actorBoneNames(mount.id)) }];
+    });
+    // A new bundle (a recolour) joins the loop where it is; a replay or loop round starts it over
+    player.seek(timeRef.current ?? 0);
+    state.current = { bundle, textures, player, frame, group, bones, layers, warmup, actors: staged };
 
     return () => {
       warmup.dispose();
@@ -86,9 +118,10 @@ export function TimelineParticleLayer({ bundle, textureBaseUrl, timeline, model,
       colorPass.current = null;
       state.current = null;
     };
-  }, [bundle, textureBaseUrl, timeline, model]);
+  }, [structure, textureBaseUrl, timeline, model, actors, timeRef]);
 
   const inverse = useRef(new THREE.Matrix4());
+  const actorInverse = useRef(new THREE.Matrix4());
   const local = useRef(new THREE.Matrix4());
   const camera = useRef(new THREE.Vector3());
   const viewport = useRef(new THREE.Vector2());
@@ -96,7 +129,7 @@ export function TimelineParticleLayer({ bundle, textureBaseUrl, timeline, model,
   useFrame((three, delta) => {
     const current = state.current;
     if (!current) return;
-    const { player, frame, group, bones, layers, warmup } = current;
+    const { player, frame, group, bones, layers, warmup, actors: staged } = current;
 
     frame.updateWorldMatrix(true, true);
     inverse.current.copy(frame.matrixWorld).invert();
@@ -108,6 +141,23 @@ export function TimelineParticleLayer({ bundle, textureBaseUrl, timeline, model,
     // The particle world is drawn moved back by the hero's travel; the camera sits there in it
     const time = timeRef.current ?? 0;
     const travel = travelAt(timeline, time);
+
+    // Each staged actor's bones, in its own model space
+    for (const actor of staged) {
+      const pose = player.actorPose(actor.mount.id)!;
+      actor.frame.updateWorldMatrix(true, true);
+      actorInverse.current.copy(actor.frame.matrixWorld).invert();
+      for (let i = 0; i < actor.bones.length; i++) {
+        const bone = actor.bones[i];
+        pose.bones[i] = bone ? new Matrix4x4(local.current.multiplyMatrices(actorInverse.current, bone.matrixWorld).elements) : undefined;
+      }
+    }
+    // Each actor where the timeline stands it in the particle world at this time (moved by its own travel);
+    // one without a rig on screen too, in its bind pose
+    for (const actor of timeline.actors ?? []) {
+      const pose = player.actorPose(actor.id);
+      if (pose) pose.transform = actorSourceTransform(actorAt(timeline, actor, time));
+    }
     three.camera.getWorldPosition(camera.current).applyMatrix4(inverse.current);
     player.update(time, delta, playback.speed, playback.paused, new Vector3(camera.current.x + travel, camera.current.y, camera.current.z));
     group.position.set(-travel, 0, 0);

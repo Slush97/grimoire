@@ -52,8 +52,8 @@ export async function loadRiggedHeroPreview(info: HeroPoseInfo, physics: boolean
     gltf.animations.push(...fallback.animations);
   }
   if (movement && info.hasMovement) {
-    const motions = await loadGltfPreview(`${base}/movement.glb?v=${version}`);
-    gltf.animations.push(...motions.animations);
+    const parts = Array.from({ length: Math.max(1, info.movementParts ?? 1) }, (_, i) => i === 0 ? 'movement.glb' : `movement-${i + 1}.glb`);
+    for (const motions of await Promise.all(parts.map((part) => loadGltfPreview(`${base}/${part}?v=${version}`)))) gltf.animations.push(...motions.animations);
   }
   return { gltf, clothModel };
 }

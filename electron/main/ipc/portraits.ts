@@ -29,6 +29,7 @@ import {
     type HeroPoseSkinSource,
     type HeroEffectInfo,
 } from '../services/heroPoseModels';
+import { exportAnimationModPreview, type AnimationModPreview } from '../services/animationModPreview';
 import type { HeroPortrait } from '../../../src/types/portrait';
 import type { ApplyHeroCardResult } from '../../../src/types/mod';
 
@@ -133,6 +134,15 @@ ipcMain.handle(
 );
 
 ipcMain.handle(
+    'export-animation-mod-preview',
+    async (_, metaKey: string): Promise<AnimationModPreview | null> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return exportAnimationModPreview(deadlockPath, metaKey);
+    }
+);
+
+ipcMain.handle(
     'get-hero-pose-info',
     async (_, heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroPoseInfo> => {
         const deadlockPath = getActiveDeadlockPath();
@@ -159,10 +169,10 @@ ipcMain.handle(
 
 ipcMain.handle(
     'get-rigged-hero-pose',
-    async (_, heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroPoseInfo> => {
+    async (_, heroName: string, skinSources?: HeroPoseSkinSource[], meshGroup?: string): Promise<HeroPoseInfo> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) return { hasModel: false, mtimeMs: null, key: '' };
-        return getRiggedHeroPose(deadlockPath, heroName, skinSources);
+        return getRiggedHeroPose(deadlockPath, heroName, skinSources, typeof meshGroup === 'string' ? meshGroup : undefined);
     }
 );
 
@@ -172,11 +182,12 @@ ipcMain.handle(
         _,
         heroName: string,
         skinSources?: HeroPoseSkinSource[],
-        fallbackSkinMetaKey?: string
+        fallbackSkinMetaKey?: string,
+        meshGroup?: string
     ): Promise<HeroPoseInfo> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return exportRiggedHeroPose(deadlockPath, heroName, skinSources, fallbackSkinMetaKey);
+        return exportRiggedHeroPose(deadlockPath, heroName, skinSources, fallbackSkinMetaKey, typeof meshGroup === 'string' ? meshGroup : undefined);
     }
 );
 

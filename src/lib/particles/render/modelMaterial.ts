@@ -15,8 +15,13 @@
 // GLSL 4.60 to GLSL ES 3.00 as for the spritecard shaders: uniforms set per draw, Source space
 // throughout (the model matrix carries the node transform, the view matrix the host's
 // Source-to-viewer transform). g_flTime is the host's uptime (`ParticleRendererContext.time`); VRF's
-// is the renderer's, which the render oracle holds at 0. Material dynamic expressions are not
-// evaluated, as VRF does not. Fog is not applied: Deadlock leaves particles unfogged.
+// is the renderer's, which the render oracle holds at 0. Fog is not applied: Deadlock leaves particles
+// unfogged.
+//
+// Two departures from VRF, both for what the game draws: the material's dynamic expressions are
+// evaluated over the render attributes a particle sets (C_OP_RenderModels' m_MaterialVars, see
+// vfxEval.ts), and with texture transforms on, the translucency masks take their texcoord scale,
+// rotation and offset as the colour does (the materials author them; VRF's pbr reads only the scroll).
 
 import * as THREE from 'three';
 import type { ParticleRendererContext } from './context';
@@ -24,6 +29,7 @@ import type { ParticleMaterialData } from './particleModels';
 import { ParticleRenderTexture } from './textures';
 import type { RenderView } from './view';
 import { PBR_JITTER_GLSL } from './pbrAnimation';
+import { compileVfxExpression, type VfxExpression } from './vfxEval';
 
 const LUMINANCE_WEIGHTS: [number, number, number] = [0.2125, 0.7154, 0.0721];
 
@@ -257,6 +263,12 @@ uniform vec2 g_vTranslucentScrollSpeed0_1;
 uniform float g_flTranslucentScrollQuantize0_1;
 uniform vec2 g_vTranslucentScrollSpeed1_1;
 uniform float g_flTranslucentScrollQuantize1_1;
+uniform vec2 g_vTranslucentTexcoordScale0_1;
+uniform float g_flTranslucentTexcoordRotation0_1;
+uniform vec2 g_vTranslucentTexcoordOffset0_1;
+uniform vec2 g_vTranslucentTexcoordScale1_1;
+uniform float g_flTranslucentTexcoordRotation1_1;
+uniform vec2 g_vTranslucentTexcoordOffset1_1;
 
 uniform vec3 g_vSelfIllumTint1;
 uniform float g_flSelfIllumScale1;
@@ -352,6 +364,10 @@ void main()
 #if F_ADVANCED_TRANSLUCENCY == 1
     vec2 translucencyTexCoord = ScrollTexCoord(SelectTexCoord(g_bUseSecondaryUvForTranslucency), g_vTranslucentScrollSpeed0_1, g_flTranslucentScrollQuantize0_1);
     vec2 altTranslucencyTexCoord = ScrollTexCoord(SelectTexCoord(g_bUseSecondaryUvForAltTranslucency), g_vTranslucentScrollSpeed1_1, g_flTranslucentScrollQuantize1_1);
+#if F_ENABLE_TEXTURE_TRANSFORMS == 1
+    translucencyTexCoord = RotateVector2D(translucencyTexCoord, g_flTranslucentTexcoordRotation0_1, g_vTranslucentTexcoordScale0_1, g_vTranslucentTexcoordOffset0_1);
+    altTranslucencyTexCoord = RotateVector2D(altTranslucencyTexCoord, g_flTranslucentTexcoordRotation1_1, g_vTranslucentTexcoordScale1_1, g_vTranslucentTexcoordOffset1_1);
+#endif
 
     float translucency = texture(g_tColor, translucencyTexCoord).a;
     float altTranslucency = texture(g_tAltTranslucency, altTranslucencyTexCoord).x;
@@ -404,14 +420,17 @@ const reported = new Set<string>();
 const DEFAULT_FLOATS: Record<string, number> = {
   g_fVertexColorStrength1: 1, g_flAlbedoScrollQuantize1: 0, g_flAlbedoTexcoordRotation1: 0, g_flSelfIllumTexcoordRotation1: 0,
   g_flAlphaAnglePower1: 0, g_flOpacityScale1: 1, g_flAlphaTestReference1: 0.5, g_flTranslucentScrollQuantize0_1: 0,
-  g_flTranslucentScrollQuantize1_1: 0, g_flSelfIllumScale1: 0, g_flSelfIllumAlbedoFactor1: 1, g_flSelfIllumScrollQuantize1: 0,
+  g_flTranslucentScrollQuantize1_1: 0, g_flTranslucentTexcoordRotation0_1: 0, g_flTranslucentTexcoordRotation1_1: 0, g_flSelfIllumScale1: 0, g_flSelfIllumAlbedoFactor1: 1, g_flSelfIllumScrollQuantize1: 0,
   g_flUnlitAdditiveScale1: 1,
   g_flJitterSpeedA1: 10, g_flJitterSpeedB1: 7, g_flJitterQuantizeTime1: 0, g_flJitterQuantizeDisplacement1: 0,
 };
 const DEFAULT_VEC2: Record<string, [number, number]> = {
   g_vAlbedoScrollSpeed1: [0, 0], g_vAlbedoTexcoordScale1: [1, 1], g_vAlbedoTexcoordOffset1: [0, 0], g_vSelfIllumTexcoordScale1: [1, 1],
   g_vSelfIllumTexcoordOffset1: [0, 0], g_vTranslucentScrollSpeed0_1: [0, 0], g_vTranslucentScrollSpeed1_1: [0, 0], g_vSelfIllumScrollSpeed1: [0, 0],
+  g_vTranslucentTexcoordScale0_1: [1, 1], g_vTranslucentTexcoordOffset0_1: [0, 0], g_vTranslucentTexcoordScale1_1: [1, 1], g_vTranslucentTexcoordOffset1_1: [0, 0],
 };
+/** Colour params the material stores gamma encoded and the shader takes linear. */
+const GAMMA_PARAMS = new Set(['g_vSelfIllumTint1']);
 const DEFAULT_BOOLS: Record<string, boolean> = {
   g_bMaskColorTint1: true, g_bMaskVertexColorTint1: true, g_bApplyTintToVertexColors: false, g_bUseSecondaryUvForTranslucency: false,
   g_bUseSecondaryUvForAltTranslucency: false, g_bUseSecondaryUvForSelfIllum1: false,
@@ -433,6 +452,8 @@ export class ModelMaterial {
   private readonly white: THREE.DataTexture;
   private readonly supported: boolean;
   private readonly requiredTextures = new Set<string>();
+  /** The dynamic expressions of params this shader takes, by param name. */
+  private readonly dynamic: [string, VfxExpression][] = [];
 
   constructor(data: ParticleMaterialData, context: ParticleRendererContext, vertexColors: boolean, skinned = false) {
     const ints = data.intParams;
@@ -514,6 +535,11 @@ export class ModelMaterial {
     };
     for (const [name, fallback] of Object.entries(jitterVectors)) this.uniforms[name] = { value: new THREE.Vector3(...vec3(name, fallback)) };
 
+    for (const [name, bytes] of Object.entries(data.dynamicParams ?? {})) {
+      const expression = name in this.uniforms ? compileVfxExpression(bytes) : null;
+      if (expression !== null && expression.attributes.length > 0) this.dynamic.push([name, expression]);
+    }
+
     for (const [name, srgbRead, fallback] of TEXTURES) {
       const active = name === 'g_tColor' || name === 'g_tTintMask'
         || name === 'g_tAltTranslucency' && feature('F_ADVANCED_TRANSLUCENCY') === 1
@@ -563,6 +589,19 @@ export class ModelMaterial {
 
   setTint(tint: [number, number, number], alpha: number): void {
     (this.uniforms.uTint.value as THREE.Vector4).set(tint[0], tint[1], tint[2], alpha);
+  }
+
+  /** The render attributes this draw carries (by StringToken): each dynamic param whose attributes are all set takes its value. */
+  setRenderAttributes(lookup: (token: number) => number[] | undefined): void {
+    for (const [name, expression] of this.dynamic) {
+      const value = expression.evaluate(lookup);
+      if (value === null) continue;
+      const uniform = this.uniforms[name];
+      const channel = (i: number) => (GAMMA_PARAMS.has(name) ? srgbGammaToLinear(value[i] ?? value[0]) : value[i] ?? value[0]);
+      if (typeof uniform.value === 'number') uniform.value = channel(0);
+      else if (uniform.value instanceof THREE.Vector2) uniform.value.set(channel(0), channel(1));
+      else if (uniform.value instanceof THREE.Vector3) uniform.value.set(channel(0), channel(1), channel(2));
+    }
   }
 
   setModelScale(scale: [number, number, number]): void {

@@ -858,7 +858,7 @@ export default function Profiles() {
                 }
               >
                 <div className="flex flex-col gap-4">
-                    <div className="flex items-center justify-between text-sm text-text-secondary bg-black/20 p-4 rounded-lg border border-hl/5">
+                    <div className="flex items-center justify-between text-sm text-text-secondary bg-shade/20 p-4 rounded-lg border border-hl/5">
                       <div className="flex flex-col items-center">
                         <span className="text-2xl font-bold text-text-primary">{profileModGroups.length}</span>
                         <span className="text-xs uppercase tracking-wider opacity-70">

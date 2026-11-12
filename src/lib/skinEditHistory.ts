@@ -1,33 +1,12 @@
+// The skin editor's undo history: the generic draft history (editHistory.ts) over its part edits.
+
 import type { SkinPartEdit } from '../types/skinEditor';
+import { createEditHistory, recordEdit, redoEdit, undoEdit, type EditHistory, type EditInteraction } from './editHistory';
 
-export type SkinEditInteraction = 'pointer' | 'keyboard' | 'input';
-export interface SkinEditHistory {
-  past: SkinPartEdit[][];
-  present: SkinPartEdit[];
-  future: SkinPartEdit[][];
-  interaction: { kind: SkinEditInteraction; recorded: boolean } | null;
-}
+export type SkinEditInteraction = EditInteraction;
+export type SkinEditHistory = EditHistory<SkinPartEdit[]>;
 
-export function createSkinEditHistory(edits: SkinPartEdit[]): SkinEditHistory {
-  return { past: [], present: edits, future: [], interaction: null };
-}
-
-export function recordSkinEdit(history: SkinEditHistory, edits: SkinPartEdit[]): SkinEditHistory {
-  if (JSON.stringify(history.present) === JSON.stringify(edits)) return history;
-  return {
-    past: history.interaction?.recorded ? history.past : [...history.past, history.present].slice(-100),
-    present: edits,
-    future: [],
-    interaction: history.interaction ? { ...history.interaction, recorded: true } : null,
-  };
-}
-
-export function undoSkinEdit(history: SkinEditHistory): SkinEditHistory {
-  const previous = history.past.at(-1);
-  return previous ? { past: history.past.slice(0, -1), present: previous, future: [history.present, ...history.future], interaction: null } : history;
-}
-
-export function redoSkinEdit(history: SkinEditHistory): SkinEditHistory {
-  const next = history.future[0];
-  return next ? { past: [...history.past, history.present], present: next, future: history.future.slice(1), interaction: null } : history;
-}
+export const createSkinEditHistory = (edits: SkinPartEdit[]): SkinEditHistory => createEditHistory(edits);
+export const recordSkinEdit = (history: SkinEditHistory, edits: SkinPartEdit[]): SkinEditHistory => recordEdit(history, edits);
+export const undoSkinEdit = (history: SkinEditHistory): SkinEditHistory => undoEdit(history);
+export const redoSkinEdit = (history: SkinEditHistory): SkinEditHistory => redoEdit(history);
