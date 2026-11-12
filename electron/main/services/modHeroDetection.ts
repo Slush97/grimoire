@@ -1,6 +1,6 @@
 import { HERO_ALIASES } from '@grimoire/social-types/heroes';
 import type { GlobalModType, InstalledHeroDetection, LockerHeroSource } from '../../../src/types/mod';
-import { categoryGeneralType, categoryHeroName, resolveCategoryPath, resolveInstalledGeneralType, type CategoryPaths } from '../../../src/lib/categoryPaths';
+import { baseTagGlobalType, categoryGeneralType, categoryHeroName, resolveCategoryPath, resolveInstalledGeneralType, type CategoryPaths } from '../../../src/lib/categoryPaths';
 import type { ModMetadata } from './metadata';
 import { canonicalSupportedHeroName, supportedHeroNames } from './heroCodenames';
 import { inferHeroesFromVpkPaths, invalidateVpkParseCache, parseVpkDirectoryCached } from './vpk';
@@ -165,10 +165,32 @@ export interface ResolvedModClassification {
     lockerHeroes: string[];
     globalType?: GlobalModType;
     metadataPatch?: Pick<ModMetadata, 'heroDetection'>;
+    detectedTags?: { heroes: string[]; globalType?: GlobalModType };
 }
 
 /** Shared runtime identity for library display and local-group compatibility. */
 export function resolveModClassification(
+    mod: DetectionMod & { path: string },
+    metadata: ModMetadata | undefined,
+    paths?: CategoryPaths,
+): ResolvedModClassification {
+    const detected = resolveDetectedModClassification(mod, metadata, paths);
+    const overrides = metadata?.tagOverrides;
+    if (!overrides) return detected;
+    const lockerHeroes = overrides.heroes ?? detected.lockerHeroes;
+    const globalType = overrides.base === undefined ? detected.globalType
+        : overrides.base.map(baseTagGlobalType).find(type => type !== undefined);
+    return {
+        ...detected,
+        detectedTags: { heroes: detected.lockerHeroes, globalType: detected.globalType },
+        globalType,
+        lockerHeroes,
+        lockerHero: lockerHeroes.length === 1 ? lockerHeroes[0] : undefined,
+        lockerHeroSource: overrides.heroes === undefined ? detected.lockerHeroSource : 'manual',
+    };
+}
+
+function resolveDetectedModClassification(
     mod: DetectionMod & { path: string },
     metadata: ModMetadata | undefined,
     paths?: CategoryPaths,

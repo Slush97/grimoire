@@ -4,6 +4,20 @@ import { categoryIdFromProfileUrl } from './heroFilter';
 
 export type CategoryPaths = ReadonlyMap<number, readonly GameBananaCategory[]>;
 
+/** Stable labels shared by stored Base selections and Locker destinations. */
+export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
+  'soul-container': 'Soul Containers',
+  'spirit-urn': 'Spirit Urns',
+  hideout: 'Hideout',
+  icons: 'Icon Packs',
+  hud: 'HUD',
+  effects: 'Effects',
+  animations: 'Animations',
+  maps: 'Maps',
+  announcer: 'Announcer / SFX',
+  'killstreak-music': 'Killstreak Music',
+};
+
 /** Correct known upstream labels without changing category identities. */
 export function normalizeCategoryLabel(label: string): string {
   const cleaned = label.replace(/\s+/g, ' ').trim();
@@ -92,6 +106,11 @@ export function categoryGeneralType(path: readonly GameBananaCategory[]): Global
       case 'spirit urns': return 'spirit-urn';
       case 'hideout': return 'hideout';
       case 'hud': return 'hud';
+      case 'icons':
+      case 'icon packs': return 'icons';
+      case 'effects': return 'effects';
+      case 'announcer':
+      case 'announcer / sfx': return 'announcer';
       case 'killstreak music': return 'killstreak-music';
       case 'animations': return 'animations';
       case 'maps': return 'maps';
@@ -109,6 +128,15 @@ interface InstalledGeneralTypeInput {
   categoryId?: number;
   categoryName?: string;
   sourceSection?: string;
+}
+
+/** Only labels with a Locker destination get the informational Locker icon. */
+export function baseTagGlobalType(label: string): GlobalModType | undefined {
+  return categoryGeneralType([{ name: label }]);
+}
+
+export function baseTagHasLockerDestination(label: string): boolean {
+  return !!baseTagGlobalType(label) || ['skins', 'sounds'].includes(normalizeCategoryLabel(label).toLowerCase());
 }
 
 /** Resolve runtime classification without persisting category-derived tags. */

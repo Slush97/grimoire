@@ -33,6 +33,12 @@ took the "Global" label the users already use for it and a distinct code name
 `PRIORITY_TAB` is a separate sentinel from `GlobalModType` specifically so a
 Global mod can never be written into the classification field by accident.
 
+Installed's unified **Set tags** menu calls its non-hero section **Base**. Its
+optional `tagOverrides` metadata overlays the original categories and detected
+heroes; empty selections suppress them, and Reset removes the overlay. Several
+Base tags can route one mod into several General destinations without changing
+its Global placement. The menu marks matching destinations with the Locker icon.
+
 They are also independent: Global is placement, so unlike a `globalType` tag it
 does **not** pull a mod off the hero axis. A Global hero skin still shows in
 that hero's Locker pile; it just also wins every collision.

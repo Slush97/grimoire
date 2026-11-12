@@ -128,6 +128,7 @@ interface MenuItemProps {
   tone?: 'default' | 'success' | 'warning' | 'danger';
   disabled?: boolean;
   title?: string;
+  align?: 'start' | 'center';
   onSelect: (event: Event) => void;
   onContextMenu?: (event: MouseEvent) => void;
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
@@ -147,7 +148,7 @@ const ITEM_TONE_CLASS: Record<NonNullable<MenuItemProps['tone']>, string> = {
   danger: 'text-state-danger focus:bg-state-danger/10 data-[highlighted]:bg-state-danger/10',
 };
 
-export function MenuItem({ children, variant = 'default', icon: Icon, leading, spinning, tone = 'default', disabled, title, onSelect, onContextMenu, onKeyDown }: MenuItemProps) {
+export function MenuItem({ children, variant = 'default', icon: Icon, leading, spinning, tone = 'default', disabled, title, align = 'start', onSelect, onContextMenu, onKeyDown }: MenuItemProps) {
   const { ns } = useMenuImpl();
   const Item = ns.Item;
   const toneClass = tone === 'default' && variant === 'picker'
@@ -167,7 +168,7 @@ export function MenuItem({ children, variant = 'default', icon: Icon, leading, s
       className={`${variant === 'picker' ? PICKER_ITEM_CLASS : ITEM_GEOMETRY_CLASS} ${toneClass}`}
     >
       {leading ?? (Icon && <Icon className={`h-4 w-4 flex-shrink-0 ${variant === 'picker' && tone === 'default' ? 'text-text-secondary' : 'text-current'} ${spinning ? 'animate-spin' : ''}`} />)}
-      <span className="min-w-0 flex-1 truncate">{children}</span>
+      <span className={`min-w-0 flex-1 truncate ${align === 'center' ? 'text-center' : ''}`}>{children}</span>
     </Item>
   );
 }
@@ -232,6 +233,8 @@ interface MenuCheckboxItemProps {
   checked: boolean;
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
+  indicatorPlacement?: 'start' | 'end';
+  endAdornment?: ReactNode;
 }
 
 /**
@@ -243,6 +246,8 @@ export function MenuCheckboxItem({
   checked,
   disabled,
   onCheckedChange,
+  indicatorPlacement = 'start',
+  endAdornment,
 }: MenuCheckboxItemProps) {
   const { ns } = useMenuImpl();
   const CheckboxItem = ns.CheckboxItem;
@@ -256,9 +261,9 @@ export function MenuCheckboxItem({
         event.stopPropagation();
       }}
       onCheckedChange={onCheckedChange}
-      className={`${ITEM_GEOMETRY_CLASS} ${DEFAULT_TONE_CLASS}`}
+      className={`${ITEM_GEOMETRY_CLASS} ${DEFAULT_TONE_CLASS} ${indicatorPlacement === 'end' ? 'data-[state=checked]:text-accent' : ''}`}
     >
-      <span
+      {indicatorPlacement === 'start' && <span
         className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-sm border ${
           checked ? 'border-accent bg-accent text-accent-foreground' : 'border-border'
         }`}
@@ -266,8 +271,10 @@ export function MenuCheckboxItem({
         <ItemIndicator>
           <Check className="h-3 w-3" />
         </ItemIndicator>
-      </span>
+      </span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
+      {endAdornment}
+      {indicatorPlacement === 'end' && <ItemIndicator className="shrink-0"><Check className="h-3.5 w-3.5" /></ItemIndicator>}
     </CheckboxItem>
   );
 }

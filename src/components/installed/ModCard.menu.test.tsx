@@ -6,6 +6,7 @@ import { ModCard } from './ModCard';
 import { HERO_NAMES_SORTED } from '../../lib/lockerUtils';
 import { useCategoryStore } from '../../stores/categoryStore';
 import { buildCategoryPaths } from '../../lib/categoryPaths';
+import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import type { AppSettings, Mod } from '../../types/mod';
 import * as imageActions from '../../lib/imageActions';
 import { useAppStore } from '../../stores/appStore';
@@ -46,7 +47,7 @@ describe('installed card menu mounting', () => {
         priority: 1, size: 100, installedAt: '2026-10-10T10:00:00Z',
       },
       viewMode: 'list', hideNsfwPreviews: true, soundVolume: 0, conflicts: [], entryKey: 'test',
-      onToggle: vi.fn(), onDelete: vi.fn(), onTagLocker: vi.fn(), onTagGlobal: vi.fn(),
+      onToggle: vi.fn(), onDelete: vi.fn(), onSetTags: vi.fn(),
     };
   });
 
@@ -71,7 +72,7 @@ describe('installed card menu mounting', () => {
 
   async function openLockerTags() {
     const trigger = [...document.querySelectorAll<HTMLElement>('[role="menuitem"][aria-haspopup="menu"]')]
-      .find((item) => item.textContent?.includes('installed.tag.setLockerTag'))!;
+      .find((item) => item.textContent?.includes('installed.tag.setTags'))!;
     expect(trigger).toBeDefined();
     await act(async () => {
       trigger.focus();
@@ -82,30 +83,30 @@ describe('installed card menu mounting', () => {
   it.each(['context', 'dropdown'] as const)('constructs %s actions and hero choices only when their menu opens', async (kind) => {
     // Spying on roster iteration detects JSX allocation even if React never
     // mounts the resulting nodes under a closed Radix portal.
-    const rosterIteration = vi.spyOn(HERO_NAMES_SORTED, 'map');
+    const rosterIteration = vi.spyOn(HERO_NAMES_SORTED, Symbol.iterator);
     await act(async () => root.render(<ModCard {...input} />));
     expect(rosterIteration).not.toHaveBeenCalled();
-    expect(translate).not.toHaveBeenCalledWith('installed.tag.setLockerTag');
+    expect(translate).not.toHaveBeenCalledWith('installed.tag.setTags');
 
     // Closed menus must pick up current callbacks and tag state when opened.
-    input = { ...input, mod: { ...input.mod, lockerHero: HERO_NAMES_SORTED[0] }, onTagLocker: vi.fn() };
+    input = { ...input, mod: { ...input.mod, lockerHeroes: [HERO_NAMES_SORTED[0]] }, onSetTags: vi.fn() };
     await act(async () => root.render(<ModCard {...input} />));
     expect(rosterIteration).not.toHaveBeenCalled();
 
     await openMenu(kind);
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
-    expect(translate).toHaveBeenCalledWith('installed.tag.setLockerTag');
+    expect(translate).toHaveBeenCalledWith('installed.tag.setTags');
     expect(rosterIteration).not.toHaveBeenCalled();
 
     await openLockerTags();
     expect(rosterIteration).toHaveBeenCalled();
-    const heroChoices = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
+    const heroChoices = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')]
       .filter((item) => item.querySelector('img'));
     expect(heroChoices).toHaveLength(HERO_NAMES_SORTED.length);
     expect(heroChoices[0].getAttribute('aria-checked')).toBe('true');
     await act(async () => heroChoices[1].click());
-    expect(input.onTagLocker).toHaveBeenCalledExactlyOnceWith(HERO_NAMES_SORTED[1]);
-    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(input.onSetTags).toHaveBeenCalledExactlyOnceWith({ heroes: [HERO_NAMES_SORTED[0], HERO_NAMES_SORTED[1]] });
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
   });
 
   it.each(['grid', 'compact', 'list'] as const)('shows a dynamic hero once in %s cards', async viewMode => {
@@ -133,12 +134,7 @@ describe('installed card menu mounting', () => {
     await act(async () => root.render(<ModCard {...input} />));
     expect(host.textContent).not.toContain('Saved mods');
     await openMenu('context');
-    const trigger = [...document.querySelectorAll<HTMLElement>('[role="menuitem"][aria-haspopup="menu"]')]
-      .find(item => item.textContent === 'installed.tags.title')!;
-    await act(async () => {
-      trigger.focus();
-      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-    });
+    await openLockerTags();
     const checkbox = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')]
       .find(item => item.textContent === 'Saved mods')!;
     expect(checkbox.getAttribute('aria-checked')).toBe('false');
@@ -146,7 +142,72 @@ describe('installed card menu mounting', () => {
     expect(useInstalledTagsStore.getState().byScope[scope][0].keys).toEqual(['Mod:gamebanana:17']);
     expect(host.querySelector('[data-fitting-tags]')?.textContent).toContain('Saved mods');
     expect(input.onToggle).not.toHaveBeenCalled();
-    expect(input.onTagLocker).not.toHaveBeenCalled();
+    expect(input.onSetTags).not.toHaveBeenCalled();
+  });
+
+  it('combines tag sections above Add to list and checks detected Base and multiple Hero tags', async () => {
+    input = { ...input, lists: [], listIds: [], onToggleList: vi.fn(), onCreateList: vi.fn(),
+      mod: { ...input.mod, sourceSection: 'Sound', categoryName: 'Abilities', lockerHeroes: ['Haze', 'Wraith'] } };
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu('context');
+    const triggers = [...document.querySelectorAll('[role="menuitem"][aria-haspopup="menu"]')].map(item => item.textContent);
+    expect(triggers.indexOf('installed.tag.setTags')).toBeLessThan(triggers.indexOf('installed.lists.menuTrigger'));
+    expect(triggers).not.toContain('installed.tags.title');
+    await openLockerTags();
+    const choices = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')];
+    for (const label of ['Sounds', 'Abilities', 'Haze', 'Wraith']) {
+      expect(choices.find(item => item.textContent === gameBananaCategoryLabel(label, translate))?.getAttribute('aria-checked')).toBe('true');
+    }
+    expect(choices.find(item => item.textContent === 'gamebanana.categories.hud')?.querySelector('.lucide-vault')).not.toBeNull();
+    expect(choices.find(item => item.textContent === 'gamebanana.categories.abilities')?.querySelector('.lucide-vault')).toBeNull();
+    expect(document.body.textContent).not.toContain('installed.tag.custom');
+    expect(document.body.textContent).toContain('installed.tag.base');
+    await act(async () => choices.find(item => item.textContent === 'gamebanana.categories.abilities')!.click());
+    expect(input.onSetTags).toHaveBeenCalledWith({ base: ['Sounds'] });
+  });
+
+  it('pins detected defaults independently of selected tags and includes default heroes missing from the cached roster', async () => {
+    useCategoryStore.setState({ heroNames: ['Ivy'] });
+    input = { ...input, mod: { ...input.mod, gameBananaId: 17, sourceSection: 'Sound', categoryName: 'Abilities',
+      lockerHeroes: ['Ivy'], globalType: 'hud', tagOverrides: { base: ['HUD'], heroes: ['Ivy'] },
+      detectedTags: { heroes: ['Haze', 'Wraith'] },
+    } };
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu('context'); await openLockerTags();
+    const choices = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')];
+    for (const label of ['Abilities', 'Sounds', 'Haze', 'Wraith']) {
+      const row = choices.find(item => item.textContent === gameBananaCategoryLabel(label, translate))!;
+      expect(row.getAttribute('aria-checked')).toBe('false');
+      expect(row.querySelector('.lucide-pin')).not.toBeNull();
+    }
+    for (const label of ['HUD', 'Ivy']) {
+      const row = choices.find(item => item.textContent === gameBananaCategoryLabel(label, translate))!;
+      expect(row.getAttribute('aria-checked')).toBe('true');
+      expect(row.querySelector('.lucide-pin')).toBeNull();
+    }
+  });
+
+  it('clears assigned tags without forgetting detected categories, then restores them on Reset', async () => {
+    const settings = { deadlockPath: '/game', devMode: false } as AppSettings;
+    useAppStore.setState({ settings });
+    const scope = getInstallationScope(settings)!;
+    useInstalledTagsStore.setState({ byScope: { [scope]: [{ id: 'saved', name: 'Saved mods', keys: ['Mod:gamebanana:17'] }] } });
+    input = { ...input, mod: { ...input.mod, gameBananaId: 17, categoryName: 'Skins > Haze', lockerHeroes: ['Haze'] },
+      onSetTags: vi.fn(async tags => {
+        input = { ...input, mod: { ...input.mod, tagOverrides: tags ?? undefined } };
+        root.render(<ModCard {...input} />);
+      }) };
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu('context'); await openLockerTags();
+    const action = (label: string) => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === label)!;
+    await act(async () => action('common.actions.clear').click());
+    expect(host.querySelector('[data-fitting-tags]')?.textContent ?? '').not.toContain('gamebanana.categories.skins');
+    expect(useInstalledTagsStore.getState().byScope[scope][0].keys).toEqual([]);
+    expect(input.mod.categoryName).toBe('Skins > Haze');
+    await openMenu('context'); await openLockerTags();
+    await act(async () => action('common.actions.reset').click());
+    expect(host.querySelector('[data-fitting-tags]')?.textContent).toContain('gamebanana.categories.skins');
+    expect(input.mod.tagOverrides).toBeUndefined();
   });
 
   it('updates the visible card tag order from shared priorities without changing mod state', async () => {
@@ -458,10 +519,10 @@ describe('installed card menu mounting', () => {
     await act(async () => root.render(<ModCard {...input} />));
     await openMenu('dropdown');
     await openLockerTags();
-    const choices = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
+    const choices = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')]
       .filter(item => item.querySelector('img'));
     expect(choices.map(item => item.textContent)).toEqual(['Baba', 'Solomon']);
     await act(async () => choices[1].click());
-    expect(input.onTagLocker).toHaveBeenCalledExactlyOnceWith('Solomon');
+    expect(input.onSetTags).toHaveBeenCalledExactlyOnceWith({ heroes: ['Solomon'] });
   });
 });

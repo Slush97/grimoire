@@ -4,7 +4,7 @@ import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import { RequirementWarning } from '../requirements/RequirementWarning';
 import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, ArrowLeftRight, Rotate3d } from 'lucide-react';
 import type { EntrySwapTarget } from '../../lib/modEntries';
-import { MenuCheckboxItem, MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
+import { MenuCheckboxItem, MenuContent, MenuItem, MenuLabel, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
 import { useRequirementsStore } from '../../stores/requirementsStore';
@@ -24,8 +24,10 @@ import ModThumbnail from '../ModThumbnail';
 import { RevealImage } from '../common/RevealImage';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import PriorityEditor from '../PriorityEditor';
-import { getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel } from '../../lib/lockerUtils';
-import { getInstalledGroupTaxonomy, sortInstalledTags } from '../../lib/installedCardTaxonomy';
+import { getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED } from '../../lib/lockerUtils';
+import { getInstalledDefaultTaxonomy, getInstalledGroupTaxonomy, installedBaseTagOptions, sortInstalledTags } from '../../lib/installedCardTaxonomy';
+import { baseTagHasLockerDestination } from '../../lib/categoryPaths';
+import { Pin, Vault } from 'lucide-react';
 import { formatRelativeDate, formatAbsoluteDate } from '../../lib/dates';
 import { formatBytes } from '../../lib/formatBytes';
 import { shakeElement } from '../../lib/shakeElement';
@@ -77,6 +79,8 @@ interface ModCardProps {
     lockerHero?: string;
     lockerHeroSource?: Mod['lockerHeroSource'];
     lockerHeroes?: string[];
+    tagOverrides?: Mod['tagOverrides'];
+    detectedTags?: Mod['detectedTags'];
     globalType?: GlobalModType;
     /** Lives in the citadel/grimoire priority root: wins every file collision
      *  and is never disabled by the launch shuffle. */
@@ -129,8 +133,7 @@ interface ModCardProps {
    *  `imprinted` flag is true (the parent gates on it); shown in the card's
    *  right-click menu. */
   onViewImprint?: () => void;
-  onTagLocker?: (heroName: string | null) => void | Promise<void>;
-  onTagGlobal?: (globalType: GlobalModType | null) => void | Promise<void>;
+  onSetTags?: (tags: Mod['tagOverrides'] | null) => void | Promise<void>;
   /** Toggle this mod's Global (priority root) placement. */
   onSetPriority?: (priority: boolean) => void | Promise<void>;
   onFixUnknown?: () => void;
@@ -725,8 +728,7 @@ export function ModCard({
   onAddVariant,
   onUngroupVariants,
   onViewImprint,
-  onTagLocker,
-  onTagGlobal,
+  onSetTags,
   onSetPriority,
   onFixUnknown,
   fixingUnknown,
@@ -871,25 +873,14 @@ export function ModCard({
     window.open(cardImageSource, '_blank', 'noopener,noreferrer');
   };
 
-  const applyLockerTag = async (heroName: string | null) => {
-    if (!onTagLocker || menuBusy) return;
+  const applyTags = async (tags: Mod['tagOverrides'] | null, clearCustom = false) => {
+    if (!onSetTags || menuBusy) return;
     setMenuBusy(true);
     try {
-      await onTagLocker(heroName);
+      await onSetTags(tags);
+      if (clearCustom && tagScope) useInstalledTagsStore.getState().clearForMods(tagScope, group?.variants ?? [mod]);
     } catch (err) {
-      reportMenuError('Failed to set locker hero', err);
-    } finally {
-      setMenuBusy(false);
-    }
-  };
-
-  const applyGlobalTag = async (globalType: GlobalModType) => {
-    if (!onTagGlobal || menuBusy) return;
-    setMenuBusy(true);
-    try {
-      await onTagGlobal(globalType);
-    } catch (err) {
-      reportMenuError('Failed to set global locker tag', err);
+      reportMenuError('Failed to set mod tags', err);
     } finally {
       setMenuBusy(false);
     }
@@ -905,19 +896,6 @@ export function ModCard({
       await onSetPriority(!mod.priorityMod);
     } catch (err) {
       reportMenuError('Failed to change Global placement', err);
-    } finally {
-      setMenuBusy(false);
-    }
-  };
-
-  const clearLockerTag = async () => {
-    if (menuBusy) return;
-    setMenuBusy(true);
-    try {
-      await onTagLocker?.(null);
-      await onTagGlobal?.(null);
-    } catch (err) {
-      reportMenuError('Failed to clear locker tag', err);
     } finally {
       setMenuBusy(false);
     }
@@ -1025,7 +1003,7 @@ export function ModCard({
     !!onEditLocal || !!onAddVariant || !!onUngroupVariants || !!onOpenDetails || !!onViewAuthor
     || !!cardImageSource;
   const hasSecondaryActions =
-    !!onSoloLaunch || !!onSetPriority || !!onTagLocker || !!onTagGlobal || !!onFixUnknown
+    !!onSoloLaunch || !!onSetPriority || !!onFixUnknown
     || !!(mod.merged && (onCopyShareCode || onUnmerge));
   const renderCardMenuItems = () => (
     <>
@@ -1097,6 +1075,52 @@ export function ModCard({
         onDelete={setBackupToDelete}
       />
       {(hasTopActions || modBackups.length > 0) && <MenuSeparator />}
+      {onSetTags && <MenuSub>
+        <MenuSubTrigger icon={TagIcon}>{t('installed.tag.setTags')}</MenuSubTrigger>
+        <MenuSubContent className="max-h-72 max-w-72 overflow-y-auto">
+          <DeferredMenuItems>{() => {
+            const defaults = getInstalledDefaultTaxonomy(mod, group?.variants ?? [mod], taxonomyContext);
+            const heroOptions = [...new Set([...tagHeroNames, ...defaults.heroNames, ...baseTaxonomy.heroNames])].sort((a, b) => a.localeCompare(b));
+            const baseOptions = sortInstalledTags(installedBaseTagOptions(taxonomyContext, [...defaults.tags, ...baseTaxonomy.tags])
+              .map(label => ({ key: `tag:${label.toLowerCase()}`, label })), tagOrder);
+            return <>
+              <div className="grid grid-cols-2 gap-1">
+                <MenuItem align="center" disabled={menuBusy} onSelect={() => void applyTags({ base: [], heroes: [] }, true)}>{t('common.actions.clear')}</MenuItem>
+                <MenuItem align="center" disabled={menuBusy} onSelect={() => void applyTags(null)}>{t('common.actions.reset')}</MenuItem>
+              </div>
+              <MenuSeparator />
+              {customTags.length > 0 && <>
+                <MenuLabel>{t('installed.tag.custom')}</MenuLabel>
+                {customTags.map(tag => <MenuCheckboxItem key={tag.id} indicatorPlacement="end" disabled={menuBusy}
+                  checked={assignedCustomTags.some(assigned => assigned.id === tag.id)}
+                  onCheckedChange={() => {
+                    if (!tagScope) return;
+                    const assigned = assignedCustomTags.some(item => item.id === tag.id);
+                    useInstalledTagsStore.getState().setForMods(tagScope, tag.id, group?.variants ?? [mod], !assigned);
+                  }}>{tag.name}</MenuCheckboxItem>)}
+                <MenuSeparator />
+              </>}
+              <MenuLabel>{t('installed.tag.base')}</MenuLabel>
+              {baseOptions.map(({ key, label }) => <MenuCheckboxItem key={key} indicatorPlacement="end" disabled={menuBusy}
+                checked={baseTaxonomy.tags.includes(label)}
+                endAdornment={<>
+                  {baseTagHasLockerDestination(label) && <Vault aria-hidden className="h-3.5 w-3.5 shrink-0" />}
+                  {defaults.tags.includes(label) && <span className="shrink-0" title={t('installed.tag.defaultTag')}><Pin aria-hidden className="h-3.5 w-3.5" /></span>}
+                </>}
+                onCheckedChange={checked => void applyTags({ base: checked ? [...baseTaxonomy.tags, label] : baseTaxonomy.tags.filter(tag => tag !== label) })}>
+                {gameBananaCategoryLabel(label, t)}
+              </MenuCheckboxItem>)}
+              <MenuSeparator />
+              <MenuLabel>{t('installed.tag.hero')}</MenuLabel>
+              {heroOptions.map(heroName => <MenuCheckboxItem key={heroName} indicatorPlacement="end" disabled={menuBusy}
+                endAdornment={defaults.heroNames.includes(heroName) && <span className="shrink-0" title={t('installed.tag.defaultTag')}><Pin aria-hidden className="h-3.5 w-3.5" /></span>}
+                checked={baseTaxonomy.heroNames.includes(heroName)} onCheckedChange={checked => void applyTags({
+                  heroes: checked ? [...baseTaxonomy.heroNames, heroName] : baseTaxonomy.heroNames.filter(name => name !== heroName),
+                })}><HeroTagLabel heroName={heroName} /></MenuCheckboxItem>)}
+            </>;
+          }}</DeferredMenuItems>
+        </MenuSubContent>
+      </MenuSub>}
       {hasListActions && lists && onToggleList && onCreateList && (
         <ModListSubmenu
           lists={lists}
@@ -1105,13 +1129,6 @@ export function ModCard({
           onCreateNew={onCreateList}
         />
       )}
-      {tagScope && customTags.length > 0 && <MenuSub>
-        <MenuSubTrigger icon={TagIcon}>{t('installed.tags.title')}</MenuSubTrigger>
-        <MenuSubContent className="max-h-72 overflow-y-auto">
-          {customTags.map(tag => <MenuCheckboxItem key={tag.id} checked={assignedCustomTags.some(assigned => assigned.id === tag.id)}
-            onCheckedChange={() => useInstalledTagsStore.getState().toggle(tagScope, tag.id, mod)}>{tag.name}</MenuCheckboxItem>)}
-        </MenuSubContent>
-      </MenuSub>}
       {onToggleFavorite && (
         <MenuItem icon={Star} onSelect={onToggleFavorite}>
           {favoriteMenuLabel}
@@ -1146,61 +1163,6 @@ export function ModCard({
               ? t('installed.priority.clear')
               : t('installed.priority.make')}
         </MenuItem>
-      )}
-      {(onTagLocker || onTagGlobal) && (
-        <MenuSub>
-          <MenuSubTrigger icon={TagIcon}>{t('installed.tag.setLockerTag')}</MenuSubTrigger>
-          {/* Cap the height: the hero list is the full roster and would
-              otherwise run taller than the window. */}
-          <MenuSubContent className="max-h-72 overflow-y-auto">
-            <DeferredMenuItems>{() => (
-              <>
-                <MenuItem
-                  disabled={menuBusy || (!mod.lockerHero && !mod.globalType)}
-                  onSelect={() => void clearLockerTag()}
-                >
-                  {t('installed.tag.clearLockerTag')}
-                </MenuItem>
-                <MenuSeparator />
-                {/* Assigning a General type clears the hero assignment. Separate
-                    radio groups keep the two destination lists easy to scan. */}
-                {onTagGlobal && (
-                  <>
-                    <MenuLabel>{t('installed.tag.global')}</MenuLabel>
-                    <MenuRadioGroup
-                      value={mod.globalType ?? ''}
-                      onValueChange={(value) => void applyGlobalTag(value as GlobalModType)}
-                    >
-                      {GLOBAL_MOD_TYPE_ORDER.map((type) => (
-                        <MenuRadioItem key={type} value={type} disabled={menuBusy}>
-                          {globalModTypeLabel(type, t)}
-                        </MenuRadioItem>
-                      ))}
-                    </MenuRadioGroup>
-                    <MenuSeparator />
-                  </>
-                )}
-                <MenuLabel>{t('installed.tag.hero')}</MenuLabel>
-                <MenuRadioGroup
-                  value={canonicalHeroName(mod.lockerHero) ?? ''}
-                  onValueChange={(value) => void applyLockerTag(value)}
-                >
-                  {tagHeroNames.map((heroName) => (
-                    <MenuRadioItem
-                      key={heroName}
-                      value={heroName}
-                      disabled={menuBusy}
-                      // Inferred tags read as informational, manual ones as chosen.
-                      tone={mod.lockerHeroSource === 'manual' ? 'accent' : 'info'}
-                    >
-                      <HeroTagLabel heroName={heroName} />
-                    </MenuRadioItem>
-                  ))}
-                </MenuRadioGroup>
-              </>
-            )}</DeferredMenuItems>
-          </MenuSubContent>
-        </MenuSub>
       )}
       {onFixUnknown && (
         <MenuItem

@@ -31,6 +31,18 @@ beforeEach(() => {
 });
 
 describe('installed hero detection', () => {
+    it('overlays tag selections without changing original categories or detected heroes', () => {
+        const metadata = { gameBananaId: 10, categoryName: 'Skins > Ivy', abilitySounds: null };
+        expect(resolveModClassification(mod, metadata).lockerHeroes).toEqual(['Ivy']);
+        expect(resolveModClassification(mod, { ...metadata, tagOverrides: { base: [], heroes: [] } }))
+            .toMatchObject({ lockerHeroes: [], globalType: undefined, lockerHero: undefined });
+        expect(resolveModClassification(mod, { ...metadata, tagOverrides: { base: ['HUD'], heroes: ['Haze', 'Wraith'] } }))
+            .toMatchObject({ lockerHeroes: ['Haze', 'Wraith'], globalType: 'hud', detectedTags: { heroes: ['Ivy'], globalType: undefined } });
+        expect(resolveModClassification(mod, { ...metadata, tagOverrides: { base: ['HUD'] } }).lockerHeroes).toEqual(['Ivy']);
+        expect(resolveModClassification(mod, metadata).lockerHeroes).toEqual(['Ivy']);
+        expect(metadata.categoryName).toBe('Skins > Ivy');
+    });
+
     it.each(['Sound', 'Wip'])('detects every payload hero before contradictory %s file labels', (sourceSection) => {
         parser.read.mockReturnValue([
             'sounds/vo/atlas/line.vsnd_c',

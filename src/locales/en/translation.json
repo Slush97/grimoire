@@ -1831,7 +1831,10 @@
     },
     "tag": {
       "clearLockerTag": "Clear Locker tag",
-      "setLockerTag": "Set Locker tag",
+      "setTags": "Set tags",
+      "custom": "Custom",
+      "base": "Base",
+      "defaultTag": "Default tag",
       "global": "General",
       "hero": "Hero"
     },
@@ -2037,7 +2040,6 @@
       "noFilterMatch": "No mods have this issue."
     },
     "tags": {
-      "title": "Custom Tags",
       "edit": "Edit Tags",
       "create": "Create Tag",
       "createPlaceholder": "New tag...",

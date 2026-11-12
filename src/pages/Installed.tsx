@@ -54,7 +54,7 @@ import { useModUpdatesStore } from '../stores/modUpdatesStore';
 import { useModUpdateCheckStore } from '../stores/modUpdateCheckStore';
 import { useCategoryStore } from '../stores/categoryStore';
 import { categoryModelForSection } from '../lib/categoryPaths';
-import { defaultInstalledTagOrder, type InstalledTaxonomyContext } from '../lib/installedCardTaxonomy';
+import { defaultInstalledTagOrder, installedTagChangesForVariants, type InstalledTaxonomyContext } from '../lib/installedCardTaxonomy';
 import { getActiveDeadlockPath, getInstallationScope, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
 import { getConflicts, openModsFolder, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
@@ -312,8 +312,7 @@ interface InstalledEntryCardProps {
    *  the menu entry: the flag is the cheap client hint, and the modal's empty
    *  state covers a stale flag. */
   onViewImprint: (mod: Mod) => void;
-  onTagLocker: (entry: ModEntry, heroName: string | null) => Promise<void>;
-  onTagGlobal: (entry: ModEntry, globalType: GlobalModType | null) => Promise<void>;
+  onSetTags: (entry: ModEntry, tags: Mod['tagOverrides'] | null) => Promise<void>;
   /** Move an entry into or out of the citadel/grimoire priority root. */
   onSetPriority: (entry: ModEntry, priority: boolean) => Promise<void>;
   onFixUnknown: (mod: Mod) => void;
@@ -373,8 +372,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onAddVariant,
   onUngroupVariants,
   onViewImprint,
-  onTagLocker,
-  onTagGlobal,
+  onSetTags,
   onSetPriority,
   onFixUnknown,
   onCommitPriority,
@@ -450,8 +448,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         // merged VPK is excluded, like it is from the GameBanana link flow.
         onAddVariant={canJoinLocalVariantGroup(mod) ? () => onAddVariant(entry) : undefined}
         onViewImprint={mod.imprinted ? () => onViewImprint(mod) : undefined}
-        onTagLocker={(heroName) => onTagLocker(entry, heroName)}
-        onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
+        onSetTags={tags => onSetTags(entry, tags)}
         onSetPriority={(priority) => onSetPriority(entry, priority)}
         onFixUnknown={
           // Any local (unlinked, non-merged) mod can search GameBanana and
@@ -546,8 +543,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
           : undefined
       }
       onUngroupVariants={entryIsLocal(entry) ? () => void onUngroupVariants(entry) : undefined}
-      onTagLocker={(heroName) => onTagLocker(entry, heroName)}
-      onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
+      onSetTags={tags => onSetTags(entry, tags)}
       onSetPriority={(priority) => onSetPriority(entry, priority)}
       loadPosition={loadPosition}
       loadCount={loadCount}
@@ -2915,18 +2911,11 @@ export default function Installed() {
       );
     }
   });
-  const tagEntryLocker = useStableCallback(async (entry: ModEntry, heroName: string | null) => {
-    if (entry.kind === 'group') {
-      for (const variant of entry.variants) await setModLockerHero(variant.id, heroName);
-    } else {
-      await setModLockerHero(entry.mod.id, heroName);
-    }
-  });
-  const tagEntryGlobal = useStableCallback(async (entry: ModEntry, globalType: GlobalModType | null) => {
-    if (entry.kind === 'group') {
-      for (const variant of entry.variants) await setModGlobalType(variant.id, globalType);
-    } else {
-      await setModGlobalType(entry.mod.id, globalType);
+  const setEntryTags = useStableCallback(async (entry: ModEntry, tags: Mod['tagOverrides'] | null) => {
+    const variants = entry.kind === 'group' ? entry.variants : [entry.mod];
+    const primary = entry.kind === 'group' ? entry.primary : entry.mod;
+    for (const change of installedTagChangesForVariants(primary, variants, tags, taxonomyContext)) {
+      await useAppStore.getState().setModTags(change.mod.id, change.tags);
     }
   });
   // Marking a grouped entry Global moves every variant, so a submission whose
@@ -3451,8 +3440,7 @@ export default function Installed() {
     onAddVariant: openAddVariant,
     onUngroupVariants: ungroupEntry,
     onViewImprint: viewEntryImprint,
-    onTagLocker: tagEntryLocker,
-    onTagGlobal: tagEntryGlobal,
+    onSetTags: setEntryTags,
     onSetPriority: setEntryPriority,
     onFixUnknown: fixUnknownEntry,
     onCommitPriority: listsView || isEntryOrderLocked(entry) ? undefined : commitEntryPriority,

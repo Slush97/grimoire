@@ -38,6 +38,8 @@ interface InstalledTagsState {
   rename: (scope: string, id: string, name: string) => boolean;
   remove: (scope: string, id: string) => void;
   toggle: (scope: string, id: string, mod: TagMod) => void;
+  clearForMods: (scope: string, mods: readonly TagMod[]) => void;
+  setForMods: (scope: string, id: string, mods: readonly TagMod[], assigned: boolean) => void;
   regroup: (scope: string, before: readonly Mod[], after: readonly Mod[]) => void;
 }
 
@@ -89,6 +91,15 @@ export const useInstalledTagsStore = create<InstalledTagsState>((set, get) => {
       if (order.includes(`custom:${id}`)) get().setOrder(scope, order.filter(key => key !== `custom:${id}`));
     },
     toggle: (scope, id, mod) => save(scope, toggleListMembership(read(scope), id, customTagMemberKey(mod))),
+    setForMods: (scope, id, mods, assigned) => {
+      const keys = new Set(mods.map(customTagMemberKey));
+      save(scope, read(scope).map(tag => tag.id === id ? { ...tag, keys: assigned
+        ? [...new Set([...tag.keys, ...keys])] : tag.keys.filter(key => !keys.has(key)) } : tag));
+    },
+    clearForMods: (scope, mods) => {
+      const keys = new Set(mods.map(customTagMemberKey));
+      save(scope, read(scope).map(tag => ({ ...tag, keys: tag.keys.filter(key => !keys.has(key)) })));
+    },
     regroup: (scope, before, after) => {
       const tags = read(scope);
       if (!tags.length) return;

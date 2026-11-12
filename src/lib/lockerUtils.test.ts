@@ -38,6 +38,28 @@ function mod(over: Partial<Mod> & { id: string; metaKey: string; priority: numbe
  * line in the canonical SearchPaths block, so it must outrank every addons
  * folder; this used to be mirrored by hand on the Conflicts page and went stale.
  */
+describe('tag selections in Locker', () => {
+  it('routes every selected Base destination and keeps cleared tags out of Locker', () => {
+    const target = mod({ id: 'tags', metaKey: 'tags.vpk', priority: 1, sourceSection: 'Mod',
+      categoryName: 'Skins', lockerHeroes: ['Haze'], tagOverrides: { base: ['HUD', 'Maps'], heroes: ['Ivy'] } });
+    const groups = groupGlobalMods([target]);
+    expect(groups.hud).toEqual([target]);
+    expect(groups.maps).toEqual([target]);
+    const cleared = { ...target, tagOverrides: { base: [], heroes: [] } };
+    expect(getEffectiveGlobalType(cleared)).toBeUndefined();
+    expect(isLockerManagedMod(cleared)).toBe(false);
+    expect(isLockerManagedSound({ ...cleared, sourceSection: 'Sound' })).toBe(false);
+    const sounds = { ...cleared, tagOverrides: { base: ['Sounds'], heroes: ['Ivy'] } };
+    expect(isLockerManagedSound(sounds)).toBe(true);
+    expect(isLockerManagedMod(sounds)).toBe(false);
+    const skins = { ...cleared, tagOverrides: { base: ['Skins'], heroes: [] } };
+    expect(isLockerManagedMod({ ...skins, sourceSection: 'Wip' })).toBe(true);
+    expect(isLockerManagedMod({ ...skins, sourceSection: 'Sound' })).toBe(true);
+    expect(isLockerManagedSound({ ...skins, sourceSection: 'Sound' })).toBe(false);
+    expect(groupModsByCategory([{ ...cleared, categoryId: 33301, lockerHeroes: undefined }], buildHeroList(skinCategories)).unassigned).toHaveLength(1);
+  });
+});
+
 describe('modLoadOrder', () => {
   it('ranks the priority root ahead of base addons', () => {
     const global = mod({ id: 'g', metaKey: 'grimoire/pak99_dir.vpk', priority: 99 });

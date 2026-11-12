@@ -502,6 +502,10 @@ export async function clearLockerOverrides(scope: LockerClearScope): Promise<voi
   return window.electronAPI.clearLockerOverrides(scope);
 }
 
+export async function setModTags(modId: string, tags: Mod['tagOverrides'] | null): Promise<Mod> {
+  return window.electronAPI.setModTags(modId, tags ?? null);
+}
+
 export async function setModGlobalType(
   modId: string,
   globalType: GlobalModType | null

@@ -175,8 +175,25 @@ tags first. Cancelling leaves the order intact. Reordering preserves saved slots
 for temporarily absent tags. Priorities persist separately per
 installation and normal/developer mode, using stable raw tag keys so translation
 or custom-tag renaming does not change their positions. Category names and
-local General classifications remain read-only. Assign custom tags through the
-card's Custom Tags submenu. These user preferences reuse the list catalogue
+local General classification names remain read-only. The card's **Set tags**
+submenu sits above **Add to list** and combines Custom, Base, and Hero sections.
+Base choices reuse the cached category labels, including tags not assigned to the
+mod yet. Empty Custom sections are omitted. Checked labels use the user's accent
+color. A matching Locker destination shows its icon before the checkmark, with
+the same text color. A pin between those icons marks detected defaults, including
+defaults currently deselected. Visible indicators pack against the right edge
+without reserving an unchecked checkmark slot. Default hero choices remain
+available even when missing from the cached roster. All resolved heroes are
+checked, including multi-hero detections. Each selected Base destination is
+reflected in Locker, while the same tags drive card labels
+and Installed filters. **Clear** removes custom, Base, and Hero assignments.
+**Reset** restores detected built-in tags without changing custom assignments.
+The two action labels are centered. Group edits keep unrelated tags on their
+original variants instead of copying them to every file.
+Overrides are stored separately in `mod-metadata.json`; the original category
+identity and detection hints remain available for reset and category refreshes.
+Detected defaults are supplied to the menu in memory and are not stored again.
+Opening or editing the menu adds no API requests. These custom-tag preferences reuse the list catalogue
 operations and are saved separately per installation and normal/developer mode.
 Grouping and splitting retain their membership through the existing stable-key
 mapping; no category data is rewritten.

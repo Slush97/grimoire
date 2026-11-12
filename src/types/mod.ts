@@ -635,6 +635,12 @@ export interface StaleModel {
   attachments: string[];
 }
 
+/** User selections overlay detected tags without replacing category metadata. */
+export interface ModTagOverrides {
+  base?: string[];
+  heroes?: string[];
+}
+
 export interface Mod {
   safety?: import('./modSafety').ModSafetySnapshot;
   outdatedVdata?: OutdatedVdata[];
@@ -682,6 +688,9 @@ export interface Mod {
   lockerHeroSource?: LockerHeroSource;
   /** Effective hero identities, including multi-hero Sound, WiP, and HUD files. */
   lockerHeroes?: string[];
+  tagOverrides?: ModTagOverrides;
+  /** Runtime defaults before tagOverrides, used for reset indicators. Not persisted. */
+  detectedTags?: { heroes: string[]; globalType?: GlobalModType };
   /** Effective General destination from category ancestry, a manual override,
    *  or a preserved legacy local classification. */
   globalType?: GlobalModType;

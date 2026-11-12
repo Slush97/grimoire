@@ -3,7 +3,7 @@ import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { AppearanceBg, AppearanceSurface, AppSettings, GlobalModType, Mod } from '../types/mod';
 import { getAssetPath } from './assetPath';
 import { categorySubtreeIds } from './heroFilter';
-import { resolveInstalledGeneralType } from './categoryPaths';
+import { baseTagGlobalType, resolveInstalledGeneralType } from './categoryPaths';
 import {
   HERO_NAMES as SHARED_HERO_NAMES,
   HERO_ALIASES as SHARED_HERO_ALIASES,
@@ -307,10 +307,15 @@ export function isLockerManagedMod(mod: Mod): boolean {
   if (mod.lockerSounds) return false;
 
   // Sounds stay in the Sounds list even when they have resolved hero identities.
-  if (mod.sourceSection === 'Sound') return false;
+  const selectedSkins = mod.tagOverrides?.base?.some(label => label.toLowerCase() === 'skins');
+  if (mod.sourceSection === 'Sound' && !selectedSkins) return false;
+  if (mod.tagOverrides?.base !== undefined) {
+    if (mod.tagOverrides.base.some(label => label.toLowerCase() === 'sounds')) return false;
+    if (!mod.tagOverrides.base.some(label => label.toLowerCase() === 'skins') && modHeroNames(mod).length === 0) return false;
+  }
 
   // Hero-tagged WiPs and custom local files share the skin list.
-  if (mod.sourceSection !== 'Mod' && modHeroNames(mod).length === 0) return false;
+  if (mod.sourceSection !== 'Mod' && modHeroNames(mod).length === 0 && !selectedSkins) return false;
 
   const lower = mod.fileName.toLowerCase();
   // Leftover preset VPKs from the removed Midnight Mina variants feature
@@ -345,6 +350,12 @@ const GLOBAL_SOUND_CATEGORIES: ReadonlySet<string> = new Set([
  * etc.) flow through.
  */
 export function isLockerManagedSound(mod: Mod): boolean {
+  if (mod.tagOverrides?.base !== undefined) {
+    if (mod.tagOverrides.base.some(label => label.toLowerCase() === 'skins')
+      && !mod.tagOverrides.base.some(label => label.toLowerCase() === 'sounds')) return false;
+    return mod.tagOverrides.base.some(label => label.toLowerCase() === 'sounds')
+      || mod.sourceSection === 'Sound' && modHeroNames(mod).length > 0;
+  }
   if (mod.sourceSection !== 'Sound') return false;
   // Resolved heroes retain their Sounds placement even under a broad category.
   if (modHeroNames(mod).length > 0) return true;
@@ -354,13 +365,20 @@ export function isLockerManagedSound(mod: Mod): boolean {
 }
 
 /** Main resolves category-derived and explicit classifications consistently. */
-export function getEffectiveGlobalType(mod: Pick<Mod, 'globalType' | 'globalTypeSource' | 'gameBananaId' | 'sourceSection' | 'categoryName' | 'lockerHeroes' | 'lockerHero' | 'lockerHeroSource'>): GlobalModType | undefined {
+export function getEffectiveGlobalType(mod: Pick<Mod, 'globalType' | 'globalTypeSource' | 'gameBananaId' | 'sourceSection' | 'categoryName' | 'lockerHeroes' | 'lockerHero' | 'lockerHeroSource' | 'tagOverrides'>): GlobalModType | undefined {
+  if (mod.tagOverrides?.base !== undefined) return mod.tagOverrides.base.map(baseTagGlobalType).find(type => type !== undefined);
   return mod.globalType ?? resolveInstalledGeneralType(mod, undefined, modHeroNames(mod));
 }
 
+export function getEffectiveGlobalTypes(mod: Parameters<typeof getEffectiveGlobalType>[0]): GlobalModType[] {
+  if (mod.tagOverrides?.base !== undefined) return [...new Set(mod.tagOverrides.base.map(baseTagGlobalType).filter((type): type is GlobalModType => !!type))];
+  const type = getEffectiveGlobalType(mod);
+  return type ? [type] : [];
+}
+
 /** The effective set is supplied by main; legacy local hero tags remain usable. */
-export function modHeroNames(mod: Pick<Mod, 'lockerHeroes' | 'lockerHero'>): string[] {
-  return [...new Set((mod.lockerHeroes ?? (mod.lockerHero ? [mod.lockerHero] : []))
+export function modHeroNames(mod: Pick<Mod, 'lockerHeroes' | 'lockerHero' | 'tagOverrides'>): string[] {
+  return [...new Set((mod.tagOverrides?.heroes ?? mod.lockerHeroes ?? (mod.lockerHero ? [mod.lockerHero] : []))
     .map(name => canonicalHeroName(name.trim())).filter(Boolean))];
 }
 
@@ -441,19 +459,7 @@ export function countLockerSkins(mods: Mod[]): number {
   return new Set(mods.map(getLockerSkinKey)).size;
 }
 
-/** Display labels for Locker's General destinations and explicit local tags. */
-export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
-  'soul-container': 'Soul Containers',
-  'spirit-urn': 'Spirit Urns',
-  hideout: 'Hideout',
-  icons: 'Icon Packs',
-  hud: 'HUD',
-  effects: 'Effects',
-  animations: 'Animations',
-  maps: 'Maps',
-  announcer: 'Announcer / SFX',
-  'killstreak-music': 'Killstreak Music',
-};
+export { GLOBAL_MOD_TYPE_LABELS } from './categoryPaths';
 
 export function globalModTypeLabel(type: GlobalModType, t: (key: string) => string): string {
   switch (type) {
@@ -535,10 +541,7 @@ export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
     'killstreak-music': [],
   };
   for (const mod of mods) {
-    const type = getEffectiveGlobalType(mod);
-    if (type && groups[type]) {
-      groups[type].push(mod);
-    }
+    for (const type of getEffectiveGlobalTypes(mod)) groups[type]?.push(mod);
   }
   for (const type of GLOBAL_MOD_TYPE_ORDER) {
     if (isPropContainerType(type)) {
@@ -583,7 +586,7 @@ export function groupModsByCategory(mods: Mod[], heroList?: readonly HeroCategor
     }
     // Legacy callers can still supply a Mod-category identity before main has
     // resolved it. Sound/WiP IDs belong to separate trees and never map here.
-    if (mod.lockerHeroes === undefined && heroIds.size === 0
+    if (mod.tagOverrides?.heroes === undefined && mod.lockerHeroes === undefined && heroIds.size === 0
       && (mod.sourceSection ?? 'Mod') === 'Mod' && mod.categoryId !== undefined) {
       const id = heroList?.length ? categoryToHeroId.get(mod.categoryId) : mod.categoryId;
       if (id !== undefined) heroIds.add(id);

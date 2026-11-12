@@ -3,6 +3,7 @@ import type { ModSafetyPrompt, InstalledModSafety } from './modSafety';
 import type { ChooseModUpdateReplacementArgs, ModUpdateState, StartModUpdatesArgs } from './modUpdates';
 import type {
     Mod,
+    ModTagOverrides,
     AppSettings,
     DeleteModEntry,
     ModSwapPlacement,
@@ -1081,6 +1082,7 @@ export interface ElectronAPI {
     getLockerCardThumbnails: () => Promise<LockerCardThumbnail[]>;
     clearLockerOverrides: (scope: LockerClearScope) => Promise<void>;
     setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
+    setModTags: (modId: string, tags: ModTagOverrides | null) => Promise<Mod>;
     setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
     /** Mark a mod Global (moves it to the citadel/grimoire priority root) or
      *  clear it. See Mod.priorityMod. Distinct from setModPriority, which sets

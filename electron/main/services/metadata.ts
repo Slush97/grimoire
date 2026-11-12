@@ -39,6 +39,7 @@ export interface ModMetadata {
     /** Explicit hero assignment or a preserved legacy local identity.
      *  New automatic results are payload-specific and live in heroDetection. */
     lockerHero?: string;
+    tagOverrides?: import('../../../src/types/mod').ModTagOverrides;
     /** Provenance for lockerHero. Missing values are legacy inferred tags. */
     lockerHeroSource?: import('../../../src/types/mod').LockerHeroSource;
     /** Fingerprinted Sound, WiP, HUD, or conservative local-file hero detection. */
@@ -191,6 +192,7 @@ export function hasModIdentity(meta: ModMetadata): boolean {
         (typeof meta.modName === 'string' && meta.modName.trim().length > 0) ||
         meta.lockerHeroSource === 'manual' ||
         meta.globalTypeSource === 'manual' ||
+        meta.tagOverrides !== undefined ||
         meta.merged !== undefined ||
         meta.forgeInstall !== undefined ||
         meta.lockerCosmetics !== undefined ||

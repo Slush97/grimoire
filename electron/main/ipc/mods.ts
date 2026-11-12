@@ -34,7 +34,7 @@ import { getModMetadata, loadMetadata, setModMetadata, setModMetadataWithHash, r
 import { parseVpkDirectory, parseVpkDirectoriesAsync } from '../services/vpk';
 import { resolveModClassification, needsModHeroDetection } from '../services/modHeroDetection';
 import { fetchCategoryTreeCached, readCachedCategoryPaths, observeCategoryTreeChanges } from '../services/gamebanana';
-import { categoryModelForSection, type CategoryPaths } from '../../../src/lib/categoryPaths';
+import { baseTagGlobalType, categoryModelForSection, GLOBAL_MOD_TYPE_LABELS, type CategoryPaths } from '../../../src/lib/categoryPaths';
 import { notifyModChanges } from '../services/modChangeObservation';
 import { classifyAbilitySoundsFromVpk } from '../services/abilitySounds';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
@@ -111,7 +111,7 @@ function enrichMod(mod: Mod, categoryPaths = new Map<string, CategoryPaths | und
         !(typeof metadata?.modName === 'string' && metadata.modName.trim().length > 0);
     const model = categoryModelForSection(metadata.sourceSection);
     if (!categoryPaths.has(model)) categoryPaths.set(model, readCachedCategoryPaths(model));
-    const { lockerHero, lockerHeroSource, lockerHeroes, globalType, metadataPatch } =
+    const { lockerHero, lockerHeroSource, lockerHeroes, globalType, metadataPatch, detectedTags } =
         resolveModClassification(mod, metadata, categoryPaths.get(model));
     const patch: ModMetadata = { ...metadataPatch };
     // Ability-slot analysis shares the warmed VPK directory with hero
@@ -158,6 +158,8 @@ function enrichMod(mod: Mod, categoryPaths = new Map<string, CategoryPaths | und
         lockerHero,
         lockerHeroSource,
         lockerHeroes,
+        tagOverrides: metadata.tagOverrides,
+        detectedTags,
         globalTypeSource: metadata.globalTypeSource,
         globalType: globalType ?? undefined,
         merged: metadata.merged,
@@ -811,14 +813,46 @@ ipcMain.handle(
             throw new Error(`Mod not found: ${modId}`);
         }
         const trimmed = heroName?.trim() ?? '';
+        const overrides = getModMetadata(target.metaKey)?.tagOverrides;
         setModMetadata(target.metaKey, {
             lockerHero: trimmed.length > 0 ? trimmed : undefined,
             lockerHeroSource: trimmed.length > 0 ? 'manual' : undefined,
             ...(trimmed.length > 0 ? { globalType: undefined, globalTypeSource: undefined } : {}),
+            ...(overrides ? { tagOverrides: { ...overrides,
+                heroes: trimmed ? [trimmed] : undefined,
+                ...(trimmed && overrides.base ? { base: overrides.base.filter(label => !baseTagGlobalType(label)) } : {}),
+            } } : {}),
         });
         return enrichMod(target);
     }
 );
+
+// Category metadata stays intact: null restores detection, empty arrays clear it.
+ipcMain.handle('set-mod-tags', async (_, modId: string, tags: WireMod['tagOverrides'] | null): Promise<WireMod> => {
+    return runExclusiveModMutation(async () => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        const devMode = loadSettings().devMode;
+        const target = (await scanMods(deadlockPath)).find(mod => mod.id === modId);
+        assertActiveModInstallation(deadlockPath, devMode);
+        if (!target) throw new Error(`Mod not found: ${modId}`);
+        if (tags !== null && (typeof tags !== 'object' || !tags || Array.isArray(tags))) throw new Error('Invalid tag selections');
+        const normalized: NonNullable<WireMod['tagOverrides']> = {};
+        for (const axis of ['base', 'heroes'] as const) {
+            const values = tags?.[axis];
+            if (values === undefined) continue;
+            if (!Array.isArray(values) || values.length > 1000
+                || values.some(value => typeof value !== 'string' || value.length > 200)) {
+                throw new Error('Invalid tag selections');
+            }
+            normalized[axis] = [...new Set(values.map(value => value.trim()).filter(Boolean))];
+        }
+        setModMetadata(target.metaKey, { tagOverrides: tags === null ? undefined : {
+            ...getModMetadata(target.metaKey)?.tagOverrides, ...normalized,
+        } });
+        return enrichMod(target);
+    });
+});
 
 // Explicit General override. The manual marker preserves positive choices and
 // explicit null across category refreshes, migrations, and backup restoration.
@@ -834,12 +868,17 @@ ipcMain.handle(
         if (!target) {
             throw new Error(`Mod not found: ${modId}`);
         }
+        const overrides = getModMetadata(target.metaKey)?.tagOverrides;
         setModMetadata(target.metaKey, {
             globalType,
             globalTypeSource: 'manual',
             globalTypeClassifierVersion: undefined,
             // Assigning a global type moves the mod off the hero axis.
             ...(globalType ? { lockerHero: undefined, lockerHeroSource: undefined } : {}),
+            ...(overrides ? { tagOverrides: { ...overrides,
+                base: [...(overrides.base ?? []).filter(label => !baseTagGlobalType(label)), ...(globalType ? [GLOBAL_MOD_TYPE_LABELS[globalType]] : [])],
+                ...(globalType ? { heroes: undefined } : {}),
+            } } : {}),
         });
         return enrichMod(target);
     }

@@ -27,6 +27,20 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Installed custom tags', () => {
+  it('assigns and clears every grouped member without removing the custom tag catalog or other mods', () => {
+    store().create(normal, 'Favorites');
+    const id = tags()[0].id;
+    const members = [mod('one'), mod('two')];
+    store().setForMods(normal, id, [...members, mod('other')], true);
+    store().setForMods(normal, id, members, true);
+    expect(tags()[0].keys).toHaveLength(3);
+    store().clearForMods(normal, members);
+    expect(tags()).toEqual([expect.objectContaining({ id, name: 'Favorites', keys: [customTagMemberKey(mod('other'))] })]);
+    store().setForMods(normal, id, members, true);
+    store().setForMods(normal, id, members, false);
+    expect(tags()[0].keys).toEqual([customTagMemberKey(mod('other'))]);
+  });
+
   it('retains temporarily absent tags in their saved slots while reordering visible tags', () => {
     store().setOrder(normal, ['tag:hud', 'tag:temporarily absent', 'tag:skins']);
     useInstalledTagsStore.setState({ byScope: {}, orderByScope: {} });

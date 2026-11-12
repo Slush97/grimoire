@@ -530,6 +530,7 @@ interface AppState {
   ) => Promise<string | null>;
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
+  setModTags: (modId: string, tags: Mod['tagOverrides'] | null) => Promise<void>;
   /** Mark a mod Global (priority root) or clear it. Moves the VPK, so it goes
    *  through the toggle queue like every other folder mutation. */
   setModPriorityFolder: (modId: string, priority: boolean) => Promise<void>;
@@ -1416,6 +1417,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       mods: get().mods.map((m) => (m.id === modId ? updated : m)),
     });
+  },
+
+  setModTags: async (modId, tags) => {
+    const updated = await api.setModTags(modId, tags);
+    invalidateModsReads();
+    set({ mods: get().mods.map(mod => mod.id === modId ? updated : mod) });
   },
 
   setModGlobalType: async (modId: string, globalType: GlobalModType | null) => {

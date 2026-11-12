@@ -153,6 +153,46 @@ beforeEach(() => {
     });
 });
 
+describe('mod tag selections', () => {
+    it('persists independent overrides under the mutation lock and restores detected tags on reset', async () => {
+        h.metadata.set(source.metaKey, { gameBananaId: 7, categoryId: 2, categoryName: 'Ivy', abilitySounds: null });
+        h.categoryPaths.mockReturnValue(buildCategoryPaths([{ id: 1, name: 'Skins', itemCount: 1,
+            children: [{ id: 2, name: 'Ivy', itemCount: 1 }] }]));
+        await invoke('set-mod-tags', { base: ['HUD', 'HUD'] });
+        expect(h.metadata.get(source.metaKey)?.tagOverrides).toEqual({ base: ['HUD'] });
+        const cleared = await invoke('set-mod-tags', { heroes: [] }) as Mod & { lockerHeroes: string[] };
+        expect(cleared.lockerHeroes).toEqual([]);
+        expect(cleared).toHaveProperty('detectedTags.heroes', ['Ivy']);
+        expect(h.metadata.get(source.metaKey)).not.toHaveProperty('detectedTags');
+        expect(h.metadata.get(source.metaKey)).toMatchObject({ categoryId: 2, categoryName: 'Ivy',
+            tagOverrides: { base: ['HUD'], heroes: [] } });
+        const reset = await invoke('set-mod-tags', null) as Mod & { lockerHeroes: string[] };
+        expect(reset.lockerHeroes).toEqual(['Ivy']);
+        expect(h.metadata.get(source.metaKey)?.tagOverrides).toBeUndefined();
+        expect(h.enterLock).toHaveBeenCalledTimes(3);
+    });
+
+    it('rejects invalid selections without writing any tags', async () => {
+        await expect(invoke('set-mod-tags', { base: [4] })).rejects.toThrow('Invalid tag selections');
+        expect(h.patch).not.toHaveBeenCalled();
+    });
+
+    it('keeps retagging from Locker connected to the same selections', async () => {
+        h.metadata.set(source.metaKey, { tagOverrides: { base: ['HUD', 'Skins'], heroes: [] }, abilitySounds: null });
+        await invoke('set-mod-locker-hero', 'Haze');
+        expect(h.metadata.get(source.metaKey)?.tagOverrides).toEqual({ base: ['Skins'], heroes: ['Haze'] });
+        const retagged = await invoke('set-mod-global-type', 'maps') as Mod & { globalType?: string };
+        expect(retagged.globalType).toBe('maps');
+        expect(h.metadata.get(source.metaKey)?.tagOverrides).toEqual({ base: ['Skins', 'Maps'], heroes: undefined });
+    });
+
+    it('does not write selections after the installation changes during scanning', async () => {
+        h.scan.mockImplementationOnce(async () => { h.path = '/developer'; return [source]; });
+        await expect(invoke('set-mod-tags', { base: [] })).rejects.toThrow('active installation changed');
+        expect(h.patch).not.toHaveBeenCalled();
+    });
+});
+
 describe('importing into a mixed local variant group', () => {
     it('imports an imprinted Lowdetailmap without requiring CompLock members to share classifications', async () => {
         const directory = await mkdtemp(join(tmpdir(), 'grimoire-variant-import-'));
