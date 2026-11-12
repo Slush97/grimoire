@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GLYPH_CELL, KEY_BOXES, PHRASES, glyphPath, wrapToScreen } from '../components/common/previewLoaderArt';
-import { CAP_CHARS, TOY_BLANK, TOY_ROWS, knockCounter, phraseListener, toyCap, toyChar, toyCommand, toyLines, toyType, type ToyScreen } from './loaderToy';
+import { CAP_CHARS, EGG, TOY_BLANK, TOY_ROWS, knockCounter, phraseListener, toyCap, toyChar, toyCommand, toyLines, toyType, type ToyScreen } from './loaderToy';
 
 const typed = (text: string, screen: ToyScreen = TOY_BLANK) => [...text].reduce((now, char) => toyType(now, { char }), screen);
 
@@ -130,6 +130,32 @@ describe('toyType', () => {
 
   it('puts up an answer nobody asked for', () => {
     expect(toyType(typed('half a li'), { show: { kind: 'phrases' } })).toMatchObject({ text: '', answer: { kind: 'phrases' }, answers: 1 });
+  });
+});
+
+describe('the egg', () => {
+  it('comes up at its line', () => {
+    expect(toyCommand('yoshi')).toEqual({ kind: 'egg' });
+    expect(toyType(typed('yoshi'), 'enter')).toMatchObject({ answer: { kind: 'egg' }, jolts: 0 });
+  });
+
+  it('is drawn in two halves with a crack between them, all inside its grid', () => {
+    const cells = (path: string) => [...path.matchAll(/M([\d.-]+) ([\d.-]+)/g)].map((match) => [Math.floor(Number(match[1])), Math.floor(Number(match[2]))]);
+    for (const part of [EGG.top, EGG.bottom, EGG.crack]) {
+      expect(cells(part).length).toBeGreaterThan(5);
+      for (const [x, y] of cells(part)) {
+        expect(x).toBeGreaterThanOrEqual(0);
+        expect(x).toBeLessThan(EGG.columns);
+        expect(y).toBeGreaterThanOrEqual(0);
+        expect(y).toBeLessThan(EGG.rows);
+      }
+    }
+    // No dot is drawn twice, and the top half is all above the bottom one in each column.
+    const all = [...cells(EGG.top), ...cells(EGG.bottom), ...cells(EGG.crack)].map(([x, y]) => `${x},${y}`);
+    expect(new Set(all).size).toBe(all.length);
+    for (const [x, y] of cells(EGG.top)) for (const [otherX, otherY] of cells(EGG.bottom)) if (x === otherX) expect(y).toBeLessThan(otherY);
+    // The sparks fly out to its sides.
+    expect(cells(EGG.sparks).every(([x]) => x < 0 || x >= EGG.columns)).toBe(true);
   });
 });
 

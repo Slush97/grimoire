@@ -4,7 +4,7 @@ import { Volume2, VolumeX, X } from 'lucide-react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
 import type { ToySound } from '../../lib/loaderToySound';
 import { useAppStore } from '../../stores/appStore';
-import { CAP_CHARS, TOY_BLANK, loaderToy, phraseListener, toyCap, toyChar, toyLines, toyType, type ToyScreen } from '../../lib/loaderToy';
+import { CAP_CHARS, EGG, TOY_BLANK, loaderToy, phraseListener, toyCap, toyChar, toyLines, toyType, type ToyScreen } from '../../lib/loaderToy';
 import { Modal } from './Modal';
 import { Book, Face, Glyphs, LoaderScene, LoaderSteam, Typed } from './PreviewLoader';
 import { FAN, KEY_BOXES, LAYERS, PHRASES, PLANCHETTE, SCREEN, typingOf } from './previewLoaderArt';
@@ -67,8 +67,25 @@ function Prompt({ text }: { text: string }) {
   );
 }
 
+/** An egg in the screen's dots that rocks, cracks along its middle and opens, over and over (see EGG). */
+function Egg() {
+  const part = (name: string, d: string) => <svg className={`loader-toy__egg-${name}`} viewBox={`0 0 ${EGG.columns} ${EGG.rows}`}><path d={d} /></svg>;
+  return (
+    <>
+      <div className="loader-toy__egg">
+        {part('bottom', EGG.bottom)}
+        {part('crack', EGG.crack)}
+        {part('top', EGG.top)}
+        {part('sparks', EGG.sparks)}
+      </div>
+      <div className="preview-loader__static"><i /></div>
+    </>
+  );
+}
+
 function Tube({ screen }: { screen: ToyScreen }) {
   const answer = screen.answer;
+  if (answer?.kind === 'egg') return <Egg />;
   if (answer?.kind === 'hero') return <Face src={getHeroChipIconPath(answer.hero)} />;
   if (answer?.kind === 'book') return <Book />;
   if (answer?.kind === 'phrases') return <Typed typing={typingOf(screen.answers % PHRASES.length)} />;

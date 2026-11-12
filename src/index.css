@@ -2048,6 +2048,73 @@ body {
   100% { opacity: 0; transform: scale(1.25, 1.15) skewX(8deg); }
 }
 
+/* An egg on the screen (the line "yoshi"), in the tube's dots: it rocks, rocks harder, cracks along its
+   middle, its top comes off with a few sparks, and it starts over. One loop of six seconds. */
+.loader-toy__egg {
+  position: relative;
+  height: 62%;
+  margin-top: 12%;
+  aspect-ratio: 13 / 16;
+  transform-origin: 50% 100%;
+  animation: loaderToyEgg 6s ease-in-out infinite;
+}
+
+.loader-toy__egg > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: var(--loader-ink);
+}
+
+.loader-toy__egg > .loader-toy__egg-top {
+  transform-origin: 15% 45%;
+  animation: loaderToyEggTop 6s ease-out infinite;
+}
+
+.loader-toy__egg > .loader-toy__egg-crack {
+  clip-path: inset(0 100% 0 0);
+  animation: loaderToyEggCrack 6s linear infinite;
+}
+
+.loader-toy__egg > .loader-toy__egg-sparks {
+  opacity: 0;
+  animation: loaderToyEggSparks 6s steps(1, end) infinite;
+}
+
+@keyframes loaderToyEgg {
+  0%, 16%, 37%, 43%, 57.5%, 90% { transform: rotate(0deg); opacity: 1; }
+  19.5%, 26.5% { transform: rotate(-6deg); }
+  23%, 30% { transform: rotate(6deg); }
+  33.5% { transform: rotate(-4deg); }
+  46%, 52% { transform: rotate(-10deg); }
+  49% { transform: rotate(10deg); }
+  55% { transform: rotate(9deg); }
+  94%, 97% { transform: rotate(0deg); opacity: 0; }
+  100% { transform: rotate(0deg); opacity: 1; }
+}
+
+@keyframes loaderToyEggTop {
+  0%, 64% { transform: none; }
+  68% { transform: translate(-4%, -13%) rotate(-13deg); }
+  72%, 80%, 88%, 95% { transform: translate(-3%, -8%) rotate(-9deg); }
+  76%, 84% { transform: translate(-3%, -10%) rotate(-10deg); }
+  96%, 100% { transform: none; }
+}
+
+@keyframes loaderToyEggCrack {
+  0%, 57.5% { clip-path: inset(0 100% 0 0); animation-timing-function: steps(6, end); }
+  63.5%, 95% { clip-path: inset(0 0 0 0); animation-timing-function: steps(1, end); }
+  96%, 100% { clip-path: inset(0 100% 0 0); }
+}
+
+@keyframes loaderToyEggSparks {
+  0%, 67% { opacity: 0; }
+  68%, 78%, 86% { opacity: 1; }
+  73%, 82%, 90%, 100% { opacity: 0; }
+}
+
 /* What some lines do to the picture. A storm of static over the hero: */
 .loader-toy[data-mood='storm'] .preview-loader__static > i {
   opacity: 1;

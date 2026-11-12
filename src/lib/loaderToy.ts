@@ -61,6 +61,7 @@ export type ToyShow =
   | { kind: 'hero'; hero: string; storm: boolean }
   | { kind: 'book'; mood: 'calm' | 'stuck' | 'awesome' }
   | { kind: 'phrases' }
+  | { kind: 'egg' }
   | { kind: 'rgb' }
   | { kind: 'clear' }
   | { kind: 'leave' };
@@ -84,6 +85,7 @@ export function toyCommand(line: string): ToyShow | null {
     case 'grimoire is awesome': return { kind: 'book', mood: 'awesome' };
     case 'grimoire': case 'book': return { kind: 'book', mood: 'calm' };
     case 'help': return { kind: 'phrases' };
+    case 'yoshi': return { kind: 'egg' };
     case 'gamer': case 'rgb': return { kind: 'rgb' };
     case 'clear': case 'cls': return { kind: 'clear' };
     case 'exit': case 'quit': case 'bye': return { kind: 'leave' };
@@ -91,6 +93,38 @@ export function toyCommand(line: string): ToyShow | null {
   const hero = heroOf(words);
   return hero ? { kind: 'hero', hero, storm: false } : null;
 }
+
+// The egg that "yoshi" puts on the screen, in the screen's own dots: a nod to the game's lead developer,
+// who goes by that name. It is our own drawing of a spotted egg, and it is all the nod there is.
+/** The egg's left and right edge in each row of its grid, from the top one. */
+const EGG_EDGES = [[5, 7], [4, 8], [3, 9], [2, 10], [2, 10], [1, 11], [1, 11], [0, 12], [0, 12], [0, 12], [0, 12], [0, 12], [1, 11], [1, 11], [2, 10], [4, 8]];
+/** Its spots: the middle of each and how far it reaches, in cells. */
+const EGG_SPOTS = [[4.5, 4.6, 1.6], [9.4, 6.2, 1.3], [3.3, 10.7, 1.4], [8.7, 11.7, 1.7]];
+/** The row its shell cracks along, column by column: a zigzag. */
+const eggCrack = (column: number) => 7 + [1, 0, 1, 2][column % 4];
+/** A dot's side, a little short of its cell, as in the screen's lettering. */
+const EGG_DOT = 0.86;
+
+export const EGG = (() => {
+  const columns = 13, rows = EGG_EDGES.length;
+  const inside = (x: number, y: number) => y >= 0 && y < rows && x >= EGG_EDGES[y][0] && x <= EGG_EDGES[y][1];
+  const top: number[][] = [], bottom: number[][] = [], crack: number[][] = [];
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < columns; x++) {
+      if (!inside(x, y)) continue;
+      const shell = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
+      const spot = EGG_SPOTS.some(([spotX, spotY, reach]) => Math.hypot(x + 0.5 - spotX, y + 0.5 - spotY) <= reach);
+      if (shell || spot) (y < eggCrack(x) ? top : bottom).push([x, y]);
+      else if (y === eggCrack(x)) crack.push([x, y]);
+    }
+  }
+  const dots = (cells: number[][]) => cells.map(([x, y]) => `M${(x + (1 - EGG_DOT) / 2).toFixed(2)} ${(y + (1 - EGG_DOT) / 2).toFixed(2)}h${EGG_DOT}v${EGG_DOT}h-${EGG_DOT}z`).join('');
+  return {
+    columns, rows, top: dots(top), bottom: dots(bottom), crack: dots(crack),
+    /** What flies out when it opens: a few dots to either side of the crack, outside its grid. */
+    sparks: dots([[-3, 5], [-2, 2], [-4, 8], [14, 3], [15, 6], [14, 9]]),
+  };
+})();
 
 /** How long the longest phrase is: as much of what was typed as is worth keeping. */
 const HEARD = Math.max(...PHRASES.map((phrase) => phrase.length));
