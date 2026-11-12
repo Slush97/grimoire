@@ -1,8 +1,12 @@
 // The news computer's sounds, for the toy alone (components/common/LoaderToy.tsx): a clack for each key,
-// the hum of its fan and of its tube, and a tap on its glass. They are Valve's sounds from the game
+// the hum of its fan and of its tube, a tap on its glass and the crack of the egg on its screen. They are Valve's sounds from the game
 // (docs/viewer-backgrounds.md). The files come inlined: the packaged app is a file:// page, which cannot
 // fetch them. This module is loaded only when the computer is opened, so they stay out of the app's own
 // bundle.
+import crack1 from '../assets/preview-loader/sounds/crack-1.mp3?inline';
+import crack2 from '../assets/preview-loader/sounds/crack-2.mp3?inline';
+import crack3 from '../assets/preview-loader/sounds/crack-3.mp3?inline';
+import crack4 from '../assets/preview-loader/sounds/crack-4.mp3?inline';
 import fanLoop from '../assets/preview-loader/sounds/fan.ogg?inline';
 import humLoop from '../assets/preview-loader/sounds/hum.ogg?inline';
 import key1 from '../assets/preview-loader/sounds/key-1.mp3?inline';
@@ -22,11 +26,12 @@ import tap8 from '../assets/preview-loader/sounds/tap-8.mp3?inline';
 
 const CLACKS = [key1, key2, key3, key4, key5, key6];
 const TAPS = [tap1, tap2, tap3, tap4, tap5, tap6, tap7, tap8];
+const CRACKS = [crack1, crack2, crack3, crack4];
 /** Seconds of each recording that loop without a seam. */
 const FAN_LOOP = 6, HUM_LOOP = 4;
 // How loud each sound is against the app's volume. The fan's recording is a quiet one and the tube's a
 // loud one, hence a level above one and a level far below it.
-const KEY_LEVEL = 0.5, TAP_LEVEL = 0.45, FAN_LEVEL = 1.4, HUM_LEVEL = 0.045;
+const KEY_LEVEL = 0.5, TAP_LEVEL = 0.45, CRACK_LEVEL = 0.4, FAN_LEVEL = 1.4, HUM_LEVEL = 0.045;
 /** How much louder the tube hums for the moment its picture jolts, and the seconds that lasts. */
 const JOLT_SWELL = 5, JOLT_SECONDS = 0.5;
 
@@ -46,6 +51,8 @@ export interface ToySound {
   key(): void;
   /** A knuckle on the glass. */
   tap(): void;
+  /** The egg's shell giving way. */
+  crack(): void;
   /** The picture jolting: the tube's hum swells for a moment. */
   jolt(): void;
   /** The pace the fan turns at now. */
@@ -54,7 +61,7 @@ export interface ToySound {
   close(): void;
 }
 
-const SILENT: ToySound = { key() {}, tap() {}, jolt() {}, fan() {}, mute() {}, close() {} };
+const SILENT: ToySound = { key() {}, tap() {}, crack() {}, jolt() {}, fan() {}, mute() {}, close() {} };
 
 /** The bytes of an inlined file (a data: URL). */
 function bytesOf(inlined: string): ArrayBuffer {
@@ -121,6 +128,7 @@ export function openToySound(volume: number, muted = false): ToySound {
   return {
     key: shots(CLACKS, KEY_LEVEL),
     tap: shots(TAPS, TAP_LEVEL),
+    crack: shots(CRACKS, CRACK_LEVEL),
     jolt() {
       if (closed) return;
       const now = context.currentTime;

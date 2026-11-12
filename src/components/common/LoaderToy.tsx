@@ -28,6 +28,8 @@ const AWESOME_PACE = 5;
 const MOUSE_REACH = [0.07, 0.055];
 /** Seconds: how quickly the planchette closes on the pointer, and how long after the pointer has left the app it goes home. */
 const MOUSE_GLIDE = 0.075, MOUSE_HOME = 1.5;
+/** The egg's loop, and the moment in it when its shell cracks, in milliseconds (the keyframes in index.css). */
+const EGG_LOOP = 6000, EGG_CRACK = 3500;
 /** Where the mute button's state is kept between openings. */
 const MUTED_KEY = 'grimoire.newsComputer.muted';
 
@@ -68,11 +70,26 @@ function Prompt({ text }: { text: string }) {
 }
 
 /** An egg in the screen's dots that rocks, cracks along its middle and opens, over and over (see EGG). */
-function Egg() {
+function Egg({ onCrack }: { onCrack: () => void }) {
+  const egg = useRef<HTMLDivElement>(null);
+  // The crack sounds as it is drawn. It is timed off the loop itself, each time round, so that the two
+  // stay together however long the egg is up. An egg that is not moving (reduced motion) makes no sound.
+  useEffect(() => {
+    let timer = 0;
+    const wait = () => {
+      const loop = egg.current?.getAnimations()[0];
+      if (!loop) return;
+      const until = (EGG_CRACK - Number(loop.currentTime ?? 0) % EGG_LOOP + EGG_LOOP) % EGG_LOOP;
+      // Just past the crack, the next one is a whole loop away.
+      timer = window.setTimeout(() => { onCrack(); wait(); }, until < 200 ? until + EGG_LOOP : until);
+    };
+    wait();
+    return () => clearTimeout(timer);
+  }, [onCrack]);
   const part = (name: string, d: string) => <svg className={`loader-toy__egg-${name}`} viewBox={`0 0 ${EGG.columns} ${EGG.rows}`}><path d={d} /></svg>;
   return (
     <>
-      <div className="loader-toy__egg">
+      <div ref={egg} className="loader-toy__egg">
         {part('bottom', EGG.bottom)}
         {part('crack', EGG.crack)}
         {part('top', EGG.top)}
@@ -83,9 +100,9 @@ function Egg() {
   );
 }
 
-function Tube({ screen }: { screen: ToyScreen }) {
+function Tube({ screen, onCrack }: { screen: ToyScreen; onCrack: () => void }) {
   const answer = screen.answer;
-  if (answer?.kind === 'egg') return <Egg />;
+  if (answer?.kind === 'egg') return <Egg onCrack={onCrack} />;
   if (answer?.kind === 'hero') return <Face src={getHeroChipIconPath(answer.hero)} />;
   if (answer?.kind === 'book') return <Book />;
   if (answer?.kind === 'phrases') return <Typed typing={typingOf(screen.answers % PHRASES.length)} />;
@@ -114,6 +131,7 @@ function LoaderToy({ line }: { line: string }) {
   const audible = useAppStore((state) => state.soundVolume > 0);
   const [muted, setMuted] = useState(() => localStorage.getItem(MUTED_KEY) === '1');
   const mutedNow = useRef(muted);
+  const crack = useCallback(() => sound.current?.crack(), []);
   const mute = (next: boolean) => {
     setMuted(next);
     mutedNow.current = next;
@@ -335,7 +353,7 @@ function LoaderToy({ line }: { line: string }) {
       <h2 id={titleId} className="sr-only">{t('layout.newsComputer')}</h2>
       <div ref={root} aria-hidden className="preview-loader loader-toy" data-mood={mood} data-rgb={screen.rgb || undefined}>
         {typing && <style>{typing.css}</style>}
-        <LoaderScene keyStyle={keyStyle} screen={<div ref={tube} className="loader-toy__tube"><Tube screen={screen} /></div>}
+        <LoaderScene keyStyle={keyStyle} screen={<div ref={tube} className="loader-toy__tube"><Tube screen={screen} onCrack={crack} /></div>}
           under={screen.rgb && (
             <>
               <img className="preview-loader__layer loader-toy__rgb-room" src={LAYERS.back} alt="" draggable={false} />

@@ -23,8 +23,9 @@ bundled so the loader is there before anything has been read from the game. Copy
 The same computer opens as a hidden toy (`src/components/common/LoaderToy.tsx`), which also has sound: the
 clack of its keys (`sounds/ui/ui_keybind_press_01` to `_06`), the hum of its fan (six seconds of
 `sounds/ambient/hideout/amb_hideout_watch_projector_fan`, made to loop) and of its tube (four seconds of
-`sounds/ambient/hideout/amb_hideout_practice_sign_close_lp`), and a tap on its glass
-(`sounds/physics/bullet_impacts/glass_bulletproof_01` to `_08`), in `src/assets/preview-loader/sounds/`.
+`sounds/ambient/hideout/amb_hideout_practice_sign_close_lp`), a tap on its glass
+(`sounds/physics/bullet_impacts/glass_bulletproof_01` to `_08`) and the crack of an egg's shell
+(`sounds/physics/bullet_impacts/pottery_01` to `_04`), in `src/assets/preview-loader/sounds/`.
 These are Valve's sounds, taken from the game's files, and copyright remains with Valve. They play at the
 app's own sound volume and only while the toy is open.
 
