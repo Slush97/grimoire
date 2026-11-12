@@ -1,59 +1,62 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { FanSpinner, PreviewLoader } from './PreviewLoader';
-import { KEY_BOXES, PHRASES, SCREEN_PROGRAMS, typingOf } from './previewLoaderArt';
+import { GLYPH_CELL, KEY_BOXES, PHRASES, glyphPath, typingOf } from './previewLoaderArt';
 
 /** Which of the screen's programs a loader's markup shows. */
-const programOf = (html: string) => (['face', ...SCREEN_PROGRAMS] as const).find((program) => html.includes(`class="preview-loader__${program}"`));
+const programOf = (html: string) => (['face', 'book', 'type'] as const).find((program) => html.includes(`class="preview-loader__${program}"`));
+const shown = (count: number, hero?: string) => Array.from({ length: count }, () => programOf(renderToStaticMarkup(<PreviewLoader hero={hero} />)));
 
 describe('PreviewLoader', () => {
-  it('sweeps its line and runs a screen program while the load reports no position', () => {
-    for (const progress of [undefined, null]) {
-      const html = renderToStaticMarkup(<PreviewLoader progress={progress} />);
-      expect(html).toContain('preview-loader__status--sweep');
-      expect(html).not.toContain('preview-loader__bar');
-      expect(programOf(html)).toBeDefined();
-    }
+  it('shows the book for a load that is not a hero\'s, and the hero for one that is', () => {
+    // Twelve loaders of each kind: two of every twelve type a phrase instead.
+    const others = shown(12), heroes = shown(12, 'Abrams');
+    expect(others.filter((program) => program === 'book')).toHaveLength(10);
+    expect(heroes.filter((program) => program === 'face')).toHaveLength(10);
+    expect(others).not.toContain('face');
+    expect(heroes).not.toContain('book');
   });
 
-  it('gives each loader that is not a hero\'s the next screen program in turn', () => {
-    const seen = SCREEN_PROGRAMS.map(() => programOf(renderToStaticMarkup(<PreviewLoader />)));
-    expect(new Set(seen).size).toBe(SCREEN_PROGRAMS.length);
-    expect(seen).not.toContain('face');
+  it('types a phrase on the screen every sixth time, whatever the load', () => {
+    const turns = [...shown(6), ...shown(6, 'Abrams'), ...shown(6)];
+    const typed = turns.map((program, turn) => program === 'type' ? turn : -1).filter((turn) => turn >= 0);
+    expect(typed).toHaveLength(3);
+    expect(typed).toEqual([typed[0], typed[0] + 6, typed[0] + 12]);
   });
 
-  it('shows the face of the hero being loaded, and types a phrase every sixth time instead', () => {
-    const shown = Array.from({ length: 12 }, () => renderToStaticMarkup(<PreviewLoader hero="Abrams" />));
-    expect(shown.filter((html) => programOf(html) === 'face')).toHaveLength(10);
-    expect(shown.filter((html) => programOf(html) === 'type')).toHaveLength(2);
-    expect(shown.find((html) => programOf(html) === 'face')).toContain('/heroes/chip-icons/abrams.png');
+  it('takes the hero\'s icon for the face', () => {
+    expect(renderToStaticMarkup(<PreviewLoader hero="Abrams" program="hero" />)).toContain('/heroes/chip-icons/abrams.png');
   });
 
-  it('fills the line and the bar on its screen with the progress, kept between 0 and 1', () => {
-    const count = (html: string, text: string) => html.split(text).length - 1;
-    expect(count(renderToStaticMarkup(<PreviewLoader progress={0.25} />), 'scaleX(0.25)')).toBe(2);
-    expect(count(renderToStaticMarkup(<PreviewLoader progress={3} />), 'scaleX(1)')).toBe(2);
-    expect(count(renderToStaticMarkup(<PreviewLoader progress={-1} />), 'scaleX(0)')).toBe(2);
-    expect(renderToStaticMarkup(<PreviewLoader progress={0.25} />)).not.toContain('preview-loader__status--sweep');
+  it('sweeps its line while the load reports no position, and fills it when it does', () => {
+    for (const progress of [undefined, null]) expect(renderToStaticMarkup(<PreviewLoader progress={progress} />)).toContain('preview-loader__status--sweep');
+    const filling = renderToStaticMarkup(<PreviewLoader progress={0.25} />);
+    expect(filling).toContain('scaleX(0.25)');
+    expect(filling).not.toContain('preview-loader__status--sweep');
+    expect(renderToStaticMarkup(<PreviewLoader progress={3} />)).toContain('scaleX(1)');
+    expect(renderToStaticMarkup(<PreviewLoader progress={-1} />)).toContain('scaleX(0)');
   });
 
   it('keeps the hero on the screen while the line fills with the load', () => {
-    const html = renderToStaticMarkup(<PreviewLoader hero="Abrams" progress={0.5} />);
+    const html = renderToStaticMarkup(<PreviewLoader hero="Abrams" program="hero" progress={0.5} />);
     expect(programOf(html)).toBe('face');
-    expect(html).not.toContain('preview-loader__bar');
     expect(html).toContain('scaleX(0.5)');
-    expect(html).not.toContain('preview-loader__status--sweep');
   });
 
-  it('shows the program it is given, whatever the progress', () => {
-    expect(renderToStaticMarkup(<PreviewLoader program="pong" progress={0.5} />)).toContain('preview-loader__pong');
-    expect(renderToStaticMarkup(<PreviewLoader program="bar" />)).toContain('preview-loader__bar');
+  it('shows the program it is given', () => {
+    expect(programOf(renderToStaticMarkup(<PreviewLoader program="book" hero="Abrams" />))).toBe('book');
+    expect(programOf(renderToStaticMarkup(<PreviewLoader program="type" />))).toBe('type');
+    // A hero's program without a hero falls back to the book.
+    expect(programOf(renderToStaticMarkup(<PreviewLoader program="hero" />))).toBe('book');
   });
 
   it('types its phrase on the screen and on the keys, with the keyframes for both', () => {
     const html = renderToStaticMarkup(<PreviewLoader program="type" phrase={0} />);
     const typing = typingOf(0);
-    for (const line of typing.lines) expect(html).toContain(`>${line}</em>`);
+    // A prompt, then each line in dots, each with a cursor.
+    expect(html).toContain(`d="${glyphPath('>')}"`);
+    for (const line of typing.lines) expect(html).toContain(`viewBox="0 0 ${line.length * GLYPH_CELL} 7"><path d="${glyphPath(line)}"`);
+    expect(html.split('preview-loader-typing-0-cursor-').length - 1).toBe(2 * typing.lines.length);
     expect(html).toContain('<style>@keyframes preview-loader-typing-0-line-0');
     // Every key is drawn, and only those the phrase presses move.
     expect(html.match(/<i style="left:/g)).toHaveLength(KEY_BOXES.length);
@@ -104,11 +107,26 @@ describe('typingOf', () => {
     for (let phrase = 0; phrase < PHRASES.length; phrase++) {
       for (const block of typingOf(phrase).css.split('\n')) {
         // The stops are the percentages in front of each brace, not those inside the transforms.
-        const stops = [...block.matchAll(/([\d.%, ]+)\{ transform/g)].flatMap((match) => match[1].split(',').map((stop) => parseFloat(stop)));
+        const stops = [...block.matchAll(/([\d.%, ]+)\{ (?:transform|opacity)/g)].flatMap((match) => match[1].split(',').map((stop) => parseFloat(stop)));
+        expect(stops.length).toBeGreaterThan(1);
         expect(Math.max(...stops)).toBeLessThanOrEqual(100);
         expect(stops).toEqual([...stops].sort((a, b) => a - b));
       }
     }
+  });
+});
+
+describe('glyphPath', () => {
+  it('draws every letter the phrases use, and nothing for a space', () => {
+    for (const char of new Set(PHRASES.join('').replace(/ /g, ''))) expect(glyphPath(char).length).toBeGreaterThan(0);
+    expect(glyphPath(' ')).toBe('');
+  });
+
+  it('gives each character its own cell', () => {
+    // The second cell's dots stay within its five columns.
+    const xs = [...glyphPath(' l').matchAll(/M([\d.]+) /g)].map((match) => Number(match[1]));
+    expect(Math.min(...xs)).toBeGreaterThan(GLYPH_CELL);
+    expect(Math.max(...xs)).toBeLessThan(GLYPH_CELL + 5);
   });
 });
 

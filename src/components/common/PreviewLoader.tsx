@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
-import { BOOK, FAN, KEY_BOXES, LAYERS, LOGO, MUG, PAGE_TOPS, SCREEN, SCREEN_PROGRAMS, nextPhrase, nextScreenProgram, typingOf, type ScreenProgram, type Typing } from './previewLoaderArt';
+import { BOOK, FAN, GLYPH_CELL, GLYPH_ROWS, KEY_BOXES, LAYERS, LOGO, MUG, PAGE_TOPS, SCREEN, glyphPath, nextPhrase, nextScreenProgram, typingOf, type ScreenProgram, type Typing } from './previewLoaderArt';
 
 // The loading state of a 3D preview: the news computer from the game's hideout, whose case fan is a
 // spinning pentagram, with a mug of cocoa beside it. The scene is a render of Valve's models, baked into
@@ -66,22 +66,35 @@ function Face({ src, onNoFace }: { src: string; onNoFace: () => void }) {
   );
 }
 
-/** The phrase the keyboard is typing, a character at a time. */
+const glyphs = (text: string, cells = text.length) => (
+  <svg viewBox={`0 0 ${cells * GLYPH_CELL} ${GLYPH_ROWS}`}><path d={glyphPath(text)} /></svg>
+);
+
+/** The phrase the keyboard is typing, as a terminal would show it: a prompt, the text a character at a
+ *  time in dots, and a cursor that keeps its place after the last one. */
 function Typed({ typing }: { typing: Typing }) {
   return (
-    <div className="preview-loader__type">
-      {typing.lines.map((line, row) => <span key={row} style={{ animation: typing.line(row) }}><em style={{ animation: typing.lineInner(row) }}>{line}</em></span>)}
-    </div>
+    <>
+      <div className="preview-loader__type">
+        {typing.lines.map((line, row) => (
+          <div key={row}>
+            {glyphs(row === 0 ? '>' : '', 2)}
+            <span style={{ animation: typing.line(row) }}>
+              <span><em style={{ animation: typing.lineInner(row) }}>{glyphs(line)}</em></span>
+              <i style={{ animation: typing.cursor(row) }}><b /></i>
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="preview-loader__static"><i /></div>
+    </>
   );
 }
 
-function Screen({ program, progress, hero, typing, onNoFace }: { program: ScreenProgram; progress: number; hero?: string; typing: Typing; onNoFace: () => void }) {
-  if (program === 'bar') return <div className="preview-loader__bar"><span style={{ transform: `scaleX(${progress})` }} /></div>;
-  if (program === 'hero' && hero) return <Face src={getHeroChipIconPath(hero)} onNoFace={onNoFace} />;
-  if (program === 'book' || program === 'hero') return <Book />;
+function Screen({ program, hero, typing, onNoFace }: { program: ScreenProgram; hero?: string; typing: Typing; onNoFace: () => void }) {
   if (program === 'type') return <Typed typing={typing} />;
-  if (program === 'eye') return <div className="preview-loader__eye"><i /></div>;
-  return <div className="preview-loader__pong"><i /><i /><b><em /></b></div>;
+  if (program === 'hero' && hero) return <Face src={getHeroChipIconPath(hero)} onNoFace={onNoFace} />;
+  return <Book />;
 }
 
 /** Every key, each a window on the keys layer over its own cap, so that one can dip without the rest. */
@@ -100,11 +113,10 @@ function Keys({ typing }: { typing: Typing }) {
 
 /**
  * Fills its positioned parent with the loader. `progress` (0 to 1) fills the line under the scene;
- * without it the line sweeps. The screen shows the face of `hero` when the load is a hero's, and
- * otherwise a bar of the progress or, without one, one of its programs. The keyboard types a phrase
- * all the while. `program` and `phrase`
- * pick those, for the lab. A box too small for the scene shows the fan alone. It fades in after a
- * moment, so a load that is over at once never flashes it.
+ * without it the line sweeps. The screen shows the face of `hero` when the load is a hero's and the
+ * Grimoire's book when it is not, and every sixth loader types a phrase on it instead. The keyboard
+ * types a phrase all the while. `program` and `phrase` pick those, for the lab. A box too small for the
+ * scene shows the fan alone. It fades in after a moment, so a load that is over at once never flashes it.
  */
 export function PreviewLoader({ progress, label, hero, program, phrase, className = '' }: {
   progress?: number | null; label?: string; hero?: string; program?: ScreenProgram; phrase?: number; className?: string;
@@ -114,9 +126,8 @@ export function PreviewLoader({ progress, label, hero, program, phrase, classNam
   const [turn] = useState(() => nextScreenProgram(!!hero));
   const [ownPhrase] = useState(nextPhrase);
   const typing = typingOf(phrase ?? ownPhrase);
-  // A hero without an icon (a new one) leaves the screen to the first program.
+  // A hero without an icon (a new one) leaves the screen to the book.
   const [noFace, setNoFace] = useState(false);
-  const idle = turn === 'hero' && noFace ? SCREEN_PROGRAMS[0] : turn;
   return (
     <div role={label ? 'status' : undefined} aria-label={label} aria-hidden={label ? undefined : true} className={`preview-loader ${className}`}>
       <style>{typing.css}</style>
@@ -134,7 +145,7 @@ export function PreviewLoader({ progress, label, hero, program, phrase, classNam
         <div className="preview-loader__rays" style={{ left: percent(SCREEN.left), top: percent(SCREEN.top) }} />
         <div className="preview-loader__screen"
           style={{ left: percent(SCREEN.left), top: percent(SCREEN.top), width: percent(SCREEN.width), aspectRatio: SCREEN.aspect, transform: matrix(SCREEN.matrix) }}>
-          <Screen program={program ?? (known && !hero ? 'bar' : idle)} progress={amount} hero={noFace ? undefined : hero} typing={typing} onNoFace={() => setNoFace(true)} />
+          <Screen program={program ?? turn} hero={noFace ? undefined : hero} typing={typing} onNoFace={() => setNoFace(true)} />
         </div>
         <div className="preview-loader__steam" style={{ left: percent(MUG.left), top: percent(MUG.top) }}>
           <svg viewBox="0 0 20 180" preserveAspectRatio="none"><path d={STEAM} /></svg>

@@ -1689,8 +1689,8 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* The screen, laid on its glass by the matrix the component sets. It shows a bar when the load
-   reports how far it is, and otherwise one of a few programs. */
+/* The screen, laid on its glass by the matrix the component sets: the hero being loaded, the
+   Grimoire's book, or a phrase being typed. */
 .preview-loader__screen {
   position: absolute;
   translate: -50% -50%;
@@ -1704,134 +1704,52 @@ body {
   background: var(--loader-ink);
 }
 
-.preview-loader__bar {
-  width: 64%;
-  height: 17%;
-  min-height: 3px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--loader-ink) 28%, transparent);
-}
-
-.preview-loader__bar > span {
-  width: 100%;
-  height: 100%;
-  transform-origin: left;
-  transition: transform 400ms ease-out;
-}
-
-/* The phrase the keyboard types. Each line is a window that slides open a character at a time over
-   text sliding the other way, so the letters appear where they stand. */
+/* The phrase the keyboard types, as a terminal shows it: a prompt, then the text in dots a character
+   at a time, a cursor after the last one, and the tube's lines and static over it all. A line is a
+   window that slides open a cell at a time, carrying its cursor, over text sliding the other way, so
+   the letters appear where they stand. `--dot` is one dot of the lettering. */
 .preview-loader__type {
+  --dot: calc(var(--loader-width) * 0.0023);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: center;
-  width: 9ch;
-  color: var(--loader-ink);
-  font: 700 calc(var(--loader-width) * 0.0235) / 1.25 var(--font-mono, ui-monospace, Consolas, monospace);
-  text-transform: uppercase;
-  white-space: pre;
+  gap: calc(var(--dot) * 3);
 }
 
-.preview-loader__type > span {
-  width: max-content;
-  overflow: hidden;
-  background: none;
-}
-
-.preview-loader__type em {
-  background: none;
-  font-style: normal;
-}
-
-/* An eye that looks about and blinks. */
-.preview-loader__eye {
+.preview-loader__type > div {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 60%;
-  aspect-ratio: 1.9;
-  border: var(--loader-stroke) solid var(--loader-ink);
-  border-radius: 50%;
-  animation: previewLoaderBlink 4.3s linear infinite;
 }
 
-.preview-loader__eye > i {
-  width: 28%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  animation: previewLoaderLook 5.2s ease-in-out infinite;
+.preview-loader__type svg {
+  display: block;
+  width: auto;
+  height: calc(var(--dot) * 7);
+  fill: var(--loader-ink);
 }
 
-@keyframes previewLoaderBlink {
-  0%, 91%, 100% { transform: scaleY(1); }
-  95% { transform: scaleY(0.08); }
-}
-
-@keyframes previewLoaderLook {
-  0%, 12%, 100% { transform: translateX(0); }
-  22%, 44% { transform: translateX(-75%); }
-  56%, 82% { transform: translateX(80%); }
-}
-
-/* A rally, one loop of four crossings. The ball flies straight and bounces off the floor once; each
-   paddle waits while the ball is going away and moves to meet it once it turns back. */
-.preview-loader__pong {
-  position: relative;
-  width: 76%;
-  height: 62%;
-}
-
-.preview-loader__pong > i {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 5%;
-  height: 34%;
-  animation: previewLoaderPaddleLeft 4.6s ease-in-out infinite;
-}
-
-.preview-loader__pong > i:nth-child(2) {
-  left: auto;
-  right: 0;
-  animation-name: previewLoaderPaddleRight;
-}
-
-.preview-loader__pong > b {
-  position: absolute;
-  top: 0;
-  left: 6%;
-  width: 9%;
-  height: 100%;
+.preview-loader__type :is(span, em, i) {
   background: none;
-  animation: previewLoaderBallX 1.15s linear infinite alternate;
 }
 
-.preview-loader__pong em {
+.preview-loader__type > div > span {
+  position: relative;
+}
+
+.preview-loader__type > div > span > span {
+  overflow: hidden;
+}
+
+.preview-loader__type i {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  width: calc(var(--dot) * 5);
+  height: calc(var(--dot) * 7);
+}
+
+.preview-loader__type i > b {
   width: 100%;
-  aspect-ratio: 1;
-  animation: previewLoaderBallY 4.6s linear infinite;
-}
-
-@keyframes previewLoaderBallX { to { transform: translateX(878%); } }
-
-@keyframes previewLoaderBallY {
-  0%, 100% { transform: translateY(128%); }
-  25% { transform: translateY(512%); }
-  33.33% { transform: translateY(640%); }
-  50% { transform: translateY(384%); }
-  75% { transform: translateY(32%); }
-}
-
-@keyframes previewLoaderPaddleLeft {
-  0%, 27%, 100% { transform: translateY(21%); }
-  46%, 78% { transform: translateY(122%); }
-  96% { transform: translateY(21%); }
-}
-
-@keyframes previewLoaderPaddleRight {
-  0%, 3%, 71%, 100% { transform: translateY(0); }
-  21%, 53% { transform: translateY(173%); }
+  height: 100%;
 }
 
 /* The Grimoire logo as one loop: the book's leaves riffle from the right page to the left, then its
@@ -2036,7 +1954,6 @@ body {
   .preview-loader__planchette,
   .preview-loader__steam,
   .preview-loader__steam > svg,
-  .preview-loader__eye { animation: none; }
   .preview-loader__screen *,
   .preview-loader__keys > i { animation: none !important; }
   .preview-loader__whirl { opacity: 1; transform: none; }
@@ -2045,7 +1962,6 @@ body {
   .preview-loader__static > i { display: none; }
   .preview-loader__screenlight,
   .preview-loader__rays { opacity: 0.6; }
-  .preview-loader__bar > span,
   .preview-loader__status > span { transition: none; }
   .preview-loader__status--sweep > span { width: 100%; opacity: 0.5; animation: none; }
 }

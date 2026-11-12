@@ -135,15 +135,13 @@ export const BOOK = (() => {
   };
 })();
 
-/** What the screen shows for a load that is not a hero's and reports no position, each loader the next one. */
-export const SCREEN_PROGRAMS = ['book', 'type', 'eye', 'pong'] as const;
-/** `hero` is the face of the hero being loaded, `bar` the progress of a load that reports it. */
-export type ScreenProgram = typeof SCREEN_PROGRAMS[number] | 'hero' | 'bar';
-let turns = 0, heroLoads = 0;
-/** A hero's load shows the hero, and every sixth one types a phrase instead. Other loads take the programs in turn. */
+/** What the screen shows: the face of the hero being loaded, the Grimoire's book, or a phrase being typed. */
+export type ScreenProgram = 'hero' | 'book' | 'type';
+let loads = 0;
+/** A hero's load shows the hero and any other the book. Every sixth load of either kind types a phrase instead. */
 export function nextScreenProgram(hero: boolean): ScreenProgram {
-  if (hero) return ++heroLoads % 6 === 0 ? 'type' : 'hero';
-  return SCREEN_PROGRAMS[turns++ % SCREEN_PROGRAMS.length];
+  if (++loads % 6 === 0) return 'type';
+  return hero ? 'hero' : 'book';
 }
 
 // What the keyboard types, which the screen shows in its `type` program. In-jokes on a prop, typed as
@@ -152,6 +150,41 @@ export const PHRASES = ['nerf bebop', 'grimoire is awesome', 'door stuck'];
 let typed = 0;
 /** The next phrase in turn, as an index into PHRASES. */
 export const nextPhrase = (): number => typed++ % PHRASES.length;
+
+// The screen's lettering: a dot matrix, five dots by seven, as the terminals of the computer's day drew
+// theirs. Each glyph is its seven rows, top to bottom.
+const GLYPHS: Record<string, string> = {
+  a: '01110 10001 10001 11111 10001 10001 10001', b: '11110 10001 10001 11110 10001 10001 11110',
+  c: '01110 10001 10000 10000 10000 10001 01110', d: '11110 10001 10001 10001 10001 10001 11110',
+  e: '11111 10000 10000 11110 10000 10000 11111', f: '11111 10000 10000 11110 10000 10000 10000',
+  g: '01110 10001 10000 10111 10001 10001 01111', h: '10001 10001 10001 11111 10001 10001 10001',
+  i: '01110 00100 00100 00100 00100 00100 01110', j: '00111 00010 00010 00010 00010 10010 01100',
+  k: '10001 10010 10100 11000 10100 10010 10001', l: '10000 10000 10000 10000 10000 10000 11111',
+  m: '10001 11011 10101 10101 10001 10001 10001', n: '10001 11001 10101 10011 10001 10001 10001',
+  o: '01110 10001 10001 10001 10001 10001 01110', p: '11110 10001 10001 11110 10000 10000 10000',
+  q: '01110 10001 10001 10001 10101 10010 01101', r: '11110 10001 10001 11110 10100 10010 10001',
+  s: '01111 10000 10000 01110 00001 00001 11110', t: '11111 00100 00100 00100 00100 00100 00100',
+  u: '10001 10001 10001 10001 10001 10001 01110', v: '10001 10001 10001 10001 10001 01010 00100',
+  w: '10001 10001 10001 10101 10101 11011 10001', x: '10001 10001 01010 00100 01010 10001 10001',
+  y: '10001 10001 01010 00100 00100 00100 00100', z: '11111 00001 00010 00100 01000 10000 11111',
+  '>': '01000 00100 00010 00001 00010 00100 01000',
+};
+/** A character's cell: its five dots and the gap after them. The typing reveals a line a cell at a time. */
+export const GLYPH_CELL = 6, GLYPH_ROWS = 7;
+/** A dot's side, a little short of its pitch, so the dots stand apart as a tube's do. */
+const DOT = 0.86;
+/** The space before a cell's first dot (as much is left after its last), so a cell's edge never cuts a dot. */
+const GLYPH_PAD = 0.57;
+/** The SVG path of `text` as dots, one cell per character, in a box GLYPH_CELL wide per cell and GLYPH_ROWS tall. */
+export function glyphPath(text: string): string {
+  const dots: string[] = [];
+  [...text.toLowerCase()].forEach((char, cell) => {
+    (GLYPHS[char] ?? '').split(' ').forEach((row, y) => {
+      [...row].forEach((dot, x) => { if (dot === '1') dots.push(`M${cell * GLYPH_CELL + x + GLYPH_PAD} ${y}h${DOT}v${DOT}h-${DOT}z`); });
+    });
+  });
+  return dots.join('');
+}
 
 const LETTER_ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
 /** The key a character presses: its place on a typewriter's three letter rows, scaled to the caps the
@@ -166,20 +199,24 @@ function keyOf(char: string): number {
   return KEY_BOXES.length - 1;
 }
 
-/** The most characters the screen holds on a line. */
-const LINE = 9;
+/** The most characters the screen holds on a line, after its prompt. */
+const LINE = 8;
 /** Seconds: before the first key, between keys, the phrase held on the screen, and the blank before the next loop. */
-const LEAD = 0.6, STEP = 0.17, HOLD = 1.9, BLANK = 0.3;
+const LEAD = 0.9, STEP = 0.17, HOLD = 2.3, BLANK = 0.45;
+/** Seconds the idle cursor stays on, and off, as it blinks. It is steady while keys are going down. */
+const BLINK = 0.45;
 
 export interface Typing {
   /** The phrase, wrapped to the screen. */
   lines: string[];
   /** The loop's length in seconds. */
   duration: number;
-  /** The keyframes: `line(n)` and `lineInner(n)` reveal a line, `key(n)` presses a key. */
+  /** The keyframes: `line(n)` and `lineInner(n)` reveal a line, `cursor(n)` shows its cursor, `key(n)` presses a key. */
   css: string;
   line: (index: number) => string;
   lineInner: (index: number) => string;
+  /** The line's cursor: there while the line is the one being typed, and on the first line while the screen is blank. */
+  cursor: (index: number) => string;
   /** The animation of a key the phrase presses, or undefined for one it leaves alone. */
   key: (index: number) => string | undefined;
 }
@@ -187,9 +224,9 @@ export interface Typing {
 const typings = new Map<number, Typing>();
 /**
  * One phrase as a loop of pure CSS: its lines appear a character at a time (a window sliding open in
- * steps over text that slides the other way, so the text itself stays put) while the key for each
- * character dips. Everything is a transform with its times written into the keyframes, so the typing
- * runs on the compositor and keeps its rhythm through a frozen page.
+ * steps, carrying the cursor, over text that slides the other way, so the text itself stays put) while
+ * the key for each character dips. Everything is a transform or an opacity with its times written into
+ * the keyframes, so the typing runs on the compositor and keeps its rhythm through a frozen page.
  */
 export function typingOf(phrase: number): Typing {
   const known = typings.get(phrase);
@@ -202,15 +239,20 @@ export function typingOf(phrase: number): Typing {
   }
   // One key per character, and one (the space bar, as a carriage return) between lines.
   const count = lines.reduce((sum, line) => sum + line.length, 0) + lines.length - 1;
-  const duration = LEAD + count * STEP + HOLD + BLANK;
+  const duration = LEAD + count * STEP + HOLD + BLANK, cleared = duration - BLANK;
   const at = (seconds: number) => `${Math.min(100, Math.max(0, seconds / duration * 100)).toFixed(3)}%`;
   const name = `preview-loader-typing-${phrase}`;
   const presses = new Map<number, number[]>();
   const blocks: string[] = [];
+  // When each line starts being typed: the carriage return before it, or the lead for the first.
+  const starts: number[] = [];
   let index = 0;
   lines.forEach((line, row) => {
-    const from = LEAD + index * STEP, to = from + line.length * STEP, cleared = duration - BLANK;
-    for (const [suffix, hidden] of [['line', '-100%'], ['inner', '100%']]) {
+    const from = LEAD + index * STEP, to = from + line.length * STEP;
+    starts.push(from);
+    // The window stops a pixel short of each cell's edge until the line is whole: the two layers round to
+    // the screen's pixels on their own, and a hair of the next letter would show otherwise.
+    for (const [suffix, hidden] of [['line', 'calc(-100% - 1px)'], ['inner', 'calc(100% + 1px)']]) {
       blocks.push(`@keyframes ${name}-${suffix}-${row} { 0%, ${at(from)} { transform: translateX(${hidden}); animation-timing-function: steps(${line.length}, end); } `
         + `${at(to)}, ${at(cleared - 0.01)} { transform: translateX(0); animation-timing-function: steps(1, end); } ${at(cleared)}, 100% { transform: translateX(${hidden}); } }`);
     }
@@ -220,15 +262,34 @@ export function typingOf(phrase: number): Typing {
       presses.set(key, [...(presses.get(key) ?? []), LEAD + index * STEP]);
     });
   });
+  // A line's cursor is there from its first key to the next line's (the last line's, until the screen
+  // clears), and the first line's also while the screen is blank. It blinks when no key is going down.
+  const blink = (from: number, to: number): [number, number][] => {
+    const turns: [number, number][] = [];
+    for (let time = from, on = true; time < to - 0.05; time += BLINK, on = !on) turns.push([time, on ? 1 : 0]);
+    return turns;
+  };
+  lines.forEach((line, row) => {
+    const last = row === lines.length - 1, until = last ? cleared : starts[row + 1], done = starts[row] + (line.length + 0.5) * STEP;
+    const turns: [number, number][] = [
+      ...(row === 0 ? blink(0, starts[0]) : [[0, 0] as [number, number]]),
+      [starts[row], 1],
+      ...(last ? blink(done, until) : []),
+      [until, 0],
+      ...(row === 0 ? blink(cleared, duration) : []),
+    ];
+    blocks.push(`@keyframes ${name}-cursor-${row} { ${turns.map(([time, opacity]) => `${at(time)} { opacity: ${opacity}; }`).join(' ')} 100% { opacity: ${row === 0 ? 1 : 0}; } }`);
+  });
   for (const [key, times] of presses) {
     const dips = times.map((time) => `${at(time - 0.045)} { transform: translateY(0); } ${at(time + 0.015)} { transform: translateY(var(--loader-press)); } ${at(time + 0.12)} { transform: translateY(0); }`);
     blocks.push(`@keyframes ${name}-key-${key} { 0% { transform: translateY(0); } ${dips.join(' ')} 100% { transform: translateY(0); } }`);
   }
-  const loop = (keyframes: string) => `${keyframes} ${duration.toFixed(2)}s linear infinite`;
+  const loop = (keyframes: string, easing = 'linear') => `${keyframes} ${duration.toFixed(2)}s ${easing} infinite`;
   const typing: Typing = {
     lines, duration, css: blocks.join('\n'),
     line: (row) => loop(`${name}-line-${row}`),
     lineInner: (row) => loop(`${name}-inner-${row}`),
+    cursor: (row) => loop(`${name}-cursor-${row}`, 'steps(1, end)'),
     key: (key) => presses.has(key) ? loop(`${name}-key-${key}`) : undefined,
   };
   typings.set(phrase, typing);

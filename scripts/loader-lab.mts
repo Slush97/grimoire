@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PreviewLoader } from '../src/components/common/PreviewLoader.tsx';
-import { PHRASES, SCREEN_PROGRAMS, type ScreenProgram } from '../src/components/common/previewLoaderArt.ts';
+import { PHRASES, type ScreenProgram } from '../src/components/common/previewLoaderArt.ts';
 
 const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 const out = resolve(process.argv[2] ?? resolve(root, 'loader-lab.html'));
@@ -47,10 +47,10 @@ const screenOf = (html: string) => {
   if (!screen) throw new Error('The loader\'s screen was not found in its markup.');
   return screen;
 };
-const programs: ScreenProgram[] = ['hero', ...SCREEN_PROGRAMS, 'bar'];
+const programs: ScreenProgram[] = ['hero', 'book', 'type'];
 /** One loader per phrase (its keys and keyframes differ), and every program's screen. `type` has one per phrase. */
 const loaders = PHRASES.map((_, phrase) => markup(phrase, 'type'));
-const screens = Object.fromEntries(programs.map((program) => [program, screenOf(markup(0, program, 0.4))]));
+const screens = Object.fromEntries(programs.map((program) => [program, screenOf(markup(0, program))]));
 const typed = loaders.map(screenOf);
 
 const page = `<!doctype html>
@@ -162,7 +162,7 @@ const withImages = (html) => html.replace(/@@([A-Za-z0-9_]+)@@/g, (_, name) => I
 const LOADERS = ${JSON.stringify(loaders)}.map(withImages);
 const SCREENS = Object.fromEntries(Object.entries(${JSON.stringify(screens)}).map(([program, html]) => [program, withImages(html)]));
 const TYPED = ${JSON.stringify(typed)};
-const PROGRAMS = ${JSON.stringify(['hero', ...SCREEN_PROGRAMS])};
+const PROGRAMS = ${JSON.stringify(programs)};
 const stage = document.getElementById('stage');
 const state = { mode: 'none', amount: 0.4, program: 'auto', phrase: 0, turn: 0, started: performance.now() };
 // #program=book opens on one program, to link to it.
@@ -186,12 +186,10 @@ function amount() {
 let screenShown = '';
 function draw() {
   const value = amount(), known = value !== null;
-  const program = state.program !== 'auto' ? state.program : known ? 'bar' : PROGRAMS[state.turn % PROGRAMS.length];
+  const program = state.program !== 'auto' ? state.program : PROGRAMS[state.turn % PROGRAMS.length];
   const screen = stage.querySelector('.preview-loader__screen');
   if (!screen) return;
   if (screen.dataset.program !== program) { screen.innerHTML = program === 'type' ? TYPED[state.phrase] : SCREENS[program]; screen.dataset.program = program; }
-  const bar = screen.querySelector('.preview-loader__bar span');
-  if (bar) bar.style.transform = 'scaleX(' + (known ? value : 0.4) + ')';
   const status = stage.querySelector('.preview-loader__status');
   status.classList.toggle('preview-loader__status--sweep', !known);
   status.firstElementChild.style.transform = known ? 'scaleX(' + value + ')' : '';
