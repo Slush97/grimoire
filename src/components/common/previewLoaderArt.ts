@@ -23,10 +23,15 @@ export const SCREEN = { left: 0.5285, top: 0.4313, width: 0.1567, aspect: 1.232,
 export const MUG = { left: 0.176, top: 0.672 };
 
 /** What the screen shows while a load reports no position. Each loader takes the next one. */
-export const SCREEN_PROGRAMS = ['type', 'eye', 'pong'] as const;
-export type ScreenProgram = typeof SCREEN_PROGRAMS[number] | 'bar';
-let shown = 0;
-export const nextScreenProgram = (): ScreenProgram => SCREEN_PROGRAMS[shown++ % SCREEN_PROGRAMS.length];
+export const SCREEN_PROGRAMS = ['book', 'type', 'eye', 'pong'] as const;
+/** `hero` is the face of the hero being loaded, `bar` the progress of a load that reports it. */
+export type ScreenProgram = typeof SCREEN_PROGRAMS[number] | 'hero' | 'bar';
+let turns = 0, faces = 0;
+/** The next program in turn. A load that is a hero's shows the hero every other time. */
+export function nextScreenProgram(hero: boolean): ScreenProgram {
+  if (hero && faces++ % 2 === 0) return 'hero';
+  return SCREEN_PROGRAMS[turns++ % SCREEN_PROGRAMS.length];
+}
 
 let preloaded: HTMLImageElement[] | null = null;
 /** Fetches and decodes the loader's layers ahead of the first preview, and keeps them. */

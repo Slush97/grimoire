@@ -103,7 +103,7 @@ export function LockerViewerHost() {
     // Without hardware WebGL the canvas throws; keep that inside the panel. The next hero or skin
     // gets a fresh try: one model that crashes must not take the viewer away from every other.
     <ErrorBoundary resetKey={JSON.stringify([request.heroName, request.skinSources])}>
-      <Suspense fallback={<PreviewLoader />}>
+      <Suspense fallback={<PreviewLoader hero={request.heroName} />}>
         <HeroPoseViewer {...request} active={shown} onShownHeroChange={showHero} />
       </Suspense>
     </ErrorBoundary>,

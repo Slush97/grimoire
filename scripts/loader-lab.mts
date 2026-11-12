@@ -29,13 +29,15 @@ const [, floor = '300', share = '46'] = /--loader-width: .*max\((\d+)px, (\d+)cq
 
 /** The component's markup, with each layer's file URL replaced by the file itself. */
 function markup(program: ScreenProgram | undefined, progress: number | undefined): string {
-  const html = renderToStaticMarkup(createElement(PreviewLoader, { program, progress }));
+  const html = renderToStaticMarkup(createElement(PreviewLoader, { program, progress, hero: 'Abrams' }));
   return html
     .replace(/<link rel="preload"[^>]*>/g, '')
-    .replace(/file:\/\/[^"]+\.webp/g, (url) => `data:image/webp;base64,${readFileSync(fileURLToPath(url)).toString('base64')}`);
+    .replace(/file:\/\/[^"]+\.webp/g, (url) => `data:image/webp;base64,${readFileSync(fileURLToPath(url)).toString('base64')}`)
+    .replace(/src="(\/heroes\/[^"]+\.png)"/g, (_, path: string) => `src="data:image/png;base64,${readFileSync(resolve(root, 'public', `.${path}`)).toString('base64')}"`);
 }
 const screenOf = (html: string) => /<div class="preview-loader__screen"[^>]*>(.*?)<\/div><div class="preview-loader__steam"/.exec(html)?.[1] ?? '';
-const screens = Object.fromEntries([...SCREEN_PROGRAMS, 'bar' as const].map((program) => [program, screenOf(markup(program, 0.4))]));
+const programs: ScreenProgram[] = ['hero', ...SCREEN_PROGRAMS, 'bar'];
+const screens = Object.fromEntries(programs.map((program) => [program, screenOf(markup(program, 0.4))]));
 
 const page = `<!doctype html>
 <html lang="en">
@@ -107,7 +109,7 @@ ${styles}
   <h2>Screen</h2>
   <div class="row" id="programs">
     <button data-program="auto" aria-pressed="true">In turn</button>
-    ${[...SCREEN_PROGRAMS, 'bar'].map((program) => `<button data-program="${program}">${program}</button>`).join('')}
+    ${programs.map((program) => `<button data-program="${program}">${program}</button>`).join('')}
   </div>
 
   <h2>Parts</h2>
@@ -134,11 +136,17 @@ ${styles}
   <p style="margin-top:8px">The freeze blocks scripts and layout, as a model load does. The fan, the light and the line should keep moving through it.</p>
 </aside>
 <script>
-const LOADER = ${JSON.stringify(markup(undefined, undefined))};
+const LOADER = ${JSON.stringify(markup('book', undefined))};
 const SCREENS = ${JSON.stringify(screens)};
-const PROGRAMS = ${JSON.stringify(SCREEN_PROGRAMS)};
+const PROGRAMS = ${JSON.stringify(SCREEN_PROGRAMS.flatMap((program, index) => index % 2 ? [program] : ['hero', program]))};
 const stage = document.getElementById('stage');
 const state = { mode: 'none', amount: 0.4, program: 'auto', turn: 0, started: performance.now() };
+// #program=book opens on one program, to link to it.
+const asked = new URLSearchParams(location.hash.slice(1)).get('program');
+if (asked && SCREENS[asked]) {
+  state.program = asked;
+  for (const button of document.getElementById('programs').children) button.setAttribute('aria-pressed', String(button.dataset.program === asked));
+}
 
 function mount() {
   stage.innerHTML = LOADER;

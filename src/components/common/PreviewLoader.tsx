@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { FAN, LAYERS, MUG, SCREEN, nextScreenProgram, type ScreenProgram } from './previewLoaderArt';
+import { getHeroChipIconPath } from '../../lib/lockerUtils';
+import { FAN, LAYERS, MUG, SCREEN, SCREEN_PROGRAMS, nextScreenProgram, type ScreenProgram } from './previewLoaderArt';
 
 // The loading state of a 3D preview: the news computer from the game's hideout, whose case fan is a
 // spinning pentagram, with a mug of cocoa beside it. The scene is a render of Valve's models, baked into
@@ -27,8 +28,10 @@ export function FanSpinner({ className = '', label }: { className?: string; labe
   );
 }
 
-function Screen({ program, progress }: { program: ScreenProgram; progress: number }) {
+function Screen({ program, progress, hero, onNoFace }: { program: ScreenProgram; progress: number; hero?: string; onNoFace: () => void }) {
   if (program === 'bar') return <div className="preview-loader__bar"><span style={{ transform: `scaleX(${progress})` }} /></div>;
+  if (program === 'hero' && hero) return <div className="preview-loader__face"><img src={getHeroChipIconPath(hero)} alt="" draggable={false} onError={onNoFace} /><i /></div>;
+  if (program === 'book' || program === 'hero') return <div className="preview-loader__book"><i /><i /><b /></div>;
   if (program === 'type') return <div className="preview-loader__type"><i /><i /><i /></div>;
   if (program === 'eye') return <div className="preview-loader__eye"><i /></div>;
   return <div className="preview-loader__pong"><i /><i /><b><em /></b></div>;
@@ -36,16 +39,20 @@ function Screen({ program, progress }: { program: ScreenProgram; progress: numbe
 
 /**
  * Fills its positioned parent with the loader. `progress` (0 to 1) fills the line under the scene and
- * a bar on the screen; without it the line sweeps and the screen runs one of its programs (`program`
- * picks which, for the lab). A box too small for the scene shows the fan alone. It fades in after a
- * moment, so a load that is over at once never flashes it.
+ * a bar on the screen; without it the line sweeps and the screen runs one of its programs, among them
+ * the face of `hero` when the load is a hero's (`program` picks one, for the lab). A box too small for
+ * the scene shows the fan alone. It fades in after a moment, so a load that is over at once never
+ * flashes it.
  */
-export function PreviewLoader({ progress, label, program, className = '' }: {
-  progress?: number | null; label?: string; program?: ScreenProgram; className?: string;
+export function PreviewLoader({ progress, label, hero, program, className = '' }: {
+  progress?: number | null; label?: string; hero?: string; program?: ScreenProgram; className?: string;
 }) {
   const known = typeof progress === 'number';
   const amount = known ? Math.min(1, Math.max(0, progress)) : 0;
-  const [idle] = useState(nextScreenProgram);
+  const [turn] = useState(() => nextScreenProgram(!!hero));
+  // A hero without an icon (a new one) leaves the screen to the first program.
+  const [noFace, setNoFace] = useState(false);
+  const idle = turn === 'hero' && noFace ? SCREEN_PROGRAMS[0] : turn;
   return (
     <div role={label ? 'status' : undefined} aria-label={label} aria-hidden={label ? undefined : true} className={`preview-loader ${className}`}>
       <div className="preview-loader__pc">
@@ -61,7 +68,7 @@ export function PreviewLoader({ progress, label, program, className = '' }: {
         <div className="preview-loader__rays" style={{ left: percent(SCREEN.left), top: percent(SCREEN.top) }} />
         <div className="preview-loader__screen"
           style={{ left: percent(SCREEN.left), top: percent(SCREEN.top), width: percent(SCREEN.width), aspectRatio: SCREEN.aspect, transform: matrix(SCREEN.matrix) }}>
-          <Screen program={program ?? (known ? 'bar' : idle)} progress={amount} />
+          <Screen program={program ?? (known ? 'bar' : idle)} progress={amount} hero={noFace ? undefined : hero} onNoFace={() => setNoFace(true)} />
         </div>
         <div className="preview-loader__steam" style={{ left: percent(MUG.left), top: percent(MUG.top) }}><i /><i /><i /></div>
       </div>

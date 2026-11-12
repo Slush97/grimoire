@@ -21,6 +21,14 @@ describe('PreviewLoader', () => {
     expect(new Set(seen).size).toBe(SCREEN_PROGRAMS.length);
   });
 
+  it('shows the face of the hero being loaded every other time, between the programs', () => {
+    const shown = [0, 1, 2, 3].map(() => renderToStaticMarkup(<PreviewLoader hero="Abrams" />));
+    const faces = shown.filter((html) => html.includes('preview-loader__face'));
+    expect(faces).toHaveLength(2);
+    expect(faces[0]).toContain('/heroes/chip-icons/abrams.png');
+    expect(shown.filter((html) => SCREEN_PROGRAMS.some((program) => html.includes(`preview-loader__${program}`)))).toHaveLength(2);
+  });
+
   it('fills the line and the bar on its screen with the progress, kept between 0 and 1', () => {
     const count = (html: string, text: string) => html.split(text).length - 1;
     expect(count(renderToStaticMarkup(<PreviewLoader progress={0.25} />), 'scaleX(0.25)')).toBe(2);

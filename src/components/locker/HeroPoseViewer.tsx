@@ -1445,7 +1445,7 @@ let hideoutWarmed = false;
  * fades out in place once the viewer has drawn, and fades back in when a later change takes it away.
  * `progress` from 0 to 1 fills the loader's screen; without it the wait reports no position.
  */
-function ViewerPlaceholder({ up, progress }: { up: boolean; progress?: number | null }) {
+function ViewerPlaceholder({ up, progress, hero }: { up: boolean; progress?: number | null; hero: string }) {
   // Whether it has been down: the first one is there from the start, a later one fades in.
   const [returning, setReturning] = useState(false);
   if (!up && !returning) setReturning(true);
@@ -1456,7 +1456,7 @@ function ViewerPlaceholder({ up, progress }: { up: boolean; progress?: number | 
     <div aria-hidden data-viewer-placeholder={up ? 'up' : 'down'}
       onAnimationEnd={(event) => { if (!up && event.target === event.currentTarget) setGone(true); }}
       className={`pointer-events-none absolute inset-0 bg-bg-secondary ${up ? returning ? 'animate-fade-in' : '' : 'animate-fade-out'}`}>
-      {!gone && <PreviewLoader progress={progress} />}
+      {!gone && <PreviewLoader progress={progress} hero={hero} />}
     </div>
   );
 }
@@ -2580,11 +2580,11 @@ export default function HeroPoseViewer({
       <canvas ref={attachCrossfade} hidden aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />
       {slowSwitch && !failed && (
         <div aria-hidden className="pointer-events-none absolute inset-0 animate-fade-in bg-bg-secondary">
-          <PreviewLoader />
+          <PreviewLoader hero={heroName} />
         </div>
       )}
       {/* The placeholder, which fades out in place once the viewer has all of the preview to show. */}
-      {!failed && <ViewerPlaceholder
+      {!failed && <ViewerPlaceholder hero={heroName}
         up={revealed === null || buildingHideout || waitingForRoom && !roomWaitOver || stageHold && (stagePhase === 'long' || !heroDrawn)}
         progress={!hideoutWarm && (buildingHideout || waitingForRoom)
           ? hideoutWarmingProgress({ building: buildingHideout, built: hideoutBuilt, build: buildProgress, room: roomProgress }) : undefined} />}
