@@ -19,7 +19,7 @@ describe('PreviewLoader', () => {
   });
 
   it('is hidden from assistive technology unless it is given a label', () => {
-    expect(renderToStaticMarkup(<PreviewLoader />)).toMatch(/^<div aria-hidden="true"/);
+    expect(renderToStaticMarkup(<PreviewLoader />)).toContain('<div aria-hidden="true" class="preview-loader');
     const labelled = renderToStaticMarkup(<PreviewLoader label="Loading" />);
     expect(labelled).toContain('role="status"');
     expect(labelled).toContain('aria-label="Loading"');
@@ -29,6 +29,14 @@ describe('PreviewLoader', () => {
     const html = renderToStaticMarkup(<PreviewLoader />);
     expect(html).toContain('preview-loader__fan');
     expect(html).toContain('preview-loader__mini');
+  });
+
+  it('draws the fan between the computer and the parts of it in front of the fan', () => {
+    const html = renderToStaticMarkup(<PreviewLoader />);
+    const at = (part: string) => html.indexOf(part, html.indexOf('class="preview-loader__pc"'));
+    expect(at('news-computer-back')).toBeGreaterThan(-1);
+    expect(at('preview-loader__fan')).toBeGreaterThan(at('news-computer-back'));
+    expect(at('news-computer-front')).toBeGreaterThan(at('preview-loader__fan'));
   });
 });
 

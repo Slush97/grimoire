@@ -1509,11 +1509,14 @@ body {
   100% { transform: rotate(var(--gear-spin-end)); }
 }
 
-/* Preview loader (common/PreviewLoader.tsx): a desk computer whose case fan is a pentagram. The fan
-   and the screen's bar are their own elements, animated by transform and opacity alone, so they keep
-   moving on the compositor while a model's load holds the main thread. Ink and surfaces come from
-   the tokens; the glow is the accent. It fades in after a moment, so a short load never flashes it. */
+/* Preview loader (common/PreviewLoader.tsx): the hideout's news computer, a render in still layers,
+   with its pentagram fan and the marks on its screen drawn over them. Only those and the glow move,
+   by transform and opacity alone, so they keep going on the compositor while a model's load holds
+   the main thread. The phosphor and ink colors belong to the render, not to the theme. It fades in
+   after a moment, so a short load never flashes it. */
 .preview-loader {
+  --loader-phosphor: #dcffe6;
+  --loader-ink: #15422b;
   position: absolute;
   inset: 0;
   display: grid;
@@ -1526,15 +1529,27 @@ body {
 
 .preview-loader__pc {
   position: relative;
-  width: min(64cqw, 80cqh, max(200px, 16cqw));
-  aspect-ratio: 160 / 138;
+  width: min(74cqw, 76cqh, max(280px, 34cqmin));
+  aspect-ratio: 760 / 750;
 }
 
-.preview-loader__art {
+.preview-loader__layer {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
-  overflow: visible;
+  user-select: none;
+}
+
+.preview-loader__glow {
+  animation: previewLoaderGlow 2.4s ease-in-out infinite alternate;
+  will-change: opacity;
+}
+
+@keyframes previewLoaderGlow {
+  from { opacity: 0.45; }
+  to { opacity: 0.9; }
 }
 
 .preview-loader .preview-loader__mini {
@@ -1549,66 +1564,47 @@ body {
   .preview-loader .preview-loader__mini { display: block; }
 }
 
-.preview-loader__case {
-  fill: var(--color-bg-tertiary);
-  stroke: color-mix(in srgb, var(--color-hl) 30%, transparent);
-  stroke-width: 1.25;
-  stroke-linejoin: round;
-}
-
-.preview-loader__line {
-  fill: none;
-  stroke: color-mix(in srgb, var(--color-hl) 22%, transparent);
-  stroke-width: 1;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.preview-loader__keys {
-  fill: none;
-  stroke: color-mix(in srgb, var(--color-hl) 30%, transparent);
-  stroke-width: 1.4;
-  stroke-dasharray: 2.6 1.4;
-}
-
-.preview-loader__dot {
-  fill: color-mix(in srgb, var(--color-hl) 30%, transparent);
-}
-
-.preview-loader__glow {
-  fill: color-mix(in srgb, var(--color-accent) 16%, var(--color-bg-sunken));
-  stroke: color-mix(in srgb, var(--color-accent) 55%, transparent);
-  stroke-width: 1;
-}
-
-.preview-loader__flame {
-  fill: var(--color-accent);
+/* Centered on the fan's hub and laid on its plane by the matrix the component sets. */
+.preview-loader__seat {
+  position: absolute;
+  aspect-ratio: 1;
+  translate: -50% -50%;
 }
 
 .preview-loader__fan {
-  position: absolute;
-  left: 20.625%;
-  top: 34.7826%;
-  width: 20%;
-  aspect-ratio: 1;
+  width: 100%;
+  height: 100%;
+  color: var(--loader-phosphor);
 }
 
 .fan-spinner {
   display: block;
-  animation: fanSpin 1.6s linear infinite;
+  overflow: visible;
+  animation: fanSpin 1s linear infinite;
   will-change: transform;
 }
 
 .fan-spinner > * {
   fill: none;
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: 0.16;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
+/* In the computer the fan turns as fast as the game's (its clip is 0.64 s a turn) and is drawn finer. */
+.preview-loader__fan {
+  animation-duration: 0.64s;
+}
+
 .preview-loader__fan > * {
-  stroke-width: 1.6;
+  stroke-width: 0.09;
+  stroke-linejoin: miter;
+}
+
+.preview-loader__fan > circle {
+  stroke-width: 0.075;
+  opacity: 0.75;
 }
 
 @keyframes fanSpin {
@@ -1618,37 +1614,34 @@ body {
 /* The screen: a bar that fills with the load, or a cursor while nothing reports how far it is. */
 .preview-loader__screen {
   position: absolute;
-  left: 51.875%;
-  top: 44.9275%;
-  width: 32.5%;
-  height: 23.1884%;
+  translate: -50% -50%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .preview-loader__bar {
-  width: 78%;
-  height: 16%;
+  width: 64%;
+  height: 17%;
   min-height: 3px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--loader-ink) 28%, transparent);
 }
 
 .preview-loader__bar > span {
   display: block;
   width: 100%;
   height: 100%;
-  background: var(--color-accent);
+  background: var(--loader-ink);
   transform-origin: left;
   transition: transform 400ms ease-out;
 }
 
 .preview-loader__cursor {
-  width: 16%;
-  height: 12%;
-  min-height: 2px;
-  background: var(--color-accent);
+  width: 15%;
+  height: 22%;
+  min-height: 3px;
+  background: var(--loader-ink);
   animation: previewCursorBlink 1.1s steps(1, end) infinite;
 }
 
@@ -1658,7 +1651,9 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .preview-loader { animation-duration: 0.01ms; }
-  .fan-spinner { animation-duration: 8s; }
+  .fan-spinner,
+  .preview-loader__fan { animation-duration: 8s; }
+  .preview-loader__glow,
   .preview-loader__cursor { animation: none; }
   .preview-loader__bar > span { transition: none; }
 }

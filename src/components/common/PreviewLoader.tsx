@@ -1,16 +1,37 @@
-// The loading state of a 3D preview: a desk computer whose case fan is a spinning pentagram, after
-// the one in the game's hideout. Styles are under `.preview-loader` in index.css. The fan and the
-// screen's bar are elements of their own that only animate transform and opacity, which the
-// compositor runs without the main thread: they keep moving while a model parses or its shaders link.
+// The loading state of a 3D preview: the news computer from the game's hideout, whose case fan is a
+// spinning pentagram. The computer is a render of Valve's model, baked into still layers (see
+// docs/viewer-backgrounds.md); the fan and the marks on the screen are drawn here, on the planes the
+// bake measured. Only they move, by transform and opacity alone, which the compositor runs without the
+// main thread: they keep going while a model parses or its shaders link. Styles are under
+// `.preview-loader` in index.css.
 
-const PENTAGRAM = 'M0-14 8.23 11.33-13.31-4.33H13.31L-8.23 11.33z';
+const LAYERS = {
+  /** The computer, without its fan. */
+  back: new URL('../../assets/preview-loader/news-computer-back.webp', import.meta.url).href,
+  /** The parts of it nearer than the fan (the window's frame), drawn over the fan. */
+  front: new URL('../../assets/preview-loader/news-computer-front.webp', import.meta.url).href,
+  /** What it emits, blurred: the chamber, the screen and the candle. */
+  glow: new URL('../../assets/preview-loader/news-computer-glow.webp', import.meta.url).href,
+};
+
+// Where the fan and the screen sit in the render, as fractions of its box, and the 2D matrix that lays
+// a flat element on each one's plane. From the bake; they change only with the render.
+const FAN = { left: 0.3248, top: 0.3241, width: 0.1245, matrix: [0.964, 0.0401, 0.0669, 0.9978] };
+const SCREEN = { left: 0.5285, top: 0.4314, width: 0.1567, aspect: 1.232, matrix: [0.9983, 0.0589, -0.0283, 0.9977] };
+
+/** The fan's drawing reaches 1.16 times the pentagram's tips (its stroke and the miter of its points). */
+const FAN_VIEW = 1.16;
+const PENTAGRAM = 'M0-1 .588.809-.951-.309H.951L-.588.809z';
+
+const percent = (fraction: number) => `${(fraction * 100).toFixed(2)}%`;
+const matrix = ([a, b, c, d]: number[]) => `matrix(${a}, ${b}, ${c}, ${d}, 0, 0)`;
 
 /** The fan alone: the spinner for a change inside a preview that is already showing. Colored by `currentColor`. */
 export function FanSpinner({ className = '', label }: { className?: string; label?: string }) {
   return (
-    <svg viewBox="-16 -16 32 32" role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true}
+    <svg viewBox={`${-FAN_VIEW} ${-FAN_VIEW} ${2 * FAN_VIEW} ${2 * FAN_VIEW}`} role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true}
       className={`fan-spinner ${className}`}>
-      <circle r="14" />
+      <circle r="0.745" />
       <path d={PENTAGRAM} />
     </svg>
   );
@@ -26,37 +47,15 @@ export function PreviewLoader({ progress, label, className = '' }: { progress?: 
   return (
     <div role={label ? 'status' : undefined} aria-label={label} aria-hidden={label ? undefined : true} className={`preview-loader ${className}`}>
       <div className="preview-loader__pc">
-        <svg className="preview-loader__art" viewBox="-3 0 160 138" aria-hidden>
-          {/* Candle */}
-          <path className="preview-loader__flame" d="M44 3.5c2 2.4 3 4 3 5.6a3 3 0 0 1-6 0c0-1.6 1-3.2 3-5.6z" />
-          <path className="preview-loader__case" d="M42 12h4v10h-4z" />
-          <path className="preview-loader__line" d="M38 22h12" />
-          {/* Case: pediment, cornice, body, plinth */}
-          <path className="preview-loader__case" d="M14 34c9 0 11-11 30-11s21 11 30 11z" />
-          <path className="preview-loader__case" d="M10 34h68v5H10z" />
-          <path className="preview-loader__case" d="M13 39h62v77H13z" />
-          <path className="preview-loader__case" d="M10 116h68v5H10z" />
-          {/* Door */}
-          <path className="preview-loader__line" d="M18 45h7v65h-7z" />
-          <circle className="preview-loader__dot" cx="21.5" cy="80" r="1.4" />
-          {/* Fan window */}
-          <path className="preview-loader__glow" d="M29 110V62a17 17 0 0 1 34 0v48z" />
-          <path className="preview-loader__line" d="M29 86h34M29 98h34" />
-          {/* Monitor */}
-          <path className="preview-loader__case" d="M74 119l3-6h62l3 6z" />
-          <rect className="preview-loader__case" x="72" y="56" width="72" height="58" rx="7" />
-          <rect className="preview-loader__glow" x="80" y="62" width="52" height="32" rx="6" />
-          <path className="preview-loader__line" d="M82 101h30M82 104.5h30M82 108h30" />
-          <circle className="preview-loader__dot" cx="121" cy="104.5" r="2.2" />
-          <circle className="preview-loader__dot" cx="129" cy="104.5" r="2.2" />
-          <circle className="preview-loader__dot" cx="137" cy="104.5" r="2.2" />
-          <path className="preview-loader__line" d="M136 66v24M139 66v24" />
-          {/* Keyboard */}
-          <path className="preview-loader__case" d="M82 125h56l6 10H76z" />
-          <path className="preview-loader__keys" d="M84 128.5h52M82 131.5h56" />
-        </svg>
-        <FanSpinner className="preview-loader__fan" />
-        <div className="preview-loader__screen">
+        <img className="preview-loader__layer" src={LAYERS.back} alt="" draggable={false} />
+        <img className="preview-loader__layer preview-loader__glow" src={LAYERS.glow} alt="" draggable={false} />
+        <div className="preview-loader__seat"
+          style={{ left: percent(FAN.left), top: percent(FAN.top), width: percent(FAN.width * FAN_VIEW), transform: matrix(FAN.matrix) }}>
+          <FanSpinner className="preview-loader__fan" />
+        </div>
+        <img className="preview-loader__layer" src={LAYERS.front} alt="" draggable={false} />
+        <div className="preview-loader__screen"
+          style={{ left: percent(SCREEN.left), top: percent(SCREEN.top), width: percent(SCREEN.width), aspectRatio: SCREEN.aspect, transform: matrix(SCREEN.matrix) }}>
           {known
             ? <div className="preview-loader__bar"><span style={{ transform: `scaleX(${Math.min(1, Math.max(0, progress))})` }} /></div>
             : <div className="preview-loader__cursor" />}
