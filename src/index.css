@@ -2062,7 +2062,8 @@ body {
 
 .loader-toy:has(.loader-toy__hit--glass:hover) .preview-loader__static > i { opacity: 0.8; }
 
-/* A small one of the computer, in a quiet corner of the app, that opens the real one (NewsComputerDoor). */
+/* A small one of the computer, in a quiet corner of the app, that opens the real one (NewsComputerDoor).
+   It stands on the page itself, with nothing behind it. */
 .loader-door {
   position: absolute;
   inset: 0;
@@ -2073,7 +2074,9 @@ body {
 
 .loader-door:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 
+/* It takes all of its box: the loader's own sizing leaves room for a line under the scene, which this has not. */
 .loader-door > .preview-loader {
+  --loader-width: min(100cqw, 101cqh);
   animation: none;
   transition: transform 200ms ease-out, filter 200ms;
 }
@@ -2121,16 +2124,19 @@ body {
   100% { opacity: 0; transform: scale(1.25, 1.15) skewX(8deg); }
 }
 
-/* An egg on the screen (the line "yoshi"), in the tube's dots: it rocks, rocks harder, cracks along its
-   middle, its top comes off with a few sparks, and it starts over. One loop of six seconds. */
+/* An egg on the screen (the line "yoshi"), in the tube's dots. Left alone it only rocks, now and then.
+   A knock on the glass cracks it (`data-hatch`, for 4.2 seconds): it shakes, splits along its middle,
+   its top comes off with a few sparks, and it fades back whole. */
 .loader-toy__egg {
   position: relative;
   height: 62%;
   margin-top: 12%;
   aspect-ratio: 13 / 16;
   transform-origin: 50% 100%;
-  animation: loaderToyEgg 6s ease-in-out infinite;
+  animation: loaderToyEggRock 4.6s ease-in-out infinite;
 }
+
+.loader-toy__egg[data-hatch] { animation: loaderToyEggHatch 4.2s ease-out both; }
 
 .loader-toy__egg > svg {
   position: absolute;
@@ -2141,51 +2147,51 @@ body {
   fill: var(--loader-ink);
 }
 
-.loader-toy__egg > .loader-toy__egg-top {
-  transform-origin: 15% 45%;
-  animation: loaderToyEggTop 6s ease-out infinite;
+.loader-toy__egg > .loader-toy__egg-top { transform-origin: 15% 45%; }
+.loader-toy__egg > .loader-toy__egg-crack { clip-path: inset(0 100% 0 0); }
+.loader-toy__egg > .loader-toy__egg-sparks { opacity: 0; }
+
+.loader-toy__egg[data-hatch] > .loader-toy__egg-top { animation: loaderToyEggTop 4.2s ease-out both; }
+.loader-toy__egg[data-hatch] > .loader-toy__egg-crack { animation: loaderToyEggCrack 4.2s linear both; }
+.loader-toy__egg[data-hatch] > .loader-toy__egg-sparks { animation: loaderToyEggSparks 4.2s steps(1, end) both; }
+
+@keyframes loaderToyEggRock {
+  0%, 22%, 44%, 62%, 80%, 100% { transform: rotate(0deg); }
+  26%, 34% { transform: rotate(-5deg); }
+  30%, 38% { transform: rotate(5deg); }
+  41% { transform: rotate(-3deg); }
+  66%, 72% { transform: rotate(-8deg); }
+  69%, 75% { transform: rotate(8deg); }
+  78% { transform: rotate(-3deg); }
 }
 
-.loader-toy__egg > .loader-toy__egg-crack {
-  clip-path: inset(0 100% 0 0);
-  animation: loaderToyEggCrack 6s linear infinite;
-}
-
-.loader-toy__egg > .loader-toy__egg-sparks {
-  opacity: 0;
-  animation: loaderToyEggSparks 6s steps(1, end) infinite;
-}
-
-@keyframes loaderToyEgg {
-  0%, 16%, 37%, 43%, 57.5%, 90% { transform: rotate(0deg); opacity: 1; }
-  19.5%, 26.5% { transform: rotate(-6deg); }
-  23%, 30% { transform: rotate(6deg); }
-  33.5% { transform: rotate(-4deg); }
-  46%, 52% { transform: rotate(-10deg); }
-  49% { transform: rotate(10deg); }
-  55% { transform: rotate(9deg); }
-  94%, 97% { transform: rotate(0deg); opacity: 0; }
+@keyframes loaderToyEggHatch {
+  0%, 12%, 84% { transform: rotate(0deg); opacity: 1; }
+  3% { transform: rotate(-9deg); }
+  6% { transform: rotate(8deg); }
+  9% { transform: rotate(-5deg); }
+  90%, 94% { transform: rotate(0deg); opacity: 0; }
   100% { transform: rotate(0deg); opacity: 1; }
 }
 
-@keyframes loaderToyEggTop {
-  0%, 64% { transform: none; }
-  68% { transform: translate(-4%, -13%) rotate(-13deg); }
-  72%, 80%, 88%, 95% { transform: translate(-3%, -8%) rotate(-9deg); }
-  76%, 84% { transform: translate(-3%, -10%) rotate(-10deg); }
-  96%, 100% { transform: none; }
+@keyframes loaderToyEggCrack {
+  0% { clip-path: inset(0 100% 0 0); animation-timing-function: steps(6, end); }
+  8%, 92% { clip-path: inset(0 0 0 0); animation-timing-function: steps(1, end); }
+  93%, 100% { clip-path: inset(0 100% 0 0); }
 }
 
-@keyframes loaderToyEggCrack {
-  0%, 57.5% { clip-path: inset(0 100% 0 0); animation-timing-function: steps(6, end); }
-  63.5%, 95% { clip-path: inset(0 0 0 0); animation-timing-function: steps(1, end); }
-  96%, 100% { clip-path: inset(0 100% 0 0); }
+@keyframes loaderToyEggTop {
+  0%, 10% { transform: none; }
+  16% { transform: translate(-4%, -13%) rotate(-13deg); }
+  22%, 40%, 58%, 76%, 92% { transform: translate(-3%, -8%) rotate(-9deg); }
+  31%, 49%, 67% { transform: translate(-3%, -10%) rotate(-10deg); }
+  93%, 100% { transform: none; }
 }
 
 @keyframes loaderToyEggSparks {
-  0%, 67% { opacity: 0; }
-  68%, 78%, 86% { opacity: 1; }
-  73%, 82%, 90%, 100% { opacity: 0; }
+  0%, 13% { opacity: 0; }
+  14%, 28%, 42% { opacity: 1; }
+  21%, 35%, 50%, 100% { opacity: 0; }
 }
 
 /* What some lines do to the picture. A storm of static over the hero: */

@@ -6,7 +6,7 @@ import type { ToySound } from '../../lib/loaderToySound';
 import { useAppStore } from '../../stores/appStore';
 import { CAP_CHARS, EGG, TOY_BLANK, TOY_FINDS, loaderToy, phraseListener, toyCap, toyChar, toyDemoLine, toyFind, toyFinds, toyLines, toyType, type ToyFind, type ToyScreen } from '../../lib/loaderToy';
 import { Modal } from './Modal';
-import { Book, Face, Glyphs, LoaderScene, LoaderSteam, Typed } from './PreviewLoader';
+import { Book, Face, FanSpinner, Glyphs, LoaderScene, LoaderSteam, Typed } from './PreviewLoader';
 import { FAN, KEY_BOXES, LAYERS, PLANCHETTE, SCREEN, typingFor, type Typing } from './previewLoaderArt';
 import { IconButton } from './ui';
 
@@ -31,8 +31,8 @@ const AWESOME_PACE = 5;
 const MOUSE_REACH = [0.07, 0.055];
 /** Seconds: how quickly the planchette closes on the pointer, and how long after the pointer has left the app it goes home. */
 const MOUSE_GLIDE = 0.075, MOUSE_HOME = 1.5;
-/** The egg's loop, and the moment in it when its shell cracks, in milliseconds (the keyframes in index.css). */
-const EGG_LOOP = 6000, EGG_CRACK = 3500;
+/** Milliseconds a cracked egg takes to open, stand open and be whole again (the keyframes in index.css). */
+const EGG_HATCH = 4200;
 /** Where the mute button's state is kept between openings, what has been found, and whether it has ever been opened. */
 const MUTED_KEY = 'grimoire.newsComputer.muted', FOUND_KEY = 'grimoire.newsComputer.found', SEEN_KEY = 'grimoire.newsComputer.seen';
 /** What it says to a line it does not know. */
@@ -73,35 +73,28 @@ function Lines({ lines, typed }: { lines: string[]; typed?: string }) {
   );
 }
 
-/** An egg in the screen's dots that rocks, cracks along its middle and opens, over and over (see EGG). */
+/**
+ * An egg in the screen's dots (see EGG). Left alone it only rocks. A knock on the glass (`strikes` counts
+ * them) cracks it: the shell splits along its middle, the top comes off, and after a while it is whole
+ * again and can be cracked once more. A knock while it is open does nothing.
+ */
 function Egg({ onCrack, strikes }: { onCrack: () => void; strikes: number }) {
-  const egg = useRef<HTMLDivElement>(null);
-  const struck = useRef(strikes);
-  // The crack sounds as it is drawn. It is timed off the loop itself, each time round, so that the two
-  // stay together however long the egg is up. An egg that is not moving (reduced motion) makes no sound.
-  // A knock on the glass (`strikes` counts them) cracks it there and then: its loop skips to the crack.
+  const [seen, setSeen] = useState(strikes);
+  const [hatching, setHatching] = useState(false);
+  if (strikes !== seen) {
+    setSeen(strikes);
+    setHatching(true);
+  }
   useEffect(() => {
-    if (struck.current !== strikes) {
-      struck.current = strikes;
-      const loops = egg.current?.getAnimations({ subtree: true }) ?? [];
-      for (const loop of loops) loop.currentTime = EGG_CRACK;
-      if (loops.length) onCrack();
-    }
-    let timer = 0;
-    const wait = () => {
-      const loop = egg.current?.getAnimations()[0];
-      if (!loop) return;
-      const until = (EGG_CRACK - Number(loop.currentTime ?? 0) % EGG_LOOP + EGG_LOOP) % EGG_LOOP;
-      // Just past the crack, the next one is a whole loop away.
-      timer = window.setTimeout(() => { onCrack(); wait(); }, until < 200 ? until + EGG_LOOP : until);
-    };
-    wait();
+    if (!hatching) return;
+    onCrack();
+    const timer = setTimeout(() => setHatching(false), EGG_HATCH);
     return () => clearTimeout(timer);
-  }, [onCrack, strikes]);
+  }, [hatching, onCrack]);
   const part = (name: string, d: string) => <svg className={`loader-toy__egg-${name}`} viewBox={`0 0 ${EGG.columns} ${EGG.rows}`}><path d={d} /></svg>;
   return (
     <>
-      <div ref={egg} className="loader-toy__egg">
+      <div className="loader-toy__egg" data-hatch={hatching || undefined}>
         {part('bottom', EGG.bottom)}
         {part('crack', EGG.crack)}
         {part('top', EGG.top)}
@@ -161,7 +154,7 @@ function LoaderToy({ line }: { line: string }) {
   const [muted, setMuted] = useState(() => localStorage.getItem(MUTED_KEY) === '1');
   const mutedNow = useRef(muted);
   const crack = useCallback(() => sound.current?.crack(), []);
-  // Knocks on the glass while the egg is up, each of which cracks it.
+  // Knocks on the glass while the egg is up, which are what cracks it.
   const [strikes, setStrikes] = useState(0);
   const mute = (next: boolean) => {
     setMuted(next);
@@ -472,14 +465,18 @@ function LoaderToy({ line }: { line: string }) {
 
 /**
  * A small one of the computer, for a quiet corner of the app: it runs as the loader does, and a click on
- * it opens the real one. Fills its positioned parent, which should be dark and no smaller than the
- * loader's scene needs (150 by 130).
+ * it opens the real one. Fills its positioned parent. In one too small for the scene (under 150 by 130)
+ * it is the fan alone.
  */
 export function NewsComputerDoor() {
   const { t } = useTranslation();
   return (
     <button type="button" aria-label={t('layout.newsComputer')} onClick={() => loaderToy.open()} className="loader-door">
-      <span aria-hidden className="preview-loader"><LoaderScene screen={<Book />} /></span>
+      <span aria-hidden className="preview-loader">
+        <LoaderScene screen={<Book />} />
+        {/* What is left of it in a box too small for the scene, as with the loader: its fan. */}
+        <FanSpinner className="preview-loader__mini" />
+      </span>
     </button>
   );
 }

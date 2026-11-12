@@ -7,7 +7,6 @@ import { Badge, Button, Card, ModalHeader, SegmentedControl, Toggle } from '../.
 import { Modal, ModalBody, ModalFooter } from '../../common/Modal';
 import Tx from '../../translation/Tx';
 import { useAppStore } from '../../../stores/appStore';
-import { NewsComputerDoor } from '../../common/LoaderToy';
 import type { UpdateStatus } from '../../../types/electron';
 import type { UpdateChannel } from '../../../types/mod';
 
@@ -304,11 +303,6 @@ export default function UpdatesSection() {
           )}
         </div>
       </Card>
-
-      {/* Easter egg: the loader's computer, small, which opens the one that can be played with (LoaderToy). */}
-      <div className="flex justify-end">
-        <div className="always-dark relative h-48 w-52 overflow-hidden rounded-sm bg-bg-secondary"><NewsComputerDoor /></div>
-      </div>
 
       {showChangelog && updateStatus?.updateInfo && (
         <Modal onClose={closeChangelog} labelledBy={changelogTitleId} size="lg">

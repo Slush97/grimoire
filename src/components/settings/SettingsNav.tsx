@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { NewsComputerDoor } from '../common/LoaderToy';
 
 // ============================================================================
 // SettingsNav - the secondary sidebar on the Settings page.
@@ -34,10 +35,10 @@ export default function SettingsNav({ groups, active, onSelect, label, search }:
   return (
     <nav
       aria-label={label}
-      className="w-full shrink-0 md:sticky md:top-6 md:w-56 md:self-start"
+      className="w-full shrink-0 md:sticky md:top-6 md:flex md:max-h-[calc(100vh-8.5rem)] md:w-56 md:flex-col md:self-start"
     >
-      {search}
-      <div className="space-y-5">
+      <div className="shrink-0">{search}</div>
+      <div className="shrink-0 space-y-5">
         {groups.map((group) => (
           <div key={group.id}>
             <h2 className="mb-1.5 px-3 text-2xs font-medium uppercase tracking-wider text-text-secondary/70">
@@ -79,6 +80,11 @@ export default function SettingsNav({ groups, active, onSelect, label, search }:
           </div>
         ))}
       </div>
+      {/* Easter egg: the loader's computer, under the menu on every settings page. It opens the one that
+          can be played with (LoaderToy). It takes the room the window leaves under the menu, up to its
+          full size: in a short window it is smaller, then only its fan, then not there. Not shown where
+          the menu sits above the page, on a narrow window. */}
+      <div className="relative mt-6 hidden min-h-0 w-full flex-[0_1_14rem] md:block"><NewsComputerDoor /></div>
     </nav>
   );
 }
