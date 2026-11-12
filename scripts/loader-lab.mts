@@ -94,6 +94,9 @@ ${styles}
 #stage[data-off~="keys"] .preview-loader__keys > i { animation: none !important; }
 #stage .preview-loader__fan { animation-duration: var(--lab-fan, 0.64s); }
 #stage .preview-loader__planchette { animation-delay: var(--lab-planchette, 5s); }
+/* Lab only: a close look at the screen. */
+#stage[data-zoom] .preview-loader__pc { transform: scale(2.8); transform-origin: 52.9% 43.1%; }
+#stage[data-zoom] .preview-loader__status { visibility: hidden; }
 </style>
 <main><div id="stage"></div></main>
 <aside>
@@ -151,6 +154,7 @@ ${styles}
 
   <h2>Try</h2>
   <div class="row">
+    <button id="zoom" aria-pressed="false">Zoom on the screen</button>
     <button id="replay">Replay from the start</button>
     <button id="stall">Freeze the page for 3 s</button>
   </div>
@@ -232,6 +236,10 @@ slider('fan', (value) => stage.style.setProperty('--lab-fan', value + 's'));
 slider('planchette', (value) => stage.style.setProperty('--lab-planchette', value + 's'));
 document.getElementById('accent').addEventListener('input', (event) => document.documentElement.style.setProperty('--color-accent', event.target.value));
 document.getElementById('replay').addEventListener('click', mount);
+const zoom = document.getElementById('zoom');
+const setZoom = (on) => { zoom.setAttribute('aria-pressed', String(on)); if (on) stage.dataset.zoom = '1'; else delete stage.dataset.zoom; };
+zoom.addEventListener('click', () => setZoom(zoom.getAttribute('aria-pressed') !== 'true'));
+if (new URLSearchParams(location.hash.slice(1)).has('zoom')) setZoom(true);
 document.getElementById('stall').addEventListener('click', () => { const until = performance.now() + 3000; while (performance.now() < until) { /* busy */ } });
 mount();
 </script>
