@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GLYPH_CELL, KEY_BOXES, PHRASES, glyphPath, wrapToScreen } from '../components/common/previewLoaderArt';
-import { CAP_CHARS, EGG, TOY_BLANK, TOY_ROWS, knockCounter, phraseListener, toyCap, toyChar, toyCommand, toyLines, toyType, type ToyScreen } from './loaderToy';
+import { CAP_CHARS, EGG, KNOCKS, TOY_BLANK, TOY_FINDS, TOY_ROWS, knockCounter, phraseListener, toyCap, toyChar, toyCommand, toyDemoLine, toyFind, toyFinds, toyLines, toyType, type ToyScreen } from './loaderToy';
 
 const typed = (text: string, screen: ToyScreen = TOY_BLANK) => [...text].reduce((now, char) => toyType(now, { char }), screen);
 
@@ -110,9 +110,12 @@ describe('toyType', () => {
     expect(toyType(answered, 'enter')).toMatchObject({ text: '', answer: null, answers: 1, jolts: 0 });
   });
 
-  it('jolts at a line it does not know, and does nothing at an empty one', () => {
-    expect(toyType(typed('sudo'), 'enter')).toMatchObject({ text: '', answer: null, jolts: 1 });
-    expect(toyType(typed('  '), 'enter')).toMatchObject({ text: '', jolts: 0 });
+  it('jolts at a line it does not know and says so, and does nothing at an empty one', () => {
+    const unknown = toyType(typed('sudo'), 'enter');
+    expect(unknown).toMatchObject({ text: '', answer: { kind: 'unknown' }, jolts: 1 });
+    // The next key clears what it said, as it does any answer.
+    expect(toyType(unknown, { char: 'h' })).toMatchObject({ text: 'h', answer: null });
+    expect(toyType(typed('  '), 'enter')).toMatchObject({ text: '', answer: null, jolts: 0 });
   });
 
   it('clears, and leaves', () => {
@@ -129,7 +132,7 @@ describe('toyType', () => {
   });
 
   it('puts up an answer nobody asked for', () => {
-    expect(toyType(typed('half a li'), { show: { kind: 'phrases' } })).toMatchObject({ text: '', answer: { kind: 'phrases' }, answers: 1 });
+    expect(toyType(typed('half a li'), { show: { kind: 'phrases', asked: false } })).toMatchObject({ text: '', answer: { kind: 'phrases', asked: false }, answers: 1 });
   });
 });
 
@@ -176,13 +179,63 @@ describe('phraseListener', () => {
 });
 
 describe('knockCounter', () => {
-  it('opens at the fifth knock in a row, and starts over after it', () => {
+  it('counts the knocks in a row up to the one that opens, and starts over after it', () => {
     const knock = knockCounter();
-    expect([0, 300, 600, 900, 1200, 1500].map(knock)).toEqual([false, false, false, false, true, false]);
+    expect([0, 300, 600, 900, 1200, 1500].map(knock)).toEqual([1, 2, 3, 4, KNOCKS, 1]);
   });
 
   it('forgets knocks that came too long ago', () => {
     const knock = knockCounter();
-    expect([0, 300, 600, 900, 5000, 5300].map(knock)).toEqual([false, false, false, false, false, false]);
+    expect([0, 300, 600, 900, 5000, 5300].map(knock)).toEqual([1, 2, 3, 4, 1, 2]);
+  });
+});
+
+describe('what the computer types by itself', () => {
+  it('goes through its phrases, a hero and its book, every line one it knows', () => {
+    const lines = Array.from({ length: 10 }, (_, turn) => toyDemoLine(turn));
+    for (const phrase of PHRASES) expect(lines).toContain(phrase);
+    expect(lines).toContain('book');
+    for (const line of lines) expect(toyCommand(line)).not.toBeNull();
+    // Never the same line twice running.
+    lines.slice(1).forEach((line, index) => expect(line).not.toBe(lines[index]));
+    // The hero changes from one round to the next.
+    expect(toyDemoLine(1)).not.toBe(toyDemoLine(6));
+    expect(toyCommand(toyDemoLine(1))).toMatchObject({ kind: 'hero' });
+  });
+
+  it('keeps its secrets to itself', () => {
+    const lines = new Set(Array.from({ length: 60 }, (_, turn) => toyDemoLine(turn)));
+    for (const secret of ['yoshi', 'gamer', 'rgb', 'help']) expect(lines.has(secret)).toBe(false);
+  });
+
+  it('is asked for with help, and that is not the same as being left alone', () => {
+    expect(toyCommand('help')).toEqual({ kind: 'phrases', asked: true });
+  });
+});
+
+describe('finds', () => {
+  const answerTo = (line: string) => toyType(typed(line), 'enter').answer;
+
+  it('counts each line that does something, once it has', () => {
+    expect(toyFind(answerTo('nerf bebop'))).toBe('nerf bebop');
+    expect(toyFind(answerTo('lash'))).toBe('hero');
+    expect(toyFind(answerTo('door stuck'))).toBe('door stuck');
+    expect(toyFind(answerTo('grimoire is awesome'))).toBe('grimoire is awesome');
+    expect(toyFind(answerTo('book'))).toBe('book');
+    expect(toyFind(answerTo('yoshi'))).toBe('yoshi');
+    expect(toyFind(answerTo('help'))).toBe('help');
+  });
+
+  it('counts nothing for a line it does not know, an empty screen, or lines it typed unasked', () => {
+    expect(toyFind(answerTo('sudo'))).toBeNull();
+    expect(toyFind(null)).toBeNull();
+    expect(toyFind({ kind: 'phrases', asked: false })).toBeNull();
+  });
+
+  it('reads back only finds there are, each once, whatever was kept', () => {
+    expect(toyFinds(JSON.stringify(['mug', 'fan', 'mug', 'nonsense', 3]))).toEqual(['fan', 'mug']);
+    for (const kept of [null, '', 'not json', '{"a":1}', '7']) expect(toyFinds(kept)).toEqual([]);
+    expect(toyFinds(JSON.stringify(TOY_FINDS))).toEqual([...TOY_FINDS]);
+    expect(new Set(TOY_FINDS).size).toBe(TOY_FINDS.length);
   });
 });

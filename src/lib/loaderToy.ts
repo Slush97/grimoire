@@ -60,7 +60,10 @@ export const TOY_MAX = TOY_ROWS * SCREEN_LINE;
 export type ToyShow =
   | { kind: 'hero'; hero: string; storm: boolean }
   | { kind: 'book'; mood: 'calm' | 'stuck' | 'awesome' }
-  | { kind: 'phrases' }
+  /** The computer typing lines of its own, one after another: asked for (`help`), or because it was left alone. */
+  | { kind: 'phrases'; asked: boolean }
+  /** A line it does not know. */
+  | { kind: 'unknown' }
   | { kind: 'egg' }
   | { kind: 'rgb' }
   | { kind: 'clear' }
@@ -84,7 +87,7 @@ export function toyCommand(line: string): ToyShow | null {
     case 'door stuck': return { kind: 'book', mood: 'stuck' };
     case 'grimoire is awesome': return { kind: 'book', mood: 'awesome' };
     case 'grimoire': case 'book': return { kind: 'book', mood: 'calm' };
-    case 'help': return { kind: 'phrases' };
+    case 'help': return { kind: 'phrases', asked: true };
     case 'yoshi': return { kind: 'egg' };
     case 'gamer': case 'rgb': return { kind: 'rgb' };
     case 'clear': case 'cls': return { kind: 'clear' };
@@ -147,16 +150,17 @@ export function phraseListener(): (char: string | null) => string | null {
 }
 
 /** How many knocks on the logo open the computer, and the seconds they must all come within. */
-const KNOCKS = 5, KNOCK_WINDOW = 2.5;
+export const KNOCKS = 5;
+const KNOCK_WINDOW = 2.5;
 
-/** Counts knocks (clicks on the app's logo). Returns true on the knock that opens the computer. */
-export function knockCounter(): (now: number) => boolean {
+/** Counts knocks (clicks on the app's logo): how many there have been in a row, KNOCKS being the one that opens the computer. */
+export function knockCounter(): (now: number) => number {
   let times: number[] = [];
   return (now) => {
     times = [...times.filter((time) => now - time <= KNOCK_WINDOW * 1000), now];
-    if (times.length < KNOCKS) return false;
-    times = [];
-    return true;
+    const knocks = times.length;
+    if (knocks >= KNOCKS) times = [];
+    return Math.min(knocks, KNOCKS);
   };
 }
 
@@ -186,9 +190,46 @@ export const loaderToy = {
 };
 
 const knock = knockCounter();
-/** A click on the app's logo. */
-export function knockOnLogo(): void {
-  if (knock(Date.now())) loaderToy.open();
+/** A click on the app's logo. Returns how many there have been in a row, for the logo to answer each one a little more. */
+export function knockOnLogo(): number {
+  const knocks = knock(Date.now());
+  if (knocks === KNOCKS) loaderToy.open();
+  return knocks;
+}
+
+// What the computer types by itself, when asked (`help`) or left alone: the lines anybody may know, one
+// after another. The rest are for finding.
+const DEMO_HEROES = HERO_NAMES_SORTED.filter((hero) => /^[A-Za-z]{3,8}$/.test(hero)).map((hero) => hero.toLowerCase());
+/** The line it types on a given turn: its phrases, with a hero's name and its book between them. */
+export function toyDemoLine(turn: number): string {
+  const round = Math.floor(turn / 5), hero = DEMO_HEROES.length ? DEMO_HEROES[(round * 7) % DEMO_HEROES.length] : 'book';
+  return [PHRASES[0], hero, PHRASES[2], 'book', PHRASES[1]][((turn % 5) + 5) % 5];
+}
+
+// What there is to find on the computer: lines that do something, and parts that answer a click. The
+// screen keeps count (so many of so many), which is the whole of its hint that there is more.
+export const TOY_FINDS = ['nerf bebop', 'door stuck', 'grimoire is awesome', 'hero', 'book', 'help', 'gamer', 'yoshi', 'fan', 'mug', 'glass', 'key', 'knock'] as const;
+export type ToyFind = typeof TOY_FINDS[number];
+
+/** What the answer on the screen counts as having found, if anything. */
+export function toyFind(answer: ToyScreen['answer']): ToyFind | null {
+  switch (answer?.kind) {
+    case 'hero': return answer.storm ? 'nerf bebop' : 'hero';
+    case 'book': return answer.mood === 'stuck' ? 'door stuck' : answer.mood === 'awesome' ? 'grimoire is awesome' : 'book';
+    case 'phrases': return answer.asked ? 'help' : null;
+    case 'egg': return 'yoshi';
+    default: return null;
+  }
+}
+
+/** The finds read back from where they are kept: only ones there are, each once. */
+export function toyFinds(kept: string | null): ToyFind[] {
+  try {
+    const list: unknown = JSON.parse(kept ?? '[]');
+    return Array.isArray(list) ? TOY_FINDS.filter((find) => list.includes(find)) : [];
+  } catch {
+    return [];
+  }
 }
 
 /** What the computer's screen holds: the line being typed, or the answer to the last one. */
@@ -196,7 +237,7 @@ export interface ToyScreen {
   text: string;
   /** The answer on the screen, which the next key clears. Null while a line is being typed. */
   answer: Exclude<ToyShow, { kind: 'rgb' | 'clear' | 'leave' }> | null;
-  /** How many answers there have been: which phrase the computer types when asked for its own. */
+  /** How many answers there have been: where the computer starts in its own lines when it types them. */
   answers: number;
   /** How many lines it did not know, each one a jolt of its picture. */
   jolts: number;
@@ -219,7 +260,8 @@ export function toyType(screen: ToyScreen, key: ToyKey): ToyScreen {
   if (key === 'enter') {
     if (screen.answer || !typing.text.trim()) return { ...typing, text: '' };
     const command = toyCommand(typing.text);
-    if (!command) return { ...typing, text: '', jolts: typing.jolts + 1 };
+    // A line it does not know says so, and where to ask.
+    if (!command) return { ...typing, text: '', answer: { kind: 'unknown' }, answers: typing.answers + 1, jolts: typing.jolts + 1 };
     if (command.kind === 'clear') return { ...typing, text: '' };
     if (command.kind === 'rgb') return { ...typing, text: '', rgb: !typing.rgb };
     if (command.kind === 'leave') return { ...typing, text: '', left: true };

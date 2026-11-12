@@ -248,22 +248,24 @@ export interface Typing {
   key: (index: number) => string | undefined;
 }
 
-const typings = new Map<number, Typing>();
+const typings = new Map<string, Typing>();
+/** The loop of one of the computer's own phrases, by its place in PHRASES. */
+export const typingOf = (phrase: number): Typing => typingFor(PHRASES[phrase], String(phrase));
 /**
- * One phrase as a loop of pure CSS: its lines appear a character at a time (a window sliding open in
+ * One line of text (`id` names its keyframes) as a loop of pure CSS: its lines appear a character at a time (a window sliding open in
  * steps, carrying the cursor, over text that slides the other way, so the text itself stays put) while
  * the key for each character dips. Everything is a transform or an opacity with its times written into
  * the keyframes, so the typing runs on the compositor and keeps its rhythm through a frozen page.
  */
-export function typingOf(phrase: number): Typing {
-  const known = typings.get(phrase);
+export function typingFor(text: string, id: string = text.replace(/[^a-z0-9]/g, '-')): Typing {
+  const known = typings.get(id);
   if (known) return known;
-  const lines = wrapToScreen(PHRASES[phrase]);
+  const lines = wrapToScreen(text);
   // One key per character, and one (the space bar, as a carriage return) between lines.
   const count = lines.reduce((sum, line) => sum + line.length, 0) + lines.length - 1;
   const duration = LEAD + count * STEP + HOLD + BLANK, cleared = duration - BLANK;
   const at = (seconds: number) => `${Math.min(100, Math.max(0, seconds / duration * 100)).toFixed(3)}%`;
-  const name = `preview-loader-typing-${phrase}`;
+  const name = `preview-loader-typing-${id}`;
   const presses = new Map<number, number[]>();
   const blocks: string[] = [];
   // When each line starts being typed: the carriage return before it, or the lead for the first.
@@ -314,7 +316,7 @@ export function typingOf(phrase: number): Typing {
     cursor: (row) => loop(`${name}-cursor-${row}`, 'steps(1, end)'),
     key: (key) => presses.has(key) ? loop(`${name}-key-${key}`) : undefined,
   };
-  typings.set(phrase, typing);
+  typings.set(id, typing);
   return typing;
 }
 

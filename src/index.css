@@ -2002,12 +2002,85 @@ body {
   border-radius: 13%;
 }
 
+/* The tube comes on as it opens: a bright line across the glass that opens into the picture. */
 .loader-toy__tube {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  animation: loaderToyPowerOn 0.65s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes loaderToyPowerOn {
+  0% { transform: scale(0, 0.012); filter: brightness(3); }
+  35% { transform: scale(1, 0.012); filter: brightness(3); }
+  100% { transform: none; filter: none; }
+}
+
+/* How many of its secrets have been found, of how many there are, in small dots under the lines: faint
+   while a line is being typed, lit for a while at each new find, and otherwise out of an answer's way.
+   Its count is all the computer says about there being more to find. */
+.loader-toy__tally {
+  position: absolute;
+  right: 0;
+  bottom: 7%;
+  left: 0;
+  display: flex;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 300ms;
+}
+
+.loader-toy__tally > svg {
+  display: block;
+  width: auto;
+  height: calc(var(--loader-width) * 0.0115);
+  fill: var(--loader-ink);
+}
+
+.loader-toy__tally[data-resting] { opacity: 0.45; }
+.loader-toy__tally[data-new] { animation: loaderToyTally 3.2s ease-out backwards; }
+
+/* It ends on whatever it is at rest: no last keyframe for its opacity. */
+@keyframes loaderToyTally {
+  0% { opacity: 0; transform: scale(1.7); }
+  12%, 75% { opacity: 1; }
+  12% { transform: scale(1.7); }
+  32%, 100% { transform: none; }
+}
+
+/* The parts that take a click answer the pointer before it: the fan brightens, the mug steams more, the
+   glass crackles. (A cap gives a little under it, which the component does.) */
+.loader-toy .preview-loader__seat { transition: filter 150ms; }
+.loader-toy:not([data-rgb]):has(.loader-toy__hit--fan:hover) .preview-loader__seat { filter: brightness(1.3) drop-shadow(0 0 calc(var(--loader-width) * 0.012) var(--loader-light)); }
+
+.loader-toy:has(.loader-toy__hit--mug:hover) .preview-loader__steam:not(.loader-toy__puff) > svg {
+  stroke: rgb(255 255 255 / 0.95);
+  stroke-width: 3.3;
+}
+
+.loader-toy:has(.loader-toy__hit--glass:hover) .preview-loader__static > i { opacity: 0.8; }
+
+/* A small one of the computer, in a quiet corner of the app, that opens the real one (NewsComputerDoor). */
+.loader-door {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: inherit;
+  cursor: pointer;
+}
+
+.loader-door:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+.loader-door > .preview-loader {
+  animation: none;
+  transition: transform 200ms ease-out, filter 200ms;
+}
+
+.loader-door:is(:hover, :focus-visible) > .preview-loader {
+  transform: scale(1.05);
+  filter: brightness(1.15);
 }
 
 /* The whole screen's worth of lettering from the start, so the text does not shift as it grows. */

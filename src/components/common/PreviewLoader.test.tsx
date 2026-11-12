@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { FanSpinner, PreviewLoader } from './PreviewLoader';
-import { GLYPH_CELL, KEY_BOXES, PHRASES, glyphPath, typingOf } from './previewLoaderArt';
+import { GLYPH_CELL, KEY_BOXES, PHRASES, glyphPath, typingFor, typingOf } from './previewLoaderArt';
 
 /** Which of the screen's programs a loader's markup shows. */
 const programOf = (html: string) => (['face', 'book', 'type'] as const).find((program) => html.includes(`class="preview-loader__${program}"`));
@@ -113,6 +113,18 @@ describe('typingOf', () => {
         expect(stops).toEqual([...stops].sort((a, b) => a - b));
       }
     }
+  });
+});
+
+describe('typingFor', () => {
+  it('types any line, with keyframes of its own name', () => {
+    const typing = typingFor('lady geist');
+    expect(typing.lines).toEqual(['lady', 'geist']);
+    expect(typing.css).toContain('@keyframes preview-loader-typing-lady-geist-line-0');
+    expect(typing.css).not.toContain('preview-loader-typing-0-');
+    // The same line is the same loop, and a phrase's loop keeps the name it had.
+    expect(typingFor('lady geist')).toBe(typing);
+    expect(typingOf(0).css).toContain('@keyframes preview-loader-typing-0-line-0');
   });
 });
 

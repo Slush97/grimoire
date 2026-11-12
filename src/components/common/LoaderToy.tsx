@@ -4,16 +4,19 @@ import { Volume2, VolumeX, X } from 'lucide-react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
 import type { ToySound } from '../../lib/loaderToySound';
 import { useAppStore } from '../../stores/appStore';
-import { CAP_CHARS, EGG, TOY_BLANK, loaderToy, phraseListener, toyCap, toyChar, toyLines, toyType, type ToyScreen } from '../../lib/loaderToy';
+import { CAP_CHARS, EGG, TOY_BLANK, TOY_FINDS, loaderToy, phraseListener, toyCap, toyChar, toyDemoLine, toyFind, toyFinds, toyLines, toyType, type ToyFind, type ToyScreen } from '../../lib/loaderToy';
 import { Modal } from './Modal';
 import { Book, Face, Glyphs, LoaderScene, LoaderSteam, Typed } from './PreviewLoader';
-import { FAN, KEY_BOXES, LAYERS, PHRASES, PLANCHETTE, SCREEN, typingOf } from './previewLoaderArt';
+import { FAN, KEY_BOXES, LAYERS, PLANCHETTE, SCREEN, typingFor, type Typing } from './previewLoaderArt';
 import { IconButton } from './ui';
 
 // The news computer as a toy: the loader's scene (PreviewLoader.tsx) in a window of its own, where the
 // real keyboard works its keys and types on its screen, the real mouse moves its planchette (the
 // computer's own mouse), some lines do things, and its parts answer a click. Nothing is loading here, so unlike the loader this runs on script. It is hidden: knocking on
 // the app's logo opens it, and so does typing one of the computer's phrases anywhere (LoaderToyHost).
+// Nothing says so. What draws people in is the computer itself: a small one sits in Settings and opens
+// this one (NewsComputerDoor), it shows off its parts as it opens, types the lines anybody may know
+// when asked or left alone, and keeps count on its screen of what has been found.
 // Styles are under `.loader-toy` in index.css; what the keys and lines mean is in lib/loaderToy.ts.
 
 /** Milliseconds a cap stays down at the least, so a quick tap still shows. */
@@ -30,8 +33,10 @@ const MOUSE_REACH = [0.07, 0.055];
 const MOUSE_GLIDE = 0.075, MOUSE_HOME = 1.5;
 /** The egg's loop, and the moment in it when its shell cracks, in milliseconds (the keyframes in index.css). */
 const EGG_LOOP = 6000, EGG_CRACK = 3500;
-/** Where the mute button's state is kept between openings. */
-const MUTED_KEY = 'grimoire.newsComputer.muted';
+/** Where the mute button's state is kept between openings, what has been found, and whether it has ever been opened. */
+const MUTED_KEY = 'grimoire.newsComputer.muted', FOUND_KEY = 'grimoire.newsComputer.found', SEEN_KEY = 'grimoire.newsComputer.seen';
+/** What it says to a line it does not know. */
+const UNKNOWN = ['?', 'try help'];
 
 /** The jolt of the picture: at a click on the glass, and at a line the computer does not know. */
 const JOLT: Keyframe[] = [
@@ -47,9 +52,8 @@ const JOLT: Keyframe[] = [
 const percent = (fraction: number) => `${(fraction * 100).toFixed(2)}%`;
 const calm = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** The line being typed: a prompt, the text in dots, and the cursor after it. */
-function Prompt({ text }: { text: string }) {
-  const lines = toyLines(text) ?? [''];
+/** Lines on the screen in its dots, after a prompt. With `typed`, they are the line being typed: a cursor follows it. */
+function Lines({ lines, typed }: { lines: string[]; typed?: string }) {
   return (
     <>
       <div className="preview-loader__type">
@@ -59,7 +63,7 @@ function Prompt({ text }: { text: string }) {
             <span>
               {line && <span><em><Glyphs text={line} /></em></span>}
               {/* Keyed by the text, so the cursor is solid just after a key and blinks once the typing rests. */}
-              {row === lines.length - 1 && <i key={text} className="loader-toy__cursor"><b /></i>}
+              {typed !== undefined && row === lines.length - 1 && <i key={typed} className="loader-toy__cursor"><b /></i>}
             </span>
           </div>
         ))}
@@ -108,13 +112,14 @@ function Egg({ onCrack, strikes }: { onCrack: () => void; strikes: number }) {
   );
 }
 
-function Tube({ screen, onCrack, strikes }: { screen: ToyScreen; onCrack: () => void; strikes: number }) {
+function Tube({ screen, typing, onCrack, strikes }: { screen: ToyScreen; typing: Typing | null; onCrack: () => void; strikes: number }) {
   const answer = screen.answer;
   if (answer?.kind === 'egg') return <Egg onCrack={onCrack} strikes={strikes} />;
   if (answer?.kind === 'hero') return <Face src={getHeroChipIconPath(answer.hero)} />;
   if (answer?.kind === 'book') return <Book />;
-  if (answer?.kind === 'phrases') return <Typed typing={typingOf(screen.answers % PHRASES.length)} />;
-  return <Prompt text={screen.text} />;
+  if (typing) return <Typed key={typing.lines.join(' ')} typing={typing} />;
+  if (answer?.kind === 'unknown') return <Lines lines={UNKNOWN} />;
+  return <Lines lines={toyLines(screen.text) ?? ['']} typed={screen.text} />;
 }
 
 function LoaderToy({ line }: { line: string }) {
@@ -125,7 +130,23 @@ function LoaderToy({ line }: { line: string }) {
   const [screen, type] = useReducer(toyType, line, (entered) => entered ? toyType({ ...TOY_BLANK, text: entered }, 'enter') : TOY_BLANK);
   const answer = screen.answer;
   const mood = answer?.kind === 'hero' ? answer.storm ? 'storm' : undefined : answer?.kind === 'book' && answer.mood !== 'calm' ? answer.mood : undefined;
-  const typing = answer?.kind === 'phrases' ? typingOf(screen.answers % PHRASES.length) : null;
+  // Its own lines, typed one after another for as long as they are up.
+  const [demoTurn, setDemoTurn] = useState(0);
+  const typing = answer?.kind === 'phrases' ? typingFor(toyDemoLine(screen.answers + demoTurn)) : null;
+  useEffect(() => {
+    if (!typing) return;
+    const timer = setTimeout(() => setDemoTurn((turn) => turn + 1), typing.duration * 1000);
+    return () => clearTimeout(timer);
+  }, [typing]);
+
+  // What has been found, kept between openings. The screen shows the count. A line's find is read off
+  // the answer it put up, as the answer shows; a part's is told by its click.
+  const [found, setFound] = useState(() => toyFinds(localStorage.getItem(FOUND_KEY)));
+  const [foundBefore] = useState(found.length);
+  const find = useCallback((what: ToyFind) => setFound((now) => now.includes(what) ? now : [...now, what]), []);
+  const answered = [toyFind(answer), screen.rgb ? 'gamer' as const : null].find((what) => what && !found.includes(what));
+  if (answered) setFound([...found, answered]);
+  useEffect(() => { localStorage.setItem(FOUND_KEY, JSON.stringify(found)); }, [found]);
 
   useEffect(() => { if (screen.left) loaderToy.close(); }, [screen.left]);
 
@@ -148,9 +169,9 @@ function LoaderToy({ line }: { line: string }) {
     localStorage.setItem(MUTED_KEY, next ? '1' : '0');
     sound.current?.mute(next);
   };
-  const press = useCallback((by: string, cap: number) => {
+  const press = useCallback((by: string, cap: number, quiet = false) => {
     downs.current.set(by, { cap, at: performance.now() });
-    sound.current?.key();
+    if (!quiet) sound.current?.key();
     showHeld();
   }, [showHeld]);
   const release = useCallback((by: string) => {
@@ -205,7 +226,7 @@ function LoaderToy({ line }: { line: string }) {
   const idle = !answer && !screen.text;
   useEffect(() => {
     if (!idle) return;
-    const timer = setTimeout(() => type({ show: { kind: 'phrases' } }), IDLE * 1000);
+    const timer = setTimeout(() => type({ show: { kind: 'phrases', asked: false } }), IDLE * 1000);
     return () => clearTimeout(timer);
   }, [idle, screen.jolts]);
 
@@ -349,11 +370,50 @@ function LoaderToy({ line }: { line: string }) {
   // Puffs of steam off the mug, each one gone when its rise ends.
   const [puffs, setPuffs] = useState<number[]>([]);
   const puffed = useRef(0);
+  const puff = useCallback(() => {
+    if (!calm()) setPuffs((all) => [...all.slice(-5), ++puffed.current]);
+  }, []);
 
+  // As it opens it shows what it has: a ripple runs over its keys, the fan revs, the mug puffs and the
+  // planchette twitches. The first time it is ever opened it then types `help` by itself.
+  useEffect(() => {
+    if (calm()) return;
+    const timers: number[] = [];
+    const later = (after: number, run: () => void) => { timers.push(window.setTimeout(run, after)); };
+    const tap = (by: string, cap: number, at: number, quiet: boolean) => {
+      later(at, () => press(by, cap, quiet));
+      later(at + 90, () => release(by));
+    };
+    KEY_BOXES.map(([left, top], cap) => ({ cap, along: left + top * 0.4 })).sort((a, b) => a.along - b.along)
+      .forEach(({ cap }, rank) => tap(`boot-${cap}`, cap, 350 + rank * 22, rank % 6 !== 0));
+    later(700, kickFan);
+    later(900, kickFan);
+    later(1150, puff);
+    later(1400, () => root.current?.querySelector('.preview-loader__planchette')
+      ?.animate([{ translate: '0 0' }, { translate: '1.2% -0.6%' }, { translate: '-0.6% 0.3%' }, { translate: '0 0' }], { duration: 520, easing: 'ease-in-out' }));
+    if (!line && !localStorage.getItem(SEEN_KEY)) {
+      [...'help'].forEach((char, index) => {
+        const cap = toyCap(`Key${char.toUpperCase()}`);
+        if (cap !== null) tap(`self-${index}`, cap, 2100 + index * 190, false);
+        later(2100 + index * 190, () => type({ char }));
+      });
+      const enter = toyCap('Enter');
+      if (enter !== null) tap('self-enter', enter, 3050, false);
+      later(3050, () => {
+        type('enter');
+        localStorage.setItem(SEEN_KEY, '1');
+      });
+    }
+    return () => { for (const timer of timers) clearTimeout(timer); };
+  }, [line, press, release, kickFan, puff]);
+
+  // The cap under the pointer gives a little, which is how it says it can be pressed.
+  const [hovered, setHovered] = useState<number | null>(null);
   const keyStyle = (key: number): CSSProperties => {
     // Where the key is across the keyboard, for the rainbow that runs over the keys.
     const across = { '--key-x': KEY_BOXES[key][0] } as CSSProperties;
     if (held.has(key)) return { ...across, transform: 'translateY(var(--loader-press))' };
+    if (hovered === key) return { ...across, transform: 'translateY(calc(var(--loader-press) * 0.4))' };
     const animation = typing?.key(key);
     return animation ? { ...across, animation } : across;
   };
@@ -363,7 +423,15 @@ function LoaderToy({ line }: { line: string }) {
       <h2 id={titleId} className="sr-only">{t('layout.newsComputer')}</h2>
       <div ref={root} aria-hidden className="preview-loader loader-toy" data-mood={mood} data-rgb={screen.rgb || undefined}>
         {typing && <style>{typing.css}</style>}
-        <LoaderScene keyStyle={keyStyle} screen={<div ref={tube} className="loader-toy__tube"><Tube screen={screen} onCrack={crack} strikes={strikes} /></div>}
+        <LoaderScene keyStyle={keyStyle} screen={(
+            <div ref={tube} className="loader-toy__tube">
+              <Tube screen={screen} typing={typing} onCrack={crack} strikes={strikes} />
+              {/* How many of its secrets have been found. Keyed by the count, so each new one lights it up again. */}
+              <div key={found.length} className="loader-toy__tally" data-new={found.length > foundBefore || undefined} data-resting={!answer || undefined}>
+                <Glyphs text={`${found.length}/${TOY_FINDS.length}`} />
+              </div>
+            </div>
+          )}
           under={screen.rgb && (
             <>
               <img className="preview-loader__layer loader-toy__rgb-room" src={LAYERS.back} alt="" draggable={false} />
@@ -372,19 +440,26 @@ function LoaderToy({ line }: { line: string }) {
             </>
           )}>
           {puffs.map((puff) => <LoaderSteam key={puff} className="loader-toy__puff" onAnimationEnd={() => setPuffs((all) => all.filter((other) => other !== puff))} />)}
-          <div className="loader-toy__hit loader-toy__hit--round" onPointerDown={kickFan}
+          <div className="loader-toy__hit loader-toy__hit--round loader-toy__hit--fan" onPointerDown={() => { kickFan(); find('fan'); }}
             style={{ left: percent(FAN.left - FAN.width * 0.6), top: percent(FAN.top - FAN.width * 0.6), width: percent(FAN.width * 1.2), aspectRatio: 1 }} />
-          <div className="loader-toy__hit" onPointerDown={() => {
-              if (answer?.kind === 'egg') setStrikes((count) => count + 1);
-              else { sound.current?.tap(); jolt(); }
+          <div className="loader-toy__hit loader-toy__hit--glass" onPointerDown={() => {
+              if (answer?.kind === 'egg') {
+                setStrikes((count) => count + 1);
+                find('knock');
+              } else {
+                sound.current?.tap();
+                jolt();
+                find('glass');
+              }
             }}
             style={{ left: percent(SCREEN.left - SCREEN.width / 2), top: percent(SCREEN.top - SCREEN.width / SCREEN.aspect / 2), width: percent(SCREEN.width), aspectRatio: SCREEN.aspect }} />
-          <div className="loader-toy__hit" style={{ left: '6.5%', top: '62%', width: '18%', height: '18%' }}
-            onPointerDown={() => { if (!calm()) setPuffs((all) => [...all.slice(-5), ++puffed.current]); }} />
+          <div className="loader-toy__hit loader-toy__hit--mug" style={{ left: '6.5%', top: '62%', width: '18%', height: '18%' }}
+            onPointerDown={() => { puff(); find('mug'); }} />
           {KEY_BOXES.map(([left, top, width, height], cap) => (
             <div key={cap} className="loader-toy__hit" style={{ left: percent(left), top: percent(top), width: percent(width), height: percent(height) }}
-              onPointerDown={() => { press('pointer', cap); type({ char: CAP_CHARS[cap] }); }}
-              onPointerUp={() => release('pointer')} onPointerLeave={() => release('pointer')} />
+              onPointerDown={() => { press('pointer', cap); type({ char: CAP_CHARS[cap] }); find('key'); }}
+              onPointerUp={() => release('pointer')} onPointerEnter={() => setHovered(cap)}
+              onPointerLeave={() => { release('pointer'); setHovered((now) => now === cap ? null : now); }} />
           ))}
         </LoaderScene>
       </div>
@@ -392,6 +467,20 @@ function LoaderToy({ line }: { line: string }) {
         aria-pressed={muted} className="absolute right-11 top-2" onClick={() => mute(!muted)} />}
       <IconButton icon={X} size="sm" label={t('common.actions.close')} className="absolute right-2 top-2" onClick={loaderToy.close} />
     </Modal>
+  );
+}
+
+/**
+ * A small one of the computer, for a quiet corner of the app: it runs as the loader does, and a click on
+ * it opens the real one. Fills its positioned parent, which should be dark and no smaller than the
+ * loader's scene needs (150 by 130).
+ */
+export function NewsComputerDoor() {
+  const { t } = useTranslation();
+  return (
+    <button type="button" aria-label={t('layout.newsComputer')} onClick={() => loaderToy.open()} className="loader-door">
+      <span aria-hidden className="preview-loader"><LoaderScene screen={<Book />} /></span>
+    </button>
   );
 }
 
