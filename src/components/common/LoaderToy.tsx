@@ -70,11 +70,19 @@ function Prompt({ text }: { text: string }) {
 }
 
 /** An egg in the screen's dots that rocks, cracks along its middle and opens, over and over (see EGG). */
-function Egg({ onCrack }: { onCrack: () => void }) {
+function Egg({ onCrack, strikes }: { onCrack: () => void; strikes: number }) {
   const egg = useRef<HTMLDivElement>(null);
+  const struck = useRef(strikes);
   // The crack sounds as it is drawn. It is timed off the loop itself, each time round, so that the two
   // stay together however long the egg is up. An egg that is not moving (reduced motion) makes no sound.
+  // A knock on the glass (`strikes` counts them) cracks it there and then: its loop skips to the crack.
   useEffect(() => {
+    if (struck.current !== strikes) {
+      struck.current = strikes;
+      const loops = egg.current?.getAnimations({ subtree: true }) ?? [];
+      for (const loop of loops) loop.currentTime = EGG_CRACK;
+      if (loops.length) onCrack();
+    }
     let timer = 0;
     const wait = () => {
       const loop = egg.current?.getAnimations()[0];
@@ -85,7 +93,7 @@ function Egg({ onCrack }: { onCrack: () => void }) {
     };
     wait();
     return () => clearTimeout(timer);
-  }, [onCrack]);
+  }, [onCrack, strikes]);
   const part = (name: string, d: string) => <svg className={`loader-toy__egg-${name}`} viewBox={`0 0 ${EGG.columns} ${EGG.rows}`}><path d={d} /></svg>;
   return (
     <>
@@ -100,9 +108,9 @@ function Egg({ onCrack }: { onCrack: () => void }) {
   );
 }
 
-function Tube({ screen, onCrack }: { screen: ToyScreen; onCrack: () => void }) {
+function Tube({ screen, onCrack, strikes }: { screen: ToyScreen; onCrack: () => void; strikes: number }) {
   const answer = screen.answer;
-  if (answer?.kind === 'egg') return <Egg onCrack={onCrack} />;
+  if (answer?.kind === 'egg') return <Egg onCrack={onCrack} strikes={strikes} />;
   if (answer?.kind === 'hero') return <Face src={getHeroChipIconPath(answer.hero)} />;
   if (answer?.kind === 'book') return <Book />;
   if (answer?.kind === 'phrases') return <Typed typing={typingOf(screen.answers % PHRASES.length)} />;
@@ -132,6 +140,8 @@ function LoaderToy({ line }: { line: string }) {
   const [muted, setMuted] = useState(() => localStorage.getItem(MUTED_KEY) === '1');
   const mutedNow = useRef(muted);
   const crack = useCallback(() => sound.current?.crack(), []);
+  // Knocks on the glass while the egg is up, each of which cracks it.
+  const [strikes, setStrikes] = useState(0);
   const mute = (next: boolean) => {
     setMuted(next);
     mutedNow.current = next;
@@ -353,7 +363,7 @@ function LoaderToy({ line }: { line: string }) {
       <h2 id={titleId} className="sr-only">{t('layout.newsComputer')}</h2>
       <div ref={root} aria-hidden className="preview-loader loader-toy" data-mood={mood} data-rgb={screen.rgb || undefined}>
         {typing && <style>{typing.css}</style>}
-        <LoaderScene keyStyle={keyStyle} screen={<div ref={tube} className="loader-toy__tube"><Tube screen={screen} onCrack={crack} /></div>}
+        <LoaderScene keyStyle={keyStyle} screen={<div ref={tube} className="loader-toy__tube"><Tube screen={screen} onCrack={crack} strikes={strikes} /></div>}
           under={screen.rgb && (
             <>
               <img className="preview-loader__layer loader-toy__rgb-room" src={LAYERS.back} alt="" draggable={false} />
@@ -364,7 +374,10 @@ function LoaderToy({ line }: { line: string }) {
           {puffs.map((puff) => <LoaderSteam key={puff} className="loader-toy__puff" onAnimationEnd={() => setPuffs((all) => all.filter((other) => other !== puff))} />)}
           <div className="loader-toy__hit loader-toy__hit--round" onPointerDown={kickFan}
             style={{ left: percent(FAN.left - FAN.width * 0.6), top: percent(FAN.top - FAN.width * 0.6), width: percent(FAN.width * 1.2), aspectRatio: 1 }} />
-          <div className="loader-toy__hit" onPointerDown={() => { sound.current?.tap(); jolt(); }}
+          <div className="loader-toy__hit" onPointerDown={() => {
+              if (answer?.kind === 'egg') setStrikes((count) => count + 1);
+              else { sound.current?.tap(); jolt(); }
+            }}
             style={{ left: percent(SCREEN.left - SCREEN.width / 2), top: percent(SCREEN.top - SCREEN.width / SCREEN.aspect / 2), width: percent(SCREEN.width), aspectRatio: SCREEN.aspect }} />
           <div className="loader-toy__hit" style={{ left: '6.5%', top: '62%', width: '18%', height: '18%' }}
             onPointerDown={() => { if (!calm()) setPuffs((all) => [...all.slice(-5), ++puffed.current]); }} />
