@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
-import { BOOK, FAN, GLYPH_CELL, GLYPH_ROWS, KEY_BOXES, LAYERS, LOGO, MUG, PAGE_TOPS, SCREEN, glyphPath, nextPhrase, nextScreenProgram, typingOf, type ScreenProgram, type Typing } from './previewLoaderArt';
+import { BOOK, FAN, GLYPH_CELL, GLYPH_ROWS, KEY_BOXES, KEY_ORDER, LAYERS, LOGO, MUG, PAGE_TOPS, SCREEN, glyphPath, nextPhrase, nextScreenProgram, typingOf, type ScreenProgram, type Typing } from './previewLoaderArt';
 
 // The loading state of a 3D preview: the news computer from the game's hideout, whose case fan is a
 // spinning pentagram, with a mug of cocoa beside it. The scene is a render of Valve's models, baked into
@@ -36,9 +36,11 @@ const logoPart = (d: string) => (
 );
 
 /** The Grimoire logo as one loop (see BOOK): its leaves riffle from the right page to the left, then the
- *  whirlwind rises out of the book, spins and dies away. */
+ *  whirlwind rises out of the book, spins and dies away. Under the tube's lines and static, as all the
+ *  screen shows is. */
 export function Book() {
   return (
+    <>
     <div className="preview-loader__book">
       <style>{BOOK.css}</style>
       {logoPart(LOGO.book)}
@@ -46,6 +48,8 @@ export function Book() {
       {BOOK.leaves.map((animation, leaf) => <span key={leaf} style={BOOK.leafBox}><b style={{ animation }} /></span>)}
       <div className="preview-loader__whirl" style={{ animation: BOOK.whirl }}>{LOGO.whirl.map(logoPart)}</div>
     </div>
+    <div className="preview-loader__static"><i /></div>
+    </>
   );
 }
 
@@ -100,18 +104,23 @@ function Screen({ program, hero, typing, onNoFace }: { program: ScreenProgram; h
 }
 
 /** Every key, each a window on the keys layer over its own cap, so that one can dip without the rest,
- *  and on the screen's light on the keys, so that a cap takes its light down with it. */
+ *  and on the screen's light on the keys, so that a cap takes its light down with it. The space bar has
+ *  layers of its own and is drawn first: its box takes in the bottoms of the caps over it, which lie in
+ *  front of it and stay where they are when it goes down. */
 function Keys({ keyStyle }: { keyStyle?: (key: number) => CSSProperties | undefined }) {
   return (
     <div className="preview-loader__keys">
-      {KEY_BOXES.map(([left, top, width, height], key) => (
-        <i key={key} style={{ left: percent(left), top: percent(top), width: percent(width), height: percent(height), ...keyStyle?.(key) }}>
-          {[LAYERS.keys, LAYERS.keyLight].map((src) => (
-            <img key={src} src={src} alt="" draggable={false} className={src === LAYERS.keyLight ? 'preview-loader__keylight' : undefined}
-              style={{ width: percent(1 / width), height: percent(1 / height), transform: `translate(${percent(-left)}, ${percent(-top)})` }} />
-          ))}
-        </i>
-      ))}
+      {KEY_ORDER.map((key) => {
+        const [left, top, width, height] = KEY_BOXES[key], bar = key === KEY_BOXES.length - 1;
+        return (
+          <i key={key} style={{ left: percent(left), top: percent(top), width: percent(width), height: percent(height), ...keyStyle?.(key) }}>
+            {[bar ? LAYERS.spaceBar : LAYERS.keys, bar ? LAYERS.spaceBarLight : LAYERS.keyLight].map((src, light) => (
+              <img key={src} src={src} alt="" draggable={false} className={light ? 'preview-loader__keylight' : undefined}
+                style={{ width: percent(1 / width), height: percent(1 / height), transform: `translate(${percent(-left)}, ${percent(-top)})` }} />
+            ))}
+          </i>
+        );
+      })}
     </div>
   );
 }

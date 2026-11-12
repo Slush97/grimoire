@@ -25,20 +25,35 @@ export interface SettingsNavGroup {
 
 interface SettingsNavProps {
   groups: SettingsNavGroup[];
+  /** The whole menu, when `groups` is a search's narrowing of it: the menu keeps the room all of it takes. */
+  fullGroups?: SettingsNavGroup[];
   active: string;
   onSelect: (id: string) => void;
   label: string;
   search?: ReactNode;
 }
 
-export default function SettingsNav({ groups, active, onSelect, label, search }: SettingsNavProps) {
+export default function SettingsNav({ groups, fullGroups, active, onSelect, label, search }: SettingsNavProps) {
   return (
     <nav
       aria-label={label}
       className="w-full shrink-0 md:sticky md:top-6 md:flex md:max-h-[calc(100vh-8.5rem)] md:w-56 md:flex-col md:self-start"
     >
       <div className="shrink-0">{search}</div>
-      <div className="shrink-0 space-y-5">
+      <div className="grid shrink-0">
+      {/* The whole menu, unseen, in the same place as the one shown: a search that narrows the menu
+          leaves what is under it (the computer) where it was. Only where that is shown. */}
+      {fullGroups && fullGroups !== groups && (
+        <div aria-hidden className="invisible hidden space-y-5 [grid-area:1/1] md:block">
+          {fullGroups.map((group) => (
+            <div key={group.id}>
+              <div className="mb-1.5 px-3 text-2xs font-medium uppercase tracking-wider">&nbsp;</div>
+              <div className="space-y-0.5">{group.items.map((item) => <div key={item.id} className="h-9" />)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="space-y-5 [grid-area:1/1]">
         {groups.map((group) => (
           <div key={group.id}>
             <h2 className="mb-1.5 px-3 text-2xs font-medium uppercase tracking-wider text-text-secondary/70">
@@ -80,11 +95,14 @@ export default function SettingsNav({ groups, active, onSelect, label, search }:
           </div>
         ))}
       </div>
+      </div>
       {/* Easter egg: the loader's computer, under the menu on every settings page. It opens the one that
           can be played with (LoaderToy). It takes the room the window leaves under the menu, up to its
           full size: in a short window it is smaller, then only its fan, then not there. Not shown where
-          the menu sits above the page, on a narrow window. */}
-      <div className="relative mt-6 hidden min-h-0 w-full flex-[0_1_14rem] md:block"><NewsComputerDoor /></div>
+          the menu sits above the page, on a narrow window. A search puts a line of its own under the
+          search field (SettingsSearch: its count, as tall as the space over the computer), which the
+          computer gives up its space to, so that it does not move. */}
+      <div className={`relative hidden min-h-0 w-full flex-[0_1_14rem] md:block ${fullGroups && fullGroups !== groups ? '' : 'mt-6'}`}><NewsComputerDoor /></div>
     </nav>
   );
 }

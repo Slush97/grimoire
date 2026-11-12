@@ -2024,7 +2024,7 @@ body {
 .loader-toy__tally {
   position: absolute;
   right: 0;
-  bottom: 7%;
+  bottom: 5%;
   left: 0;
   display: flex;
   justify-content: center;
@@ -2032,10 +2032,15 @@ body {
   transition: opacity 300ms;
 }
 
+/* On a patch of the screen's own color, so that it reads over whatever the answer has drawn there. */
 .loader-toy__tally > svg {
   display: block;
+  box-sizing: content-box;
   width: auto;
   height: calc(var(--loader-width) * 0.0115);
+  padding: calc(var(--loader-width) * 0.003) calc(var(--loader-width) * 0.006);
+  border-radius: calc(var(--loader-width) * 0.004);
+  background: color-mix(in srgb, var(--loader-phosphor) 88%, transparent);
   fill: var(--loader-ink);
 }
 

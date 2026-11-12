@@ -216,24 +216,28 @@ describe('what the computer types by itself', () => {
 describe('finds', () => {
   const answerTo = (line: string) => toyType(typed(line), 'enter').answer;
 
-  it('counts each line that does something, once it has', () => {
+  it('counts each secret line, once it has answered', () => {
     expect(toyFind(answerTo('nerf bebop'))).toBe('nerf bebop');
-    expect(toyFind(answerTo('lash'))).toBe('hero');
     expect(toyFind(answerTo('door stuck'))).toBe('door stuck');
     expect(toyFind(answerTo('grimoire is awesome'))).toBe('grimoire is awesome');
     expect(toyFind(answerTo('book'))).toBe('book');
     expect(toyFind(answerTo('yoshi'))).toBe('yoshi');
-    expect(toyFind(answerTo('help'))).toBe('help');
+    // Every secret is a line the computer knows, and gamer is one of them (it lights up, with no answer).
+    for (const find of TOY_FINDS) expect(toyCommand(find)).not.toBeNull();
+    expect(TOY_FINDS).toContain('gamer');
   });
 
-  it('counts nothing for a line it does not know, an empty screen, or lines it typed unasked', () => {
+  it('counts nothing for a hero, for help, for a line it does not know or for an empty screen', () => {
+    expect(toyFind(answerTo('lash'))).toBeNull();
+    expect(toyFind(answerTo('help'))).toBeNull();
     expect(toyFind(answerTo('sudo'))).toBeNull();
     expect(toyFind(null)).toBeNull();
     expect(toyFind({ kind: 'phrases', asked: false })).toBeNull();
   });
 
   it('reads back only finds there are, each once, whatever was kept', () => {
-    expect(toyFinds(JSON.stringify(['mug', 'fan', 'mug', 'nonsense', 3]))).toEqual(['fan', 'mug']);
+    // What an earlier build counted (a hero, help, clicks) is dropped.
+    expect(toyFinds(JSON.stringify(['yoshi', 'book', 'yoshi', 'fan', 'hero', 'help', 'nonsense', 3]))).toEqual(['book', 'yoshi']);
     for (const kept of [null, '', 'not json', '{"a":1}', '7']) expect(toyFinds(kept)).toEqual([]);
     expect(toyFinds(JSON.stringify(TOY_FINDS))).toEqual([...TOY_FINDS]);
     expect(new Set(TOY_FINDS).size).toBe(TOY_FINDS.length);

@@ -4,10 +4,10 @@ import { Volume2, VolumeX, X } from 'lucide-react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
 import type { ToySound } from '../../lib/loaderToySound';
 import { useAppStore } from '../../stores/appStore';
-import { CAP_CHARS, EGG, TOY_BLANK, TOY_FINDS, loaderToy, phraseListener, toyCap, toyChar, toyDemoLine, toyFind, toyFinds, toyLines, toyType, type ToyFind, type ToyScreen } from '../../lib/loaderToy';
+import { CAP_CHARS, EGG, TOY_BLANK, TOY_FINDS, loaderToy, phraseListener, toyCap, toyChar, toyDemoLine, toyFind, toyFinds, toyLines, toyType, type ToyScreen } from '../../lib/loaderToy';
 import { Modal } from './Modal';
 import { Book, Face, FanSpinner, Glyphs, LoaderScene, LoaderSteam, Typed } from './PreviewLoader';
-import { FAN, KEY_BOXES, LAYERS, PLANCHETTE, SCREEN, typingFor, type Typing } from './previewLoaderArt';
+import { FAN, KEY_BOXES, KEY_ORDER, LAYERS, PLANCHETTE, SCREEN, typingFor, type Typing } from './previewLoaderArt';
 import { IconButton } from './ui';
 
 // The news computer as a toy: the loader's scene (PreviewLoader.tsx) in a window of its own, where the
@@ -16,7 +16,7 @@ import { IconButton } from './ui';
 // the app's logo opens it, and so does typing one of the computer's phrases anywhere (LoaderToyHost).
 // Nothing says so. What draws people in is the computer itself: a small one sits in Settings and opens
 // this one (NewsComputerDoor), it shows off its parts as it opens, types the lines anybody may know
-// when asked or left alone, and keeps count on its screen of what has been found.
+// when asked or left alone, and keeps count on its screen of how many of its secret lines have been found.
 // Styles are under `.loader-toy` in index.css; what the keys and lines mean is in lib/loaderToy.ts.
 
 /** Milliseconds a cap stays down at the least, so a quick tap still shows. */
@@ -132,11 +132,10 @@ function LoaderToy({ line }: { line: string }) {
     return () => clearTimeout(timer);
   }, [typing]);
 
-  // What has been found, kept between openings. The screen shows the count. A line's find is read off
-  // the answer it put up, as the answer shows; a part's is told by its click.
+  // Which of its secret lines have been found, kept between openings. The screen shows the count. A
+  // find is read off the answer its line put up, as the answer shows.
   const [found, setFound] = useState(() => toyFinds(localStorage.getItem(FOUND_KEY)));
   const [foundBefore] = useState(found.length);
-  const find = useCallback((what: ToyFind) => setFound((now) => now.includes(what) ? now : [...now, what]), []);
   const answered = [toyFind(answer), screen.rgb ? 'gamer' as const : null].find((what) => what && !found.includes(what));
   if (answered) setFound([...found, answered]);
   useEffect(() => { localStorage.setItem(FOUND_KEY, JSON.stringify(found)); }, [found]);
@@ -433,27 +432,28 @@ function LoaderToy({ line }: { line: string }) {
             </>
           )}>
           {puffs.map((puff) => <LoaderSteam key={puff} className="loader-toy__puff" onAnimationEnd={() => setPuffs((all) => all.filter((other) => other !== puff))} />)}
-          <div className="loader-toy__hit loader-toy__hit--round loader-toy__hit--fan" onPointerDown={() => { kickFan(); find('fan'); }}
+          <div className="loader-toy__hit loader-toy__hit--round loader-toy__hit--fan" onPointerDown={kickFan}
             style={{ left: percent(FAN.left - FAN.width * 0.6), top: percent(FAN.top - FAN.width * 0.6), width: percent(FAN.width * 1.2), aspectRatio: 1 }} />
           <div className="loader-toy__hit loader-toy__hit--glass" onPointerDown={() => {
-              if (answer?.kind === 'egg') {
-                setStrikes((count) => count + 1);
-                find('knock');
-              } else {
+              if (answer?.kind === 'egg') setStrikes((count) => count + 1);
+              else {
                 sound.current?.tap();
                 jolt();
-                find('glass');
               }
             }}
             style={{ left: percent(SCREEN.left - SCREEN.width / 2), top: percent(SCREEN.top - SCREEN.width / SCREEN.aspect / 2), width: percent(SCREEN.width), aspectRatio: SCREEN.aspect }} />
           <div className="loader-toy__hit loader-toy__hit--mug" style={{ left: '6.5%', top: '62%', width: '18%', height: '18%' }}
-            onPointerDown={() => { puff(); find('mug'); }} />
-          {KEY_BOXES.map(([left, top, width, height], cap) => (
-            <div key={cap} className="loader-toy__hit" style={{ left: percent(left), top: percent(top), width: percent(width), height: percent(height) }}
-              onPointerDown={() => { press('pointer', cap); type({ char: CAP_CHARS[cap] }); find('key'); }}
-              onPointerUp={() => release('pointer')} onPointerEnter={() => setHovered(cap)}
-              onPointerLeave={() => { release('pointer'); setHovered((now) => now === cap ? null : now); }} />
-          ))}
+            onPointerDown={puff} />
+          {/* In the keys' own order, so that a cap is over the part of the space bar's box it stands in. */}
+          {KEY_ORDER.map((cap) => {
+            const [left, top, width, height] = KEY_BOXES[cap];
+            return (
+              <div key={cap} className="loader-toy__hit" style={{ left: percent(left), top: percent(top), width: percent(width), height: percent(height) }}
+                onPointerDown={() => { press('pointer', cap); type({ char: CAP_CHARS[cap] }); }}
+                onPointerUp={() => release('pointer')} onPointerEnter={() => setHovered(cap)}
+                onPointerLeave={() => { release('pointer'); setHovered((now) => now === cap ? null : now); }} />
+            );
+          })}
         </LoaderScene>
       </div>
       {audible && <IconButton icon={muted ? VolumeX : Volume2} size="sm" label={muted ? t('layout.newsComputerUnmute') : t('layout.newsComputerMute')}

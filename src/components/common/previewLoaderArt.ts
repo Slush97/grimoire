@@ -7,10 +7,13 @@ export const LAYERS = {
   back: new URL('../../assets/preview-loader/news-computer-back.webp', import.meta.url).href,
   /** What the screen alone lights, to flicker over the scene. Rendered without the keys: it lights what is under them. */
   screenLight: new URL('../../assets/preview-loader/news-computer-screenlight.webp', import.meta.url).href,
-  /** The screen's light on the keys alone, which goes down with each one. */
+  /** The screen's light on the caps alone, and on the space bar alone, which goes down with each one. */
   keyLight: new URL('../../assets/preview-loader/news-computer-keylight.webp', import.meta.url).href,
-  /** The keyboard's caps and space bar, which press as the screen's phrase is typed. */
+  spaceBarLight: new URL('../../assets/preview-loader/news-computer-spacebarlight.webp', import.meta.url).href,
+  /** The keyboard's caps, which press as the screen's phrase is typed. */
   keys: new URL('../../assets/preview-loader/news-computer-keys.webp', import.meta.url).href,
+  /** Its space bar, a layer of its own: its box takes in the bottoms of the caps over it, which do not go down with it. */
+  spaceBar: new URL('../../assets/preview-loader/news-computer-spacebar.webp', import.meta.url).href,
   /** The planchette, the computer's mouse, which wanders once a load runs long. */
   planchette: new URL('../../assets/preview-loader/news-computer-planchette.webp', import.meta.url).href,
   /** What the scene emits, blurred: the chamber, the screen and the candle. */
@@ -37,6 +40,8 @@ const KEY_ROWS: number[][][] = [
 const SPACE_BAR = [0.3487, 0.8871, 0.2546, 0.0553];
 /** Every key's box: the caps row by row, and the space bar last. */
 export const KEY_BOXES: number[][] = [...KEY_ROWS.flat(), SPACE_BAR];
+/** The keys from the back of the picture to the front: the space bar lies behind the bottoms of the caps over it. */
+export const KEY_ORDER: readonly number[] = [KEY_BOXES.length - 1, ...KEY_ROWS.flat().map((_, key) => key)];
 /** How many caps each row has, from the back one. */
 export const KEY_ROW_SIZES: readonly number[] = KEY_ROWS.map((row) => row.length);
 

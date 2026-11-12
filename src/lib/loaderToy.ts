@@ -206,17 +206,18 @@ export function toyDemoLine(turn: number): string {
   return [PHRASES[0], hero, PHRASES[2], 'book', PHRASES[1]][((turn % 5) + 5) % 5];
 }
 
-// What there is to find on the computer: lines that do something, and parts that answer a click. The
-// screen keeps count (so many of so many), which is the whole of its hint that there is more.
-export const TOY_FINDS = ['nerf bebop', 'door stuck', 'grimoire is awesome', 'hero', 'book', 'help', 'gamer', 'yoshi', 'fan', 'mug', 'glass', 'key', 'knock'] as const;
+// What there is to find on the computer: its secret lines, the words that do something when typed. A
+// hero's name is no secret, nor is `help`, and what answers a click (the fan, the mug, the glass, the egg)
+// is play, not a find. The screen keeps count (so many of so many), which is the whole of its hint that
+// there is more.
+export const TOY_FINDS = ['nerf bebop', 'door stuck', 'grimoire is awesome', 'book', 'gamer', 'yoshi'] as const;
 export type ToyFind = typeof TOY_FINDS[number];
 
 /** What the answer on the screen counts as having found, if anything. */
 export function toyFind(answer: ToyScreen['answer']): ToyFind | null {
   switch (answer?.kind) {
-    case 'hero': return answer.storm ? 'nerf bebop' : 'hero';
+    case 'hero': return answer.storm ? 'nerf bebop' : null;
     case 'book': return answer.mood === 'stuck' ? 'door stuck' : answer.mood === 'awesome' ? 'grimoire is awesome' : 'book';
-    case 'phrases': return answer.asked ? 'help' : null;
     case 'egg': return 'yoshi';
     default: return null;
   }
