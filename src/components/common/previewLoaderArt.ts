@@ -5,8 +5,10 @@
 export const LAYERS = {
   /** The computer and the mug, without the fan and the planchette. */
   back: new URL('../../assets/preview-loader/news-computer-back.webp', import.meta.url).href,
-  /** What the screen alone lights, to flicker over the scene. */
+  /** What the screen alone lights, to flicker over the scene. Rendered without the keys: it lights what is under them. */
   screenLight: new URL('../../assets/preview-loader/news-computer-screenlight.webp', import.meta.url).href,
+  /** The screen's light on the keys alone, which goes down with each one. */
+  keyLight: new URL('../../assets/preview-loader/news-computer-keylight.webp', import.meta.url).href,
   /** The keyboard's caps and space bar, which press as the screen's phrase is typed. */
   keys: new URL('../../assets/preview-loader/news-computer-keys.webp', import.meta.url).href,
   /** The planchette, the computer's mouse, which wanders once a load runs long. */
@@ -33,6 +35,8 @@ const KEY_ROWS: number[][][] = [
 const SPACE_BAR = [0.3487, 0.8871, 0.2546, 0.0553];
 /** Every key's box: the caps row by row, and the space bar last. */
 export const KEY_BOXES: number[][] = [...KEY_ROWS.flat(), SPACE_BAR];
+/** How many caps each row has, from the back one. */
+export const KEY_ROW_SIZES: readonly number[] = KEY_ROWS.map((row) => row.length);
 
 // The Grimoire logo (public/grimoire-title-icon.svg), taken apart so the screen can turn the book's
 // pages and sway its whirlwind. The paths are in the traced file's own units: draw them inside
@@ -168,6 +172,15 @@ const GLYPHS: Record<string, string> = {
   w: '10001 10001 10001 10101 10101 11011 10001', x: '10001 10001 01010 00100 01010 10001 10001',
   y: '10001 10001 01010 00100 00100 00100 00100', z: '11111 00001 00010 00100 01000 10000 11111',
   '>': '01000 00100 00010 00001 00010 00100 01000',
+  0: '01110 10001 10011 10101 11001 10001 01110', 1: '00100 01100 00100 00100 00100 00100 01110',
+  2: '01110 10001 00001 00010 00100 01000 11111', 3: '11111 00010 00100 00010 00001 10001 01110',
+  4: '00010 00110 01010 10010 11111 00010 00010', 5: '11111 10000 11110 00001 00001 10001 01110',
+  6: '00110 01000 10000 11110 10001 10001 01110', 7: '11111 00001 00010 00100 01000 01000 01000',
+  8: '01110 10001 10001 01110 10001 10001 01110', 9: '01110 10001 10001 01111 00001 00010 01100',
+  '.': '00000 00000 00000 00000 00000 01100 01100', ',': '00000 00000 00000 00000 01100 00100 01000',
+  '-': '00000 00000 00000 11111 00000 00000 00000', "'": '00100 00100 01000 00000 00000 00000 00000',
+  '!': '00100 00100 00100 00100 00100 00000 00100', '?': '01110 10001 00001 00010 00100 00000 00100',
+  '/': '00001 00001 00010 00100 01000 10000 10000',
 };
 /** A character's cell: its five dots and the gap after them. The typing reveals a line a cell at a time. */
 export const GLYPH_CELL = 6, GLYPH_ROWS = 7;
@@ -186,21 +199,33 @@ export function glyphPath(text: string): string {
   return dots.join('');
 }
 
-const LETTER_ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
-/** The key a character presses: its place on a typewriter's three letter rows, scaled to the caps the
- *  model has in the rows under its back one. Anything else, a space or a line's end, is the space bar. */
-function keyOf(char: string): number {
-  for (let row = 0; row < LETTER_ROWS.length; row++) {
-    const column = LETTER_ROWS[row].indexOf(char);
+const KEY_CHARS = ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+/** The key a character presses: its place on a typewriter's row of figures and three of letters, scaled
+ *  to the caps the model has in that row. Anything else, a space or a line's end, is the space bar. */
+export function keyOf(char: string): number {
+  for (let row = 0; row < KEY_CHARS.length; row++) {
+    const column = KEY_CHARS[row].indexOf(char);
     if (column < 0) continue;
-    const caps = KEY_ROWS[row + 1].length, before = KEY_ROWS.slice(0, row + 1).reduce((sum, keys) => sum + keys.length, 0);
-    return before + Math.round(column / (LETTER_ROWS[row].length - 1) * (caps - 1));
+    const caps = KEY_ROWS[row].length, before = KEY_ROWS.slice(0, row).reduce((sum, keys) => sum + keys.length, 0);
+    return before + Math.round(column / (KEY_CHARS[row].length - 1) * (caps - 1));
   }
   return KEY_BOXES.length - 1;
 }
 
 /** The most characters the screen holds on a line, after its prompt. */
-const LINE = 8;
+export const SCREEN_LINE = 8;
+/** `text` as the screen's lines: broken at its spaces, and inside a word only when the word is longer than a line. */
+export function wrapToScreen(text: string): string[] {
+  const lines: string[] = [];
+  let line = '';
+  text.split(' ').forEach((word, index) => {
+    let next = index === 0 ? word : `${line} ${word}`;
+    if (index > 0 && next.length > SCREEN_LINE) { lines.push(line); next = word; }
+    for (; next.length > SCREEN_LINE; next = next.slice(SCREEN_LINE)) lines.push(next.slice(0, SCREEN_LINE));
+    line = next;
+  });
+  return [...lines, line];
+}
 /** Seconds: before the first key, between keys, the phrase held on the screen, and the blank before the next loop. */
 const LEAD = 0.9, STEP = 0.17, HOLD = 2.3, BLANK = 0.45;
 /** Seconds the idle cursor stays on, and off, as it blinks. It is steady while keys are going down. */
@@ -231,12 +256,7 @@ const typings = new Map<number, Typing>();
 export function typingOf(phrase: number): Typing {
   const known = typings.get(phrase);
   if (known) return known;
-  const lines: string[] = [];
-  for (const word of PHRASES[phrase].split(' ')) {
-    const last = lines.length - 1;
-    if (last >= 0 && lines[last].length + 1 + word.length <= LINE) lines[last] += ` ${word}`;
-    else lines.push(word);
-  }
+  const lines = wrapToScreen(PHRASES[phrase]);
   // One key per character, and one (the space bar, as a carriage return) between lines.
   const count = lines.reduce((sum, line) => sum + line.length, 0) + lines.length - 1;
   const duration = LEAD + count * STEP + HOLD + BLANK, cleared = duration - BLANK;

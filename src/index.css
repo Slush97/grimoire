@@ -1582,12 +1582,15 @@ body {
   to { opacity: 0.9; }
 }
 
-/* The screen's light on the desk, wavering as a tube does, and the beams it throws with it. */
+/* The screen's light on the desk, wavering as a tube does, and the beams it throws with it. Each key
+   carries its own share of that light, so it stays on the cap when the cap goes down. */
 .preview-loader__screenlight,
 .preview-loader__rays {
   animation: previewLoaderFlicker 3.7s linear infinite;
   will-change: opacity;
 }
+
+.preview-loader__keylight { animation: previewLoaderFlicker 3.7s linear infinite; }
 
 @keyframes previewLoaderFlicker {
   0%, 100% { opacity: 0.5; }
@@ -1961,9 +1964,135 @@ body {
   .preview-loader__book > span,
   .preview-loader__static > i { display: none; }
   .preview-loader__screenlight,
+  .preview-loader__keylight,
   .preview-loader__rays { opacity: 0.6; }
+  .preview-loader__keylight { animation: none; }
   .preview-loader__status > span { transition: none; }
   .preview-loader__status--sweep > span { width: 100%; opacity: 0.5; animation: none; }
+}
+
+/* The news computer as a toy (common/LoaderToy.tsx): the loader's scene in a window of its own, where
+   the keys go down under the real keyboard, the screen takes what is typed, and the fan, the mug, the
+   planchette and the glass each answer a click. Nothing loads here, so script runs this one. */
+.preview-loader.loader-toy {
+  --loader-width: min(94cqw, 96cqh);
+  --toy-heat: 0;
+  animation: none;
+}
+
+.loader-toy .preview-loader__planchette { animation-delay: 0s; }
+
+/* The chamber glows with the fan's pace. */
+.loader-toy .preview-loader__glow { filter: brightness(calc(1 + var(--toy-heat) * 1.1)); }
+
+.loader-toy .preview-loader__keys > i { transition: transform 50ms ease-out; }
+
+.loader-toy .preview-loader__screen {
+  overflow: hidden;
+  border-radius: 13%;
+}
+
+.loader-toy__tube {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The whole screen's worth of lettering from the start, so the text does not shift as it grows. */
+.loader-toy .preview-loader__type {
+  width: calc(var(--dot) * 60);
+  min-height: calc(var(--dot) * 37);
+}
+
+.loader-toy__cursor > b { animation: loaderToyBlink 0.9s steps(1, end) 0.5s infinite; }
+
+@keyframes loaderToyBlink {
+  50% { opacity: 0; }
+}
+
+.loader-toy__hit {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.loader-toy__hit--round { border-radius: 50%; }
+
+.preview-loader__steam.loader-toy__puff {
+  width: 7%;
+  height: 30%;
+  animation: loaderToyPuff 1.5s ease-out both;
+}
+
+.loader-toy__puff > svg {
+  stroke: rgb(255 255 255 / 0.85);
+  stroke-width: 3.4;
+  animation-duration: 0.8s;
+}
+
+@keyframes loaderToyPuff {
+  0% { opacity: 0; transform: scale(0.6, 0.4); }
+  18% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.25, 1.15) skewX(8deg); }
+}
+
+/* What some lines do to the picture. A storm of static over the hero: */
+.loader-toy[data-mood='storm'] .preview-loader__static > i {
+  opacity: 1;
+  animation-duration: 0.16s;
+}
+
+.loader-toy[data-mood='storm'] .preview-loader__face { animation-duration: 0.45s; }
+.loader-toy[data-mood='storm'] .preview-loader__face > img { animation-duration: 0.55s; }
+.loader-toy[data-mood='storm'] :is(.preview-loader__screenlight, .preview-loader__rays) { animation-duration: 0.7s; }
+
+/* the book rattled like a door that will not open, and the desk with it: */
+.loader-toy[data-mood='stuck'] .preview-loader__book { animation: loaderToyStuck 1.5s linear infinite; }
+.loader-toy[data-mood='stuck'] .preview-loader__pc { animation: loaderToyShudder 1.5s linear infinite; }
+
+.loader-toy:is([data-mood='stuck'], [data-mood='awesome']) .preview-loader__book > span > b,
+.loader-toy:is([data-mood='stuck'], [data-mood='awesome']) .preview-loader__page-tops { animation: none !important; }
+
+.loader-toy[data-mood='stuck'] .preview-loader__whirl {
+  opacity: 0;
+  animation: none !important;
+}
+
+@keyframes loaderToyStuck {
+  0%, 30%, 100% { transform: none; }
+  4% { transform: translateX(-5%) rotate(-2deg); }
+  8% { transform: translateX(4%) rotate(1.5deg); }
+  12% { transform: translateX(-4%) rotate(-1.5deg); }
+  16% { transform: translateX(3%) rotate(1deg); }
+  20% { transform: translateX(-2%); }
+  24% { transform: translateX(1%); }
+}
+
+@keyframes loaderToyShudder {
+  0%, 30%, 100% { transform: none; }
+  4%, 12%, 20% { transform: translateX(-0.25%); }
+  8%, 16%, 24% { transform: translateX(0.25%); }
+}
+
+/* and the book in its glory, its whirlwind up for good. */
+.loader-toy[data-mood='awesome'] .preview-loader__whirl {
+  opacity: 1;
+  animation: loaderToyGlory 1.1s ease-in-out infinite alternate !important;
+}
+
+.loader-toy[data-mood='awesome'] .preview-loader__whirl > svg { animation-duration: 0.16s; }
+.loader-toy[data-mood='awesome'] .preview-loader__page-tops { opacity: 0; }
+
+@keyframes loaderToyGlory {
+  from { transform: scale(0.96); }
+  to { transform: scale(1.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loader-toy .preview-loader__pc,
+  .loader-toy .preview-loader__keys > i { animation: none !important; transition: none; }
 }
 
 /* Skeletons (common/Skeleton.tsx). One sweep for the whole screen: the glint

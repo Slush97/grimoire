@@ -3665,6 +3665,7 @@
     "hideUntilNextLaunch": "Hide until next launch"
   },
   "layout": {
+    "newsComputer": "News computer",
     "rateLimited": "GameBanana is rate-limiting Grimoire. Pause a moment before retrying.",
     "fixNow": "Fix now",
     "perfRestored": "Performance config restored.",

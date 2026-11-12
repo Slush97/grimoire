@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
 import { BOOK, FAN, GLYPH_CELL, GLYPH_ROWS, KEY_BOXES, LAYERS, LOGO, MUG, PAGE_TOPS, SCREEN, glyphPath, nextPhrase, nextScreenProgram, typingOf, type ScreenProgram, type Typing } from './previewLoaderArt';
 
@@ -8,7 +8,8 @@ import { BOOK, FAN, GLYPH_CELL, GLYPH_ROWS, KEY_BOXES, LAYERS, LOGO, MUG, PAGE_T
 // bake measured: the fan, the marks on the screen, the keys, the planchette, the steam and the screen's
 // light. All of it moves by transform and opacity alone, which the compositor runs without the main
 // thread: it keeps going while a model parses or its shaders link. Nothing is timed from script, for
-// the same reason. Styles are under `.preview-loader` in index.css.
+// the same reason. Styles are under `.preview-loader` in index.css. The scene and what its screen shows
+// are exported for the computer as a toy (LoaderToy.tsx), which is no loader and does run on script.
 
 /** The fan's drawing reaches 1.16 times the pentagram's tips (its stroke and the miter of its points). */
 const FAN_VIEW = 1.16;
@@ -36,7 +37,7 @@ const logoPart = (d: string) => (
 
 /** The Grimoire logo as one loop (see BOOK): its leaves riffle from the right page to the left, then the
  *  whirlwind rises out of the book, spins and dies away. */
-function Book() {
+export function Book() {
   return (
     <div className="preview-loader__book">
       <style>{BOOK.css}</style>
@@ -52,7 +53,7 @@ function Book() {
 const FACE_STRIPS = 8;
 
 /** The hero's face as a tube would pull it in: a ripple runs down it now and then, under static. */
-function Face({ src, onNoFace }: { src: string; onNoFace: () => void }) {
+export function Face({ src, onNoFace }: { src: string; onNoFace?: () => void }) {
   return (
     <>
       <div className="preview-loader__face">
@@ -66,21 +67,22 @@ function Face({ src, onNoFace }: { src: string; onNoFace: () => void }) {
   );
 }
 
-const glyphs = (text: string, cells = text.length) => (
-  <svg viewBox={`0 0 ${cells * GLYPH_CELL} ${GLYPH_ROWS}`}><path d={glyphPath(text)} /></svg>
-);
+/** `text` in the screen's dots, in a box of `cells` characters. */
+export function Glyphs({ text, cells = text.length }: { text: string; cells?: number }) {
+  return <svg viewBox={`0 0 ${cells * GLYPH_CELL} ${GLYPH_ROWS}`}><path d={glyphPath(text)} /></svg>;
+}
 
 /** The phrase the keyboard is typing, as a terminal would show it: a prompt, the text a character at a
  *  time in dots, and a cursor that keeps its place after the last one. */
-function Typed({ typing }: { typing: Typing }) {
+export function Typed({ typing }: { typing: Typing }) {
   return (
     <>
       <div className="preview-loader__type">
         {typing.lines.map((line, row) => (
           <div key={row}>
-            {glyphs(row === 0 ? '>' : '', 2)}
+            <Glyphs text={row === 0 ? '>' : ''} cells={2} />
             <span style={{ animation: typing.line(row) }}>
-              <span><em style={{ animation: typing.lineInner(row) }}>{glyphs(line)}</em></span>
+              <span><em style={{ animation: typing.lineInner(row) }}><Glyphs text={line} /></em></span>
               <i style={{ animation: typing.cursor(row) }}><b /></i>
             </span>
           </div>
@@ -97,16 +99,55 @@ function Screen({ program, hero, typing, onNoFace }: { program: ScreenProgram; h
   return <Book />;
 }
 
-/** Every key, each a window on the keys layer over its own cap, so that one can dip without the rest. */
-function Keys({ typing }: { typing: Typing }) {
+/** Every key, each a window on the keys layer over its own cap, so that one can dip without the rest,
+ *  and on the screen's light on the keys, so that a cap takes its light down with it. */
+function Keys({ keyStyle }: { keyStyle?: (key: number) => CSSProperties | undefined }) {
   return (
     <div className="preview-loader__keys">
       {KEY_BOXES.map(([left, top, width, height], key) => (
-        <i key={key} style={{ left: percent(left), top: percent(top), width: percent(width), height: percent(height), animation: typing.key(key) }}>
-          <img src={LAYERS.keys} alt="" draggable={false}
-            style={{ width: percent(1 / width), height: percent(1 / height), transform: `translate(${percent(-left)}, ${percent(-top)})` }} />
+        <i key={key} style={{ left: percent(left), top: percent(top), width: percent(width), height: percent(height), ...keyStyle?.(key) }}>
+          {[LAYERS.keys, LAYERS.keyLight].map((src) => (
+            <img key={src} src={src} alt="" draggable={false} className={src === LAYERS.keyLight ? 'preview-loader__keylight' : undefined}
+              style={{ width: percent(1 / width), height: percent(1 / height), transform: `translate(${percent(-left)}, ${percent(-top)})` }} />
+          ))}
         </i>
       ))}
+    </div>
+  );
+}
+
+/** The mug's steam: a ribbon rising from its opening. With a `className`, a puff of it. */
+export function LoaderSteam({ className = '', onAnimationEnd }: { className?: string; onAnimationEnd?: () => void }) {
+  return (
+    <div className={className ? `preview-loader__steam ${className}` : 'preview-loader__steam'} style={{ left: percent(MUG.left), top: percent(MUG.top) }}
+      onAnimationEnd={onAnimationEnd && ((event) => { if (event.target === event.currentTarget) onAnimationEnd(); })}>
+      <svg viewBox="0 0 20 180" preserveAspectRatio="none"><path d={STEAM} /></svg>
+    </div>
+  );
+}
+
+/** The computer itself: its layers, with `screen` on its glass and each key styled by `keyStyle`. `children` are drawn over it. */
+export function LoaderScene({ screen, keyStyle, children }: { screen: ReactNode; keyStyle?: (key: number) => CSSProperties | undefined; children?: ReactNode }) {
+  return (
+    <div className="preview-loader__pc">
+      <img className="preview-loader__layer" src={LAYERS.back} alt="" draggable={false} />
+      <img className="preview-loader__layer preview-loader__screenlight" src={LAYERS.screenLight} alt="" draggable={false} />
+      {/* Over the screen's light, which was rendered without the caps and lights what is under them. */}
+      <Keys keyStyle={keyStyle} />
+      <img className="preview-loader__layer preview-loader__planchette" src={LAYERS.planchette} alt="" draggable={false} />
+      <img className="preview-loader__layer preview-loader__glow" src={LAYERS.glow} alt="" draggable={false} />
+      <div className="preview-loader__seat"
+        style={{ left: percent(FAN.left), top: percent(FAN.top), width: percent(FAN.width * FAN_VIEW), transform: matrix(FAN.matrix) }}>
+        <FanSpinner className="preview-loader__fan" />
+      </div>
+      <img className="preview-loader__layer" src={LAYERS.front} alt="" draggable={false} />
+      <div className="preview-loader__rays" style={{ left: percent(SCREEN.left), top: percent(SCREEN.top) }} />
+      <div className="preview-loader__screen"
+        style={{ left: percent(SCREEN.left), top: percent(SCREEN.top), width: percent(SCREEN.width), aspectRatio: SCREEN.aspect, transform: matrix(SCREEN.matrix) }}>
+        {screen}
+      </div>
+      <LoaderSteam />
+      {children}
     </div>
   );
 }
@@ -131,26 +172,8 @@ export function PreviewLoader({ progress, label, hero, program, phrase, classNam
   return (
     <div role={label ? 'status' : undefined} aria-label={label} aria-hidden={label ? undefined : true} className={`preview-loader ${className}`}>
       <style>{typing.css}</style>
-      <div className="preview-loader__pc">
-        <img className="preview-loader__layer" src={LAYERS.back} alt="" draggable={false} />
-        <Keys typing={typing} />
-        <img className="preview-loader__layer preview-loader__screenlight" src={LAYERS.screenLight} alt="" draggable={false} />
-        <img className="preview-loader__layer preview-loader__planchette" src={LAYERS.planchette} alt="" draggable={false} />
-        <img className="preview-loader__layer preview-loader__glow" src={LAYERS.glow} alt="" draggable={false} />
-        <div className="preview-loader__seat"
-          style={{ left: percent(FAN.left), top: percent(FAN.top), width: percent(FAN.width * FAN_VIEW), transform: matrix(FAN.matrix) }}>
-          <FanSpinner className="preview-loader__fan" />
-        </div>
-        <img className="preview-loader__layer" src={LAYERS.front} alt="" draggable={false} />
-        <div className="preview-loader__rays" style={{ left: percent(SCREEN.left), top: percent(SCREEN.top) }} />
-        <div className="preview-loader__screen"
-          style={{ left: percent(SCREEN.left), top: percent(SCREEN.top), width: percent(SCREEN.width), aspectRatio: SCREEN.aspect, transform: matrix(SCREEN.matrix) }}>
-          <Screen program={program ?? turn} hero={noFace ? undefined : hero} typing={typing} onNoFace={() => setNoFace(true)} />
-        </div>
-        <div className="preview-loader__steam" style={{ left: percent(MUG.left), top: percent(MUG.top) }}>
-          <svg viewBox="0 0 20 180" preserveAspectRatio="none"><path d={STEAM} /></svg>
-        </div>
-      </div>
+      <LoaderScene keyStyle={(key) => { const animation = typing.key(key); return animation ? { animation } : undefined; }}
+        screen={<Screen program={program ?? turn} hero={noFace ? undefined : hero} typing={typing} onNoFace={() => setNoFace(true)} />} />
       <div className={`preview-loader__status ${known ? '' : 'preview-loader__status--sweep'}`}>
         <span style={known ? { transform: `scaleX(${amount})` } : undefined} />
       </div>
