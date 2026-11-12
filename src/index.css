@@ -1509,6 +1509,160 @@ body {
   100% { transform: rotate(var(--gear-spin-end)); }
 }
 
+/* Preview loader (common/PreviewLoader.tsx): a desk computer whose case fan is a pentagram. The fan
+   and the screen's bar are their own elements, animated by transform and opacity alone, so they keep
+   moving on the compositor while a model's load holds the main thread. Ink and surfaces come from
+   the tokens; the glow is the accent. It fades in after a moment, so a short load never flashes it. */
+.preview-loader {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+  pointer-events: none;
+  color: var(--color-accent);
+  animation: fadeIn 200ms ease-out 250ms both;
+}
+
+.preview-loader__pc {
+  position: relative;
+  width: min(64cqw, 80cqh, max(200px, 16cqw));
+  aspect-ratio: 160 / 138;
+}
+
+.preview-loader__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.preview-loader .preview-loader__mini {
+  display: none;
+  width: min(40cqw, 40cqh, 32px);
+  aspect-ratio: 1;
+}
+
+/* A box too small to read the computer in gets the fan alone. */
+@container (max-width: 150px) or (max-height: 130px) {
+  .preview-loader__pc { display: none; }
+  .preview-loader .preview-loader__mini { display: block; }
+}
+
+.preview-loader__case {
+  fill: var(--color-bg-tertiary);
+  stroke: color-mix(in srgb, var(--color-hl) 30%, transparent);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+}
+
+.preview-loader__line {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-hl) 22%, transparent);
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.preview-loader__keys {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-hl) 30%, transparent);
+  stroke-width: 1.4;
+  stroke-dasharray: 2.6 1.4;
+}
+
+.preview-loader__dot {
+  fill: color-mix(in srgb, var(--color-hl) 30%, transparent);
+}
+
+.preview-loader__glow {
+  fill: color-mix(in srgb, var(--color-accent) 16%, var(--color-bg-sunken));
+  stroke: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  stroke-width: 1;
+}
+
+.preview-loader__flame {
+  fill: var(--color-accent);
+}
+
+.preview-loader__fan {
+  position: absolute;
+  left: 20.625%;
+  top: 34.7826%;
+  width: 20%;
+  aspect-ratio: 1;
+}
+
+.fan-spinner {
+  display: block;
+  animation: fanSpin 1.6s linear infinite;
+  will-change: transform;
+}
+
+.fan-spinner > * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.preview-loader__fan > * {
+  stroke-width: 1.6;
+}
+
+@keyframes fanSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* The screen: a bar that fills with the load, or a cursor while nothing reports how far it is. */
+.preview-loader__screen {
+  position: absolute;
+  left: 51.875%;
+  top: 44.9275%;
+  width: 32.5%;
+  height: 23.1884%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-loader__bar {
+  width: 78%;
+  height: 16%;
+  min-height: 3px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+
+.preview-loader__bar > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--color-accent);
+  transform-origin: left;
+  transition: transform 400ms ease-out;
+}
+
+.preview-loader__cursor {
+  width: 16%;
+  height: 12%;
+  min-height: 2px;
+  background: var(--color-accent);
+  animation: previewCursorBlink 1.1s steps(1, end) infinite;
+}
+
+@keyframes previewCursorBlink {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-loader { animation-duration: 0.01ms; }
+  .fan-spinner { animation-duration: 8s; }
+  .preview-loader__cursor { animation: none; }
+  .preview-loader__bar > span { transition: none; }
+}
+
 /* Skeletons (common/Skeleton.tsx). One sweep for the whole screen: the glint
    is a fixed-attachment background, so it is positioned against the viewport
    and every placeholder shows its slice of the same band at the same moment,

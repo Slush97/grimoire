@@ -2,6 +2,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -76,10 +77,10 @@ import { HeroViewerToolbar, type HeroViewerScene } from './HeroViewerToolbar';
 import { Source2MapPost } from './Source2MapPost';
 import { HideoutScene, HideoutHeroLighting, type HideoutStatus } from './HideoutScene';
 import { useViewerCrossfade } from './useViewerCrossfade';
-import { Skeleton } from '../common/Skeleton';
+import { precompileHidden } from '../../lib/viewerPrecompile';
+import { FanSpinner, PreviewLoader } from '../common/PreviewLoader';
 import { preloadHideout } from '../../lib/hideoutPreload';
 import { hideoutWarmingProgress, roomStageProgress } from '../../lib/hideoutProgress';
-import { ProgressBar } from '../common/ui';
 import { useAppStore } from '../../stores/appStore';
 import { heroViewerSceneSchema, hideoutReadyNow, migrateViewerScene, openingViewerScene, ownViewerSceneDraft, refreshHideoutReady, viewerSceneDraft, type ViewerSceneSurface } from '../../lib/hideoutDefault';
 import { foundryDraftKey, foundryDraftScope, readFoundryDraft } from '../../lib/foundryDrafts';
@@ -234,6 +235,11 @@ const HIDEOUT_RESIDENT_MS = 5 * 60_000;
 // How long a hero ready before its room waits under the placeholder. A warm room draws its saved
 // frame in about a second and its real geometry in three to four; a cold program cache takes up to ten.
 const ROOM_WAIT_MS = 12_000;
+// How long a hero waits under the placeholder for the rest of a staged preview (a parry's attacker):
+// a first open exports the other hero's rig, which takes about as long as the hero's own.
+const STAGE_WAIT_MS = 20_000;
+// How long a change of stage holds the previous frame before the placeholder takes over.
+const STAGE_GRACE_MS = 400;
 
 // Turntable rotation rate (rad/s). The spin pauses while the user holds (orbits)
 // the model with the mouse.
@@ -1427,7 +1433,6 @@ interface LoadedModel {
 
 const NO_CLIPS: THREE.AnimationClip[] = [];
 
-/** A small spinner in the corner, only once a model change takes long enough to notice. */
 /** How long a hero switch keeps the previous hero on screen before the placeholder takes over. */
 const SLOW_SWITCH_MS = 1000;
 
@@ -1435,29 +1440,50 @@ const SLOW_SWITCH_MS = 1000;
  *  enough to explain; later ones come from memory or a warm cache. */
 let hideoutWarmed = false;
 
-/** `progress` from 0 to 1, or null for a stage that reports none. */
-function HideoutWarmingIndicator({ progress }: { progress: number | null }) {
-  const { t } = useTranslation();
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setShown(true), 600);
-    return () => clearTimeout(timer);
-  }, []);
-  return shown ? (
-    <div aria-hidden className="pointer-events-none absolute left-3 top-3 flex w-36 animate-fade-in flex-col gap-1 rounded-sm border border-border bg-bg-secondary/80 px-2 py-1.5 text-2xs text-text-secondary">
-      <span className="flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" />{t('locker.pose.hideoutWarming')}</span>
-      <ProgressBar value={progress ?? 0} max={1} indeterminate={progress === null} />
+/**
+ * What stands in for the preview until all of it can show: the loader, over the viewer's surface. It
+ * fades out in place once the viewer has drawn, and fades back in when a later change takes it away.
+ * `progress` from 0 to 1 fills the loader's screen; without it the wait reports no position.
+ */
+function ViewerPlaceholder({ up, progress }: { up: boolean; progress?: number | null }) {
+  // Whether it has been down: the first one is there from the start, a later one fades in.
+  const [returning, setReturning] = useState(false);
+  if (!up && !returning) setReturning(true);
+  // The loader leaves with the fade, then stops animating under it.
+  const [gone, setGone] = useState(false);
+  if (up && gone) setGone(false);
+  return (
+    <div aria-hidden data-viewer-placeholder={up ? 'up' : 'down'}
+      onAnimationEnd={(event) => { if (!up && event.target === event.currentTarget) setGone(true); }}
+      className={`pointer-events-none absolute inset-0 bg-bg-secondary ${up ? returning ? 'animate-fade-in' : '' : 'animate-fade-out'}`}>
+      {!gone && <PreviewLoader progress={progress} />}
     </div>
-  ) : null;
+  );
 }
 
+/** The fan in the corner, only once a model change takes long enough to notice. */
 function SlowChangeIndicator() {
   const [shown, setShown] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setShown(true), 400);
     return () => clearTimeout(timer);
   }, []);
-  return shown ? <Loader2 aria-hidden className="pointer-events-none absolute right-3 top-3 h-4 w-4 animate-spin text-white/60" /> : null;
+  return shown ? <FanSpinner className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-white/60" /> : null;
+}
+
+/** Links the staged actors' programs before they first draw, as HeroPrecompile does for the hero: hidden
+ *  until then, and reported once all are linked. Mounted after the material builders. */
+function StagedActorsPrecompile({ actors, onReady }: { actors: LoadedStagedActor[]; onReady: (actors: LoadedStagedActor[]) => void }) {
+  const { gl, camera } = useThree();
+  const getThree = useThree((state) => state.get);
+  useEffect(() => {
+    let cancelled = false;
+    for (const actor of actors) installFastSkinnedBounds(actor.scene);
+    const compile = precompileHidden(gl, getThree().scene, camera, actors.map((actor) => actor.scene), true);
+    void compile.ready.then(() => { if (!cancelled) onReady(actors); });
+    return () => { cancelled = true; compile.cancel(); };
+  }, [gl, camera, getThree, actors, onReady]);
+  return null;
 }
 
 /** Estimated GPU memory the viewer's hero models may hold, the one on screen included. A measured
@@ -1627,7 +1653,9 @@ export default function HeroPoseViewer({
   const released = useRef(false);
   // A new model draws once its programs are linked, off the render loop.
   const [revealed, setRevealed] = useState<THREE.Object3D | null>(null);
-  const heroReady = useCallback((model: THREE.Object3D) => { setRevealed(model); crossfade.revealSoon(); }, [crossfade]);
+  // A hero whose stage is still loading (see `stageHold`) stays behind the held frame until that is in.
+  const stageHeld = useRef(false);
+  const heroReady = useCallback((model: THREE.Object3D) => { setRevealed(model); if (!stageHeld.current) crossfade.revealSoon(); }, [crossfade]);
   // A new hero that takes longer than SLOW_SWITCH_MS (a first open exports it) gives way to the
   // placeholder rather than leaving the previous hero up under the new one's name. It stays until the
   // new model has drawn, and the swap then needs no crossfade.
@@ -1703,8 +1731,9 @@ export default function HeroPoseViewer({
   // Compact (the Installed peek) renders like the full viewer's transparent scene: studio light, no backdrop.
   const chosenScene = compact ? 'transparent' : storedScene;
   const wantsHideout = chosenScene === 'hideout';
-  // A first hideout open builds its cache, which takes tens of seconds. Studio shows meanwhile; the
-  // hideout takes over, loading as any first open does, unless another scene was chosen.
+  // A first hideout open builds its cache, which takes tens of seconds. The placeholder stays up for
+  // the build and the room's load after it, showing how far both have come. Under it the viewer is on
+  // Studio until the hideout takes over, unless another scene was chosen.
   const [hideoutCache, setHideoutCache] = useState<'unknown' | 'building' | 'ready'>(() => hideoutReadyNow() ? 'ready' : 'unknown');
   useEffect(() => {
     if (!wantsHideout || hideoutCache !== 'unknown') return;
@@ -1844,7 +1873,8 @@ export default function HeroPoseViewer({
     if (!waitingForRoom) return;
     const timer = setTimeout(() => setRoomWaitOver(true), ROOM_WAIT_MS);
     return () => clearTimeout(timer);
-  }, [waitingForRoom]);
+    // A first load reports its stages: the wait runs on while they keep coming.
+  }, [waitingForRoom, roomProgress]);
   // The canvas mounts with the first model and then outlives model changes.
   const [canvasMounted, setCanvasMounted] = useState(false);
   if (scene && !canvasMounted) setCanvasMounted(true);
@@ -1981,6 +2011,31 @@ export default function HeroPoseViewer({
   }, [movementEngine, movementChoice, movementPreview?.kind]);
   // Without the engine (Engine particles off, or its preview failed) the bake's descriptor plays instead
   const [movementEngineFailed, setMovementEngineFailed] = useState<string | null>(null);
+  // A staged preview appears whole. Until its timeline and the other actors are in, and their programs
+  // linked, the hero would stand idle and alone: the last frame is held instead (a change of stage),
+  // and the placeholder takes over when that runs long or there is no frame to hold (a first open).
+  const [compiledActors, setCompiledActors] = useState<LoadedStagedActor[] | null>(null);
+  const stageWaiting = movementEngineEnabled && movementEngineFailed !== movementEngineKey
+    && (!movementEngine || !!actorLoads?.length && compiledActors !== actorLoads);
+  const stageKey = movementEngineEnabled ? movementEngineKey : '';
+  const [stageWait, setStageWait] = useState<{ key: string; phase: 'long' | 'over' } | null>(null);
+  if (!stageWaiting && stageWait) setStageWait(null);
+  useEffect(() => {
+    if (!stageWaiting) return;
+    const long = setTimeout(() => setStageWait({ key: stageKey, phase: 'long' }), STAGE_GRACE_MS);
+    // A stage that never arrives leaves the hero on its own, as a failed one does.
+    const over = setTimeout(() => setStageWait({ key: stageKey, phase: 'over' }), STAGE_WAIT_MS);
+    return () => { clearTimeout(long); clearTimeout(over); };
+  }, [stageWaiting, stageKey]);
+  const stagePhase = stageWaiting && stageWait?.key === stageKey ? stageWait.phase : 'grace';
+  const stageHold = stageWaiting && stagePhase !== 'over';
+  const heroDrawn = scene !== null && revealed === scene;
+  // Before the next frame draws the hero without its stage. A hero that has not drawn yet reveals itself.
+  useLayoutEffect(() => {
+    stageHeld.current = stageHold;
+    if (stageHold) crossfade.cover();
+    else if (heroDrawn) crossfade.revealSoon();
+  }, [stageHold, heroDrawn, crossfade]);
   const movementRequest = movementPreview?.request;
   const legacyMovementRequest = movementRequest && (!movementEngineEnabled || movementEngineFailed === movementEngineKey) ? movementRequest : null;
   const [legacyMovement, setLegacyMovement] = useState<{ request: MovementFxPreviewRequest; value: MovementFxPreview } | null>(null);
@@ -2431,7 +2486,8 @@ export default function HeroPoseViewer({
             <shadowMaterial transparent opacity={0.25} />
           </mesh>
         )}
-        {scene && <group visible={revealed === scene}>
+        {/* Hidden while its stage loads: the held frame, then the placeholder, stand in for it. */}
+        {scene && <group visible={revealed === scene && !stageHold}>
         {onPartPick && <SkinPartPicking model={scene} posed={!!regionSelection}
           onPick={regionSelection ? (_material, hit) => { if (regionSelection.picker.by !== 'brush') regionSelection.onPick(hit); } : onPartPick} />}
         {regionSelection ? <SkinRegionOverlay scene={scene} material={regionSelection.material} seeds={regionSelection.seeds} picker={regionSelection.picker} applied={partEditsApplied} />
@@ -2518,20 +2574,20 @@ export default function HeroPoseViewer({
         )}
         {/* Last, so the material builders above have run on the model it compiles. */}
         {scene && <HeroPrecompile model={scene} onReady={heroReady} />}
+        {movementEngine && !!actorLoads?.length && <StagedActorsPrecompile actors={actorLoads} onReady={setCompiledActors} />}
       </Canvas>}
       {/* The last frame before a change, fading out once the change has drawn (useViewerCrossfade). */}
       <canvas ref={attachCrossfade} hidden aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />
       {slowSwitch && !failed && (
         <div aria-hidden className="pointer-events-none absolute inset-0 animate-fade-in bg-bg-secondary">
-          <Skeleton className="absolute inset-0 opacity-60" rounded="none" />
+          <PreviewLoader />
         </div>
       )}
-      {/* The placeholder, which fades out in place once the viewer has something to show. */}
-      {!failed && (!canvasMounted || waitingForRoom && !roomWaitOver) ? (
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-bg-secondary">
-          <Skeleton className="absolute inset-0 opacity-60" rounded="none" />
-        </div>
-      ) : !failed && <div aria-hidden className="pointer-events-none absolute inset-0 animate-fade-out bg-bg-secondary" />}
+      {/* The placeholder, which fades out in place once the viewer has all of the preview to show. */}
+      {!failed && <ViewerPlaceholder
+        up={revealed === null || buildingHideout || waitingForRoom && !roomWaitOver || stageHold && (stagePhase === 'long' || !heroDrawn)}
+        progress={!hideoutWarm && (buildingHideout || waitingForRoom)
+          ? hideoutWarmingProgress({ building: buildingHideout, built: hideoutBuilt, build: buildProgress, room: roomProgress }) : undefined} />}
       {failed ? <HeroPoseFailureState message={t('locker.pose.cannotPose')} />
         : canvasMounted && !current && <SlowChangeIndicator />}
       <p role="status" className="sr-only">
@@ -2541,8 +2597,6 @@ export default function HeroPoseViewer({
           : viewerScene === 'hideout' && hideoutStatus.kind === 'loading' ? t('locker.pose.hideoutLoading') : null}
       </p>
       {!compact && toolbar}
-      {!hideoutWarm && (buildingHideout || waitingForRoom) && <HideoutWarmingIndicator
-        progress={hideoutWarmingProgress({ building: buildingHideout, built: hideoutBuilt, build: buildProgress, room: roomProgress })} />}
       {hideoutFailed && (
         <p role="alert" className="absolute left-3 top-3 max-w-64 rounded-sm border border-border bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">
           {t('locker.pose.hideoutFailed')}

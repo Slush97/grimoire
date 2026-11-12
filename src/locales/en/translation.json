@@ -2689,8 +2689,7 @@
       "wireframe": "Wireframe",
       "hideoutLoading": "Loading hideout. First load takes a few minutes.",
       "hideoutBuilding": "Building hideout",
-      "hideoutFailed": "Could not load the hideout. Choose another scene.",
-      "hideoutWarming": "Loading hideout"
+      "hideoutFailed": "Could not load the hideout. Choose another scene."
     },
     "downloadSkins": {
       "browseMore": "Browse more skins"

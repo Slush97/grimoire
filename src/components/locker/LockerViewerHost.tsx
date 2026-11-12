@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Loader2 } from 'lucide-react';
 import { ErrorBoundary } from '../common/ErrorBoundary';
+import { PreviewLoader } from '../common/PreviewLoader';
 import FloatingModelPanel from './FloatingModelPanel';
 import { parkedViewerRequest, requestLockerViewer, useLockerViewer, type LockerViewerRequest } from '../../stores/lockerViewerStore';
 
@@ -103,13 +103,7 @@ export function LockerViewerHost() {
     // Without hardware WebGL the canvas throws; keep that inside the panel. The next hero or skin
     // gets a fresh try: one model that crashes must not take the viewer away from every other.
     <ErrorBoundary resetKey={JSON.stringify([request.heroName, request.skinSources])}>
-      <Suspense
-        fallback={
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-white/80" />
-          </div>
-        }
-      >
+      <Suspense fallback={<PreviewLoader />}>
         <HeroPoseViewer {...request} active={shown} onShownHeroChange={showHero} />
       </Suspense>
     </ErrorBoundary>,

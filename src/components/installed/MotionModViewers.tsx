@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Pause, Play } from 'lucide-react';
+import { Pause, Play } from 'lucide-react';
 import { IconButton, SegmentedControl } from '../common/ui';
+import { PreviewLoader } from '../common/PreviewLoader';
 import HeroPoseViewer from '../locker/HeroPoseViewer';
 import { exportAnimationModPreview } from '../../lib/api';
 import type { MovementFxChoice } from '../../lib/movementFx';
@@ -11,10 +12,9 @@ export const MOVEMENT_PREVIEW_HERO = 'Lash';
 
 function Status({ failed }: { failed: boolean }): ReactNode {
   const { t } = useTranslation();
+  if (!failed) return <PreviewLoader label={t('foundry.skin.loading')} />;
   return <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
-    {failed
-      ? <p className="text-center text-xs text-text-secondary">{t('installed.preview.unavailable')}</p>
-      : <Loader2 className="h-6 w-6 animate-spin text-text-secondary" aria-label={t('foundry.skin.loading')} />}
+    <p className="text-center text-xs text-text-secondary">{t('installed.preview.unavailable')}</p>
   </div>;
 }
 
