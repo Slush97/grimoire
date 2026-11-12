@@ -1520,6 +1520,7 @@ body {
   --loader-ink: #15422b;
   --loader-light: #9dffc0;
   --loader-stroke: max(1.5px, calc(var(--loader-width) * 0.006));
+  --loader-press: calc(var(--loader-width) * 0.009);
   --loader-width: min(76cqw, 78cqh, max(300px, 58cqmin));
   position: absolute;
   inset: 0;
@@ -1547,6 +1548,27 @@ body {
   display: block;
   width: 100%;
   height: 100%;
+  user-select: none;
+}
+
+/* The keys: each one a window on the keys layer over its own cap, dipping when the phrase the
+   keyboard types reaches its letter (the component writes those keyframes, see typingOf). */
+.preview-loader__keys {
+  position: absolute;
+  inset: 0;
+}
+
+.preview-loader__keys > i {
+  position: absolute;
+  overflow: hidden;
+}
+
+.preview-loader__keys img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  max-width: none;
   user-select: none;
 }
 
@@ -1697,42 +1719,29 @@ body {
   transition: transform 400ms ease-out;
 }
 
-/* Three lines typed one after another, then cleared. */
+/* The phrase the keyboard types. Each line is a window that slides open a character at a time over
+   text sliding the other way, so the letters appear where they stand. */
 .preview-loader__type {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   justify-content: center;
-  gap: 16%;
-  width: 62%;
-  height: 58%;
+  width: 9ch;
+  color: var(--loader-ink);
+  font: 700 calc(var(--loader-width) * 0.0235) / 1.25 var(--font-mono, ui-monospace, Consolas, monospace);
+  text-transform: uppercase;
+  white-space: pre;
 }
 
-.preview-loader__type > i {
-  height: 15%;
-  min-height: 2px;
-  transform-origin: left;
-  animation: previewLoaderType1 4.6s linear infinite;
+.preview-loader__type > span {
+  width: max-content;
+  overflow: hidden;
+  background: none;
 }
 
-.preview-loader__type > i:nth-child(2) { width: 74%; animation-name: previewLoaderType2; }
-.preview-loader__type > i:nth-child(3) { width: 48%; animation-name: previewLoaderType3; }
-
-@keyframes previewLoaderType1 {
-  0% { transform: scaleX(0); animation-timing-function: steps(7, end); }
-  20%, 92% { transform: scaleX(1); animation-timing-function: steps(1, end); }
-  93%, 100% { transform: scaleX(0); }
-}
-
-@keyframes previewLoaderType2 {
-  0%, 26% { transform: scaleX(0); animation-timing-function: steps(6, end); }
-  44%, 92% { transform: scaleX(1); animation-timing-function: steps(1, end); }
-  93%, 100% { transform: scaleX(0); }
-}
-
-@keyframes previewLoaderType3 {
-  0%, 52% { transform: scaleX(0); animation-timing-function: steps(4, end); }
-  64%, 92% { transform: scaleX(1); animation-timing-function: steps(1, end); }
-  93%, 100% { transform: scaleX(0); }
+.preview-loader__type em {
+  background: none;
+  font-style: normal;
 }
 
 /* An eye that looks about and blinks. */
@@ -1825,17 +1834,18 @@ body {
   21%, 53% { transform: translateY(173%); }
 }
 
-/* The Grimoire logo: its open book, with leaves turning from the right page to the left and its
-   whirlwind swaying over them. A leaf sits in a box laid on the right page (x along the page, y along
-   the spine, from the logo's own lines), and turns inside it by scaleX and skewY, which stay finite
-   where the leaf is seen edge on. */
+/* The Grimoire logo as one loop: the book's leaves riffle from the right page to the left, then its
+   whirlwind rises out of the spine, spins and dies away. A leaf sits in a box laid on the right page
+   (x along the page, y along the spine, from the logo's own lines) and turns inside it by scaleX and
+   skewY, which stay finite where the leaf is seen edge on. The leaves share the loop and start it one
+   after another, so they are done before the whirlwind is up. */
 .preview-loader__book {
   position: relative;
   height: 88%;
   aspect-ratio: 1010 / 890;
 }
 
-.preview-loader__book > svg {
+.preview-loader__book svg {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -1843,17 +1853,31 @@ body {
   fill: var(--loader-ink);
 }
 
-.preview-loader__book > .preview-loader__whirl {
-  animation: previewLoaderWhirl 1.3s ease-in-out infinite alternate;
+.preview-loader__whirl {
+  position: absolute;
+  inset: 0;
+  transform-origin: 57.4% 69.7%;
+  animation: previewLoaderWhirl 6.2s ease-in-out infinite;
 }
 
-.preview-loader__book > .preview-loader__whirl:nth-of-type(3) { animation-delay: -0.3s; }
-.preview-loader__book > .preview-loader__whirl:nth-of-type(4) { animation-delay: -0.6s; }
-.preview-loader__book > .preview-loader__whirl:nth-of-type(5) { animation-delay: -0.9s; }
+.preview-loader__whirl > svg {
+  animation: previewLoaderWhirlBand 0.42s ease-in-out infinite alternate;
+}
+
+.preview-loader__whirl > svg:nth-child(2) { animation-delay: -0.1s; }
+.preview-loader__whirl > svg:nth-child(3) { animation-delay: -0.2s; }
+.preview-loader__whirl > svg:nth-child(4) { animation-delay: -0.3s; }
 
 @keyframes previewLoaderWhirl {
-  from { transform: translateX(-2.2%); }
-  to { transform: translateX(2.2%); }
+  0%, 36% { opacity: 0; transform: scale(0.12); }
+  46% { opacity: 1; transform: scale(1.05); }
+  50%, 84% { opacity: 1; transform: scale(1); }
+  95%, 100% { opacity: 0; transform: scale(0.12); }
+}
+
+@keyframes previewLoaderWhirlBand {
+  from { transform: translateX(-2.6%); }
+  to { transform: translateX(2.6%); }
 }
 
 .preview-loader__book > span {
@@ -1874,19 +1898,17 @@ body {
   border-radius: 0 26% 0 0;
   background: color-mix(in srgb, var(--loader-ink) 10%, var(--loader-phosphor));
   transform-origin: 0 100%;
-  animation: previewLoaderLeaf 2.4s linear infinite;
+  animation: previewLoaderLeaf 6.2s linear infinite backwards;
 }
-
-.preview-loader__book > span + span > b { animation-delay: -1.2s; }
 
 @keyframes previewLoaderLeaf {
   0% { transform: scaleX(1) skewY(0deg); opacity: 0; }
-  5% { transform: scaleX(0.99) skewY(-8deg); opacity: 1; }
-  16% { transform: scaleX(0.944) skewY(-25.5deg); }
-  28% { transform: scaleX(0.624) skewY(-38.4deg); }
-  40% { transform: scaleX(0.176) skewY(-42deg); }
-  52% { transform: scaleX(-0.288) skewY(-37.9deg); opacity: 1; }
-  58%, 100% { transform: scaleX(-0.288) skewY(-37.9deg); opacity: 0; }
+  0.5% { transform: scaleX(0.995) skewY(-5deg); opacity: 1; }
+  1.8% { transform: scaleX(0.944) skewY(-25.5deg); }
+  3.4% { transform: scaleX(0.624) skewY(-38.4deg); }
+  5% { transform: scaleX(0.176) skewY(-42deg); }
+  6.6% { transform: scaleX(-0.288) skewY(-37.9deg); opacity: 1; }
+  7.1%, 100% { transform: scaleX(-0.288) skewY(-37.9deg); opacity: 0; }
 }
 
 /* The hero the preview is loading, as an old tube would pull the picture in: cut into strips that
@@ -2027,8 +2049,10 @@ body {
   .preview-loader__planchette,
   .preview-loader__steam,
   .preview-loader__steam > svg,
-  .preview-loader__screen *,
   .preview-loader__eye { animation: none; }
+  .preview-loader__screen *,
+  .preview-loader__keys > i { animation: none !important; }
+  .preview-loader__whirl { opacity: 1; transform: none; }
   .preview-loader__book > span,
   .preview-loader__static > i { display: none; }
   .preview-loader__screenlight,

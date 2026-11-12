@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PreviewLoader } from '../src/components/common/PreviewLoader.tsx';
-import { SCREEN_PROGRAMS, type ScreenProgram } from '../src/components/common/previewLoaderArt.ts';
+import { PHRASES, SCREEN_PROGRAMS, type ScreenProgram } from '../src/components/common/previewLoaderArt.ts';
 
 const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 const out = resolve(process.argv[2] ?? resolve(root, 'loader-lab.html'));
@@ -27,17 +27,27 @@ const styles = css.slice(from, to);
 /** The size the loader ships with, as the size controls' starting point. */
 const [, floor = '300', share = '46'] = /--loader-width: .*max\((\d+)px, (\d+)cqmin\)/.exec(styles) ?? [];
 
-/** The component's markup, with each layer's file URL replaced by the file itself. */
-function markup(program: ScreenProgram | undefined, progress: number | undefined): string {
-  const html = renderToStaticMarkup(createElement(PreviewLoader, { program, progress, hero: 'Abrams' }));
+/** The images the markup points at, kept once and put back in by the page: name to data URL. */
+const images: Record<string, string> = {};
+const keep = (path: string, type: string): string => {
+  const name = path.replace(/^.*[\\/]/, '').replace(/\W+/g, '_');
+  images[name] ??= `data:image/${type};base64,${readFileSync(path).toString('base64')}`;
+  return `@@${name}@@`;
+};
+/** The component's markup for one phrase and program, with each image's URL replaced by a name. */
+function markup(phrase: number, program: ScreenProgram, progress?: number): string {
+  const html = renderToStaticMarkup(createElement(PreviewLoader, { program, progress, phrase, hero: 'Abrams' }));
   return html
     .replace(/<link rel="preload"[^>]*>/g, '')
-    .replace(/file:\/\/[^"]+\.webp/g, (url) => `data:image/webp;base64,${readFileSync(fileURLToPath(url)).toString('base64')}`)
-    .replace(/src="(\/heroes\/[^"]+\.png)"/g, (_, path: string) => `src="data:image/png;base64,${readFileSync(resolve(root, 'public', `.${path}`)).toString('base64')}"`);
+    .replace(/file:\/\/[^"]+\.webp/g, (url) => keep(fileURLToPath(url), 'webp'))
+    .replace(/src="(\/heroes\/[^"]+\.png)"/g, (_, path: string) => `src="${keep(resolve(root, 'public', `.${path}`), 'png')}"`);
 }
 const screenOf = (html: string) => /<div class="preview-loader__screen"[^>]*>(.*?)<\/div><div class="preview-loader__steam"/.exec(html)?.[1] ?? '';
 const programs: ScreenProgram[] = ['hero', ...SCREEN_PROGRAMS, 'bar'];
-const screens = Object.fromEntries(programs.map((program) => [program, screenOf(markup(program, 0.4))]));
+/** One loader per phrase (its keys and keyframes differ), and every program's screen. `type` has one per phrase. */
+const loaders = PHRASES.map((_, phrase) => markup(phrase, 'type'));
+const screens = Object.fromEntries(programs.map((program) => [program, screenOf(markup(0, program, 0.4))]));
+const typed = loaders.map(screenOf);
 
 const page = `<!doctype html>
 <html lang="en">
@@ -77,6 +87,7 @@ ${styles}
 #stage[data-off~="fan"] .preview-loader__seat,
 #stage[data-off~="status"] .preview-loader__status,
 #stage[data-off~="screen"] .preview-loader__screen { display: none; }
+#stage[data-off~="keys"] .preview-loader__keys > i { animation: none !important; }
 #stage .preview-loader__fan { animation-duration: var(--lab-fan, 0.64s); }
 #stage .preview-loader__planchette { animation-delay: var(--lab-planchette, 5s); }
 </style>
@@ -112,9 +123,15 @@ ${styles}
     ${programs.map((program) => `<button data-program="${program}">${program}</button>`).join('')}
   </div>
 
+  <h2>Typing</h2>
+  <div class="row" id="phrases">
+    ${PHRASES.map((phrase, index) => `<button data-phrase="${index}"${index ? '' : ' aria-pressed="true"'}>${phrase}</button>`).join('')}
+  </div>
+  <p style="margin-top:6px">The keys type the phrase whatever the screen shows. The screen spells it in <b>type</b>.</p>
+
   <h2>Parts</h2>
   <div class="row" id="parts">
-    ${[['light', 'Screen light'], ['rays', 'Rays'], ['glow', 'Glow'], ['steam', 'Steam'], ['planchette', 'Planchette'], ['fan', 'Fan'], ['screen', 'Screen marks'], ['status', 'Line']]
+    ${[['light', 'Screen light'], ['rays', 'Rays'], ['glow', 'Glow'], ['steam', 'Steam'], ['planchette', 'Planchette'], ['keys', 'Typing'], ['fan', 'Fan'], ['screen', 'Screen marks'], ['status', 'Line']]
       .map(([key, name]) => `<button data-part="${key}" aria-pressed="true">${name}</button>`).join('')}
   </div>
   <label><span>Fan, seconds a turn</span><input id="fan" type="range" min="0.2" max="3" step="0.02" value="0.64"><output></output></label>
@@ -136,11 +153,14 @@ ${styles}
   <p style="margin-top:8px">The freeze blocks scripts and layout, as a model load does. The fan, the light and the line should keep moving through it.</p>
 </aside>
 <script>
-const LOADER = ${JSON.stringify(markup('book', undefined))};
-const SCREENS = ${JSON.stringify(screens)};
-const PROGRAMS = ${JSON.stringify(SCREEN_PROGRAMS.flatMap((program, index) => index % 2 ? [program] : ['hero', program]))};
+const IMAGES = ${JSON.stringify(images)};
+const withImages = (html) => html.replace(/@@([A-Za-z0-9_]+)@@/g, (_, name) => IMAGES[name]);
+const LOADERS = ${JSON.stringify(loaders)}.map(withImages);
+const SCREENS = Object.fromEntries(Object.entries(${JSON.stringify(screens)}).map(([program, html]) => [program, withImages(html)]));
+const TYPED = ${JSON.stringify(typed)};
+const PROGRAMS = ${JSON.stringify(['hero', ...SCREEN_PROGRAMS])};
 const stage = document.getElementById('stage');
-const state = { mode: 'none', amount: 0.4, program: 'auto', turn: 0, started: performance.now() };
+const state = { mode: 'none', amount: 0.4, program: 'auto', phrase: 0, turn: 0, started: performance.now() };
 // #program=book opens on one program, to link to it.
 const asked = new URLSearchParams(location.hash.slice(1)).get('program');
 if (asked && SCREENS[asked]) {
@@ -149,7 +169,7 @@ if (asked && SCREENS[asked]) {
 }
 
 function mount() {
-  stage.innerHTML = LOADER;
+  stage.innerHTML = LOADERS[state.phrase];
   state.started = performance.now();
   if (state.program === 'auto') state.turn++;
   draw();
@@ -165,7 +185,7 @@ function draw() {
   const program = state.program !== 'auto' ? state.program : known ? 'bar' : PROGRAMS[state.turn % PROGRAMS.length];
   const screen = stage.querySelector('.preview-loader__screen');
   if (!screen) return;
-  if (screen.dataset.program !== program) { screen.innerHTML = SCREENS[program]; screen.dataset.program = program; }
+  if (screen.dataset.program !== program) { screen.innerHTML = program === 'type' ? TYPED[state.phrase] : SCREENS[program]; screen.dataset.program = program; }
   const bar = screen.querySelector('.preview-loader__bar span');
   if (bar) bar.style.transform = 'scaleX(' + (known ? value : 0.4) + ')';
   const status = stage.querySelector('.preview-loader__status');
@@ -183,6 +203,7 @@ const pick = (group, attribute, apply) => document.getElementById(group).addEven
 pick('sizes', 'data-size', (size) => { const [width, height] = size.split(','); stage.style.width = width + 'px'; stage.style.height = height + 'px'; });
 pick('progress', 'data-mode', (mode) => { state.mode = mode; state.started = performance.now(); draw(); });
 pick('programs', 'data-program', (program) => { state.program = program; draw(); });
+pick('phrases', 'data-phrase', (phrase) => { state.phrase = Number(phrase); mount(); });
 pick('themes', 'data-theme', (theme) => { document.documentElement.dataset.theme = theme; });
 document.getElementById('parts').addEventListener('click', (event) => {
   const button = event.target.closest('button');

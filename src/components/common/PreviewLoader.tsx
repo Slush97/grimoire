@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
-import { FAN, LAYERS, LOGO, MUG, SCREEN, SCREEN_PROGRAMS, nextScreenProgram, type ScreenProgram } from './previewLoaderArt';
+import { FAN, KEY_BOXES, LAYERS, LOGO, MUG, SCREEN, SCREEN_PROGRAMS, nextPhrase, nextScreenProgram, typingOf, type ScreenProgram, type Typing } from './previewLoaderArt';
 
 // The loading state of a 3D preview: the news computer from the game's hideout, whose case fan is a
 // spinning pentagram, with a mug of cocoa beside it. The scene is a render of Valve's models, baked into
 // still layers (see docs/viewer-backgrounds.md). What moves is drawn or placed here, on the planes the
-// bake measured: the fan, the marks on the screen, the planchette, the steam and the screen's light.
-// All of it moves by transform and opacity alone, which the compositor runs without the main thread:
-// it keeps going while a model parses or its shaders link. Nothing is timed from script, for the same
-// reason. Styles are under `.preview-loader` in index.css.
+// bake measured: the fan, the marks on the screen, the keys, the planchette, the steam and the screen's
+// light. All of it moves by transform and opacity alone, which the compositor runs without the main
+// thread: it keeps going while a model parses or its shaders link. Nothing is timed from script, for
+// the same reason. Styles are under `.preview-loader` in index.css.
 
 /** The fan's drawing reaches 1.16 times the pentagram's tips (its stroke and the miter of its points). */
 const FAN_VIEW = 1.16;
@@ -30,18 +30,21 @@ export function FanSpinner({ className = '', label }: { className?: string; labe
   );
 }
 
-const logoPart = (d: string, className?: string) => (
-  <svg key={d.slice(0, 24)} className={className} viewBox={LOGO.view}><g transform={LOGO.frame}><path d={d} /></g></svg>
+const logoPart = (d: string) => (
+  <svg key={d.slice(0, 24)} viewBox={LOGO.view}><g transform={LOGO.frame}><path d={d} /></g></svg>
 );
 
-/** The Grimoire logo with its pages turning in the whirlwind: two leaves, half a turn apart. */
+/** How many leaves the book turns before its whirlwind rises, and the seconds between two of them. */
+const LEAVES = 5, LEAF_GAP = 0.34;
+
+/** The Grimoire logo as one loop: its leaves riffle from the right page to the left, then the whirlwind
+ *  rises out of the book, spins and dies away. */
 function Book() {
   return (
     <div className="preview-loader__book">
       {logoPart(LOGO.book)}
-      <span><b /></span>
-      <span><b /></span>
-      {LOGO.whirl.map((band) => logoPart(band, 'preview-loader__whirl'))}
+      {Array.from({ length: LEAVES }, (_, leaf) => <span key={leaf}><b style={{ animationDelay: `${(0.15 + leaf * LEAF_GAP).toFixed(2)}s` }} /></span>)}
+      <div className="preview-loader__whirl">{LOGO.whirl.map(logoPart)}</div>
     </div>
   );
 }
@@ -64,35 +67,63 @@ function Face({ src, onNoFace }: { src: string; onNoFace: () => void }) {
   );
 }
 
-function Screen({ program, progress, hero, onNoFace }: { program: ScreenProgram; progress: number; hero?: string; onNoFace: () => void }) {
+/** The phrase the keyboard is typing, a character at a time. */
+function Typed({ typing }: { typing: Typing }) {
+  return (
+    <div className="preview-loader__type">
+      {typing.lines.map((line, row) => <span key={row} style={{ animation: typing.line(row) }}><em style={{ animation: typing.lineInner(row) }}>{line}</em></span>)}
+    </div>
+  );
+}
+
+function Screen({ program, progress, hero, typing, onNoFace }: { program: ScreenProgram; progress: number; hero?: string; typing: Typing; onNoFace: () => void }) {
   if (program === 'bar') return <div className="preview-loader__bar"><span style={{ transform: `scaleX(${progress})` }} /></div>;
   if (program === 'hero' && hero) return <Face src={getHeroChipIconPath(hero)} onNoFace={onNoFace} />;
   if (program === 'book' || program === 'hero') return <Book />;
-  if (program === 'type') return <div className="preview-loader__type"><i /><i /><i /></div>;
+  if (program === 'type') return <Typed typing={typing} />;
   if (program === 'eye') return <div className="preview-loader__eye"><i /></div>;
   return <div className="preview-loader__pong"><i /><i /><b><em /></b></div>;
 }
 
+/** Every key, each a window on the keys layer over its own cap, so that one can dip without the rest. */
+function Keys({ typing }: { typing: Typing }) {
+  return (
+    <div className="preview-loader__keys">
+      {KEY_BOXES.map(([left, top, width, height], key) => (
+        <i key={key} style={{ left: percent(left), top: percent(top), width: percent(width), height: percent(height), animation: typing.key(key) }}>
+          <img src={LAYERS.keys} alt="" draggable={false}
+            style={{ width: percent(1 / width), height: percent(1 / height), transform: `translate(${percent(-left)}, ${percent(-top)})` }} />
+        </i>
+      ))}
+    </div>
+  );
+}
+
 /**
- * Fills its positioned parent with the loader. `progress` (0 to 1) fills the line under the scene and
- * a bar on the screen; without it the line sweeps and the screen runs one of its programs, among them
- * the face of `hero` when the load is a hero's (`program` picks one, for the lab). A box too small for
- * the scene shows the fan alone. It fades in after a moment, so a load that is over at once never
- * flashes it.
+ * Fills its positioned parent with the loader. `progress` (0 to 1) fills the line under the scene;
+ * without it the line sweeps. The screen shows the face of `hero` when the load is a hero's, and
+ * otherwise a bar of the progress or, without one, one of its programs. The keyboard types a phrase
+ * all the while. `program` and `phrase`
+ * pick those, for the lab. A box too small for the scene shows the fan alone. It fades in after a
+ * moment, so a load that is over at once never flashes it.
  */
-export function PreviewLoader({ progress, label, hero, program, className = '' }: {
-  progress?: number | null; label?: string; hero?: string; program?: ScreenProgram; className?: string;
+export function PreviewLoader({ progress, label, hero, program, phrase, className = '' }: {
+  progress?: number | null; label?: string; hero?: string; program?: ScreenProgram; phrase?: number; className?: string;
 }) {
   const known = typeof progress === 'number';
   const amount = known ? Math.min(1, Math.max(0, progress)) : 0;
   const [turn] = useState(() => nextScreenProgram(!!hero));
+  const [ownPhrase] = useState(nextPhrase);
+  const typing = typingOf(phrase ?? ownPhrase);
   // A hero without an icon (a new one) leaves the screen to the first program.
   const [noFace, setNoFace] = useState(false);
   const idle = turn === 'hero' && noFace ? SCREEN_PROGRAMS[0] : turn;
   return (
     <div role={label ? 'status' : undefined} aria-label={label} aria-hidden={label ? undefined : true} className={`preview-loader ${className}`}>
+      <style>{typing.css}</style>
       <div className="preview-loader__pc">
         <img className="preview-loader__layer" src={LAYERS.back} alt="" draggable={false} />
+        <Keys typing={typing} />
         <img className="preview-loader__layer preview-loader__screenlight" src={LAYERS.screenLight} alt="" draggable={false} />
         <img className="preview-loader__layer preview-loader__planchette" src={LAYERS.planchette} alt="" draggable={false} />
         <img className="preview-loader__layer preview-loader__glow" src={LAYERS.glow} alt="" draggable={false} />
@@ -104,7 +135,7 @@ export function PreviewLoader({ progress, label, hero, program, className = '' }
         <div className="preview-loader__rays" style={{ left: percent(SCREEN.left), top: percent(SCREEN.top) }} />
         <div className="preview-loader__screen"
           style={{ left: percent(SCREEN.left), top: percent(SCREEN.top), width: percent(SCREEN.width), aspectRatio: SCREEN.aspect, transform: matrix(SCREEN.matrix) }}>
-          <Screen program={program ?? (known ? 'bar' : idle)} progress={amount} hero={noFace ? undefined : hero} onNoFace={() => setNoFace(true)} />
+          <Screen program={program ?? (known && !hero ? 'bar' : idle)} progress={amount} hero={noFace ? undefined : hero} typing={typing} onNoFace={() => setNoFace(true)} />
         </div>
         <div className="preview-loader__steam" style={{ left: percent(MUG.left), top: percent(MUG.top) }}>
           <svg viewBox="0 0 20 180" preserveAspectRatio="none"><path d={STEAM} /></svg>

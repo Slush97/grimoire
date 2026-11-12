@@ -7,6 +7,8 @@ export const LAYERS = {
   back: new URL('../../assets/preview-loader/news-computer-back.webp', import.meta.url).href,
   /** What the screen alone lights, to flicker over the scene. */
   screenLight: new URL('../../assets/preview-loader/news-computer-screenlight.webp', import.meta.url).href,
+  /** The keyboard's caps and space bar, which press as the screen's phrase is typed. */
+  keys: new URL('../../assets/preview-loader/news-computer-keys.webp', import.meta.url).href,
   /** The planchette, the computer's mouse, which wanders once a load runs long. */
   planchette: new URL('../../assets/preview-loader/news-computer-planchette.webp', import.meta.url).href,
   /** What the scene emits, blurred: the chamber, the screen and the candle. */
@@ -21,6 +23,16 @@ export const FAN = { left: 0.3248, top: 0.324, width: 0.1245, matrix: [0.964, 0.
 export const SCREEN = { left: 0.5285, top: 0.4313, width: 0.1567, aspect: 1.232, matrix: [0.9983, 0.0589, -0.0283, 0.9977] };
 /** The middle of the mug's opening, where its steam rises from. */
 export const MUG = { left: 0.176, top: 0.672 };
+/** Each cap's box in the keys layer, [left, top, width, height], in rows from the back one, then the space bar's. */
+const KEY_ROWS: number[][][] = [
+    [[0.3603, 0.7293, 0.0323, 0.032], [0.3984, 0.7314, 0.0319, 0.0321], [0.4366, 0.7336, 0.0315, 0.0322], [0.4752, 0.7358, 0.0311, 0.0323], [0.514, 0.738, 0.0307, 0.0325], [0.5531, 0.7402, 0.0304, 0.0326], [0.5924, 0.7425, 0.0302, 0.0327]],
+    [[0.3346, 0.7634, 0.0339, 0.034], [0.3736, 0.7658, 0.0335, 0.0341], [0.4129, 0.7681, 0.0331, 0.0342], [0.4524, 0.7705, 0.0327, 0.0344], [0.4922, 0.7729, 0.0323, 0.0345], [0.5323, 0.7753, 0.0318, 0.0347], [0.5727, 0.7777, 0.0316, 0.0348], [0.6132, 0.7802, 0.0316, 0.035]],
+    [[0.3397, 0.8039, 0.0346, 0.0356], [0.3799, 0.8065, 0.0342, 0.0357], [0.4205, 0.8091, 0.0338, 0.0359], [0.4613, 0.8117, 0.0333, 0.036], [0.5025, 0.8143, 0.0329, 0.0362], [0.544, 0.8169, 0.0324, 0.0363], [0.5856, 0.8196, 0.0322, 0.0365]],
+    [[0.3396, 0.8465, 0.0362, 0.0381], [0.3813, 0.8493, 0.0357, 0.0383], [0.4233, 0.8522, 0.0352, 0.0385], [0.4656, 0.855, 0.0348, 0.0387], [0.5082, 0.8579, 0.0343, 0.0388], [0.5512, 0.8608, 0.0338, 0.039], [0.5943, 0.8637, 0.0336, 0.0392]],
+];
+const SPACE_BAR = [0.3487, 0.8871, 0.2546, 0.0553];
+/** Every key's box: the caps row by row, and the space bar last. */
+export const KEY_BOXES: number[][] = [...KEY_ROWS.flat(), SPACE_BAR];
 
 // The Grimoire logo (public/grimoire-title-icon.svg), taken apart so the screen can turn the book's
 // pages and sway its whirlwind. The paths are in the traced file's own units: draw them inside
@@ -38,15 +50,104 @@ export const LOGO = {
   ],
 };
 
-/** What the screen shows while a load reports no position. Each loader takes the next one. */
+/** What the screen shows for a load that is not a hero's and reports no position, each loader the next one. */
 export const SCREEN_PROGRAMS = ['book', 'type', 'eye', 'pong'] as const;
 /** `hero` is the face of the hero being loaded, `bar` the progress of a load that reports it. */
 export type ScreenProgram = typeof SCREEN_PROGRAMS[number] | 'hero' | 'bar';
-let turns = 0, faces = 0;
-/** The next program in turn. A load that is a hero's shows the hero every other time. */
+let turns = 0, heroLoads = 0;
+/** A hero's load shows the hero, and every sixth one types a phrase instead. Other loads take the programs in turn. */
 export function nextScreenProgram(hero: boolean): ScreenProgram {
-  if (hero && faces++ % 2 === 0) return 'hero';
+  if (hero) return ++heroLoads % 6 === 0 ? 'type' : 'hero';
   return SCREEN_PROGRAMS[turns++ % SCREEN_PROGRAMS.length];
+}
+
+// What the keyboard types, which the screen shows in its `type` program. In-jokes on a prop, typed as
+// written: they are not interface copy and are not translated.
+export const PHRASES = ['nerf bebop', 'grimoire is awesome', 'door stuck'];
+let typed = 0;
+/** The next phrase in turn, as an index into PHRASES. */
+export const nextPhrase = (): number => typed++ % PHRASES.length;
+
+const LETTER_ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+/** The key a character presses: its place on a typewriter's three letter rows, scaled to the caps the
+ *  model has in the rows under its back one. Anything else, a space or a line's end, is the space bar. */
+function keyOf(char: string): number {
+  for (let row = 0; row < LETTER_ROWS.length; row++) {
+    const column = LETTER_ROWS[row].indexOf(char);
+    if (column < 0) continue;
+    const caps = KEY_ROWS[row + 1].length, before = KEY_ROWS.slice(0, row + 1).reduce((sum, keys) => sum + keys.length, 0);
+    return before + Math.round(column / (LETTER_ROWS[row].length - 1) * (caps - 1));
+  }
+  return KEY_BOXES.length - 1;
+}
+
+/** The most characters the screen holds on a line. */
+const LINE = 9;
+/** Seconds: before the first key, between keys, the phrase held on the screen, and the blank before the next loop. */
+const LEAD = 0.6, STEP = 0.17, HOLD = 1.9, BLANK = 0.3;
+
+export interface Typing {
+  /** The phrase, wrapped to the screen. */
+  lines: string[];
+  /** The loop's length in seconds. */
+  duration: number;
+  /** The keyframes: `line(n)` and `lineInner(n)` reveal a line, `key(n)` presses a key. */
+  css: string;
+  line: (index: number) => string;
+  lineInner: (index: number) => string;
+  /** The animation of a key the phrase presses, or undefined for one it leaves alone. */
+  key: (index: number) => string | undefined;
+}
+
+const typings = new Map<number, Typing>();
+/**
+ * One phrase as a loop of pure CSS: its lines appear a character at a time (a window sliding open in
+ * steps over text that slides the other way, so the text itself stays put) while the key for each
+ * character dips. Everything is a transform with its times written into the keyframes, so the typing
+ * runs on the compositor and keeps its rhythm through a frozen page.
+ */
+export function typingOf(phrase: number): Typing {
+  const known = typings.get(phrase);
+  if (known) return known;
+  const lines: string[] = [];
+  for (const word of PHRASES[phrase].split(' ')) {
+    const last = lines.length - 1;
+    if (last >= 0 && lines[last].length + 1 + word.length <= LINE) lines[last] += ` ${word}`;
+    else lines.push(word);
+  }
+  // One key per character, and one (the space bar, as a carriage return) between lines.
+  const count = lines.reduce((sum, line) => sum + line.length, 0) + lines.length - 1;
+  const duration = LEAD + count * STEP + HOLD + BLANK;
+  const at = (seconds: number) => `${Math.min(100, Math.max(0, seconds / duration * 100)).toFixed(3)}%`;
+  const name = `preview-loader-typing-${phrase}`;
+  const presses = new Map<number, number[]>();
+  const blocks: string[] = [];
+  let index = 0;
+  lines.forEach((line, row) => {
+    const from = LEAD + index * STEP, to = from + line.length * STEP, cleared = duration - BLANK;
+    for (const [suffix, hidden] of [['line', '-100%'], ['inner', '100%']]) {
+      blocks.push(`@keyframes ${name}-${suffix}-${row} { 0%, ${at(from)} { transform: translateX(${hidden}); animation-timing-function: steps(${line.length}, end); } `
+        + `${at(to)}, ${at(cleared - 0.01)} { transform: translateX(0); animation-timing-function: steps(1, end); } ${at(cleared)}, 100% { transform: translateX(${hidden}); } }`);
+    }
+    [...line, '\n'].slice(0, row === lines.length - 1 ? line.length : line.length + 1).forEach((char) => {
+      index++;
+      const key = keyOf(char);
+      presses.set(key, [...(presses.get(key) ?? []), LEAD + index * STEP]);
+    });
+  });
+  for (const [key, times] of presses) {
+    const dips = times.map((time) => `${at(time - 0.045)} { transform: translateY(0); } ${at(time + 0.015)} { transform: translateY(var(--loader-press)); } ${at(time + 0.12)} { transform: translateY(0); }`);
+    blocks.push(`@keyframes ${name}-key-${key} { 0% { transform: translateY(0); } ${dips.join(' ')} 100% { transform: translateY(0); } }`);
+  }
+  const loop = (keyframes: string) => `${keyframes} ${duration.toFixed(2)}s linear infinite`;
+  const typing: Typing = {
+    lines, duration, css: blocks.join('\n'),
+    line: (row) => loop(`${name}-line-${row}`),
+    lineInner: (row) => loop(`${name}-inner-${row}`),
+    key: (key) => presses.has(key) ? loop(`${name}-key-${key}`) : undefined,
+  };
+  typings.set(phrase, typing);
+  return typing;
 }
 
 let preloaded: HTMLImageElement[] | null = null;
