@@ -1435,6 +1435,8 @@ const NO_CLIPS: THREE.AnimationClip[] = [];
 
 /** How long a hero switch keeps the previous hero on screen before the placeholder takes over. */
 const SLOW_SWITCH_MS = 1000;
+/** How long after the viewer comes back into view a change of hero still counts as part of its arrival. */
+const ARRIVAL_MS = 150;
 
 /** Whether a hideout has drawn in this session. Only the first load (or a cache build) is slow
  *  enough to explain; later ones come from memory or a warm cache. */
@@ -1443,9 +1445,10 @@ let hideoutWarmed = false;
 /**
  * What stands in for the preview until all of it can show: the loader, over the viewer's surface. It
  * fades out in place once the viewer has drawn, and fades back in when a later change takes it away.
- * `progress` from 0 to 1 fills the loader's screen; without it the wait reports no position.
+ * `progress` from 0 to 1 fills the loader's screen; without it the wait reports no position. `atOnce`
+ * brings it back without the fade, for when what is under it must not show at all.
  */
-function ViewerPlaceholder({ up, progress, hero }: { up: boolean; progress?: number | null; hero: string }) {
+function ViewerPlaceholder({ up, atOnce = false, progress, hero }: { up: boolean; atOnce?: boolean; progress?: number | null; hero: string }) {
   // Whether it has been down: the first one is there from the start, a later one fades in.
   const [returning, setReturning] = useState(false);
   if (!up && !returning) setReturning(true);
@@ -1455,7 +1458,7 @@ function ViewerPlaceholder({ up, progress, hero }: { up: boolean; progress?: num
   return (
     <div aria-hidden data-viewer-placeholder={up ? 'up' : 'down'}
       onAnimationEnd={(event) => { if (!up && event.target === event.currentTarget) setGone(true); }}
-      className={`pointer-events-none absolute inset-0 bg-bg-secondary ${up ? returning ? 'animate-fade-in' : '' : 'animate-fade-out'}`}>
+      className={`pointer-events-none absolute inset-0 bg-bg-secondary ${up ? returning && !atOnce ? 'animate-fade-in' : '' : 'animate-fade-out'}`}>
       {!gone && <PreviewLoader progress={progress} hero={hero} />}
     </div>
   );
@@ -1666,7 +1669,24 @@ export default function HeroPoseViewer({
     const timer = setTimeout(() => setSlowSwitch(true), SLOW_SWITCH_MS);
     return () => clearTimeout(timer);
   }, [otherHero, heroName]);
+  // Coming back into view for another hero (a page mounted the viewer, or the panel was opened again),
+  // the hero it still holds was never part of what is being opened: the placeholder covers it at once.
+  // The page asks for its hero as it mounts, a moment after the viewer shows, hence the short window.
+  const [arriving, setArriving] = useState(active);
+  if (!active && !arriving) setArriving(true);
+  useEffect(() => {
+    if (!active || !arriving) return;
+    const timer = setTimeout(() => setArriving(false), ARRIVAL_MS);
+    return () => clearTimeout(timer);
+  }, [active, arriving]);
+  // That cover does not fade in: the hero under it must not show through even for a moment.
+  const [coveredAtOnce, setCoveredAtOnce] = useState(false);
+  if (active && arriving && otherHero && !slowSwitch) {
+    setSlowSwitch(true);
+    setCoveredAtOnce(true);
+  }
   if (slowSwitch && !otherHero && (scene === null || revealed === scene)) setSlowSwitch(false);
+  if (!slowSwitch && coveredAtOnce) setCoveredAtOnce(false);
   const placeholderUp = useRef(false);
   placeholderUp.current = slowSwitch;
   // Until the swapped-in model draws, the screen still shows the previous one (or the placeholder).
@@ -2582,14 +2602,9 @@ export default function HeroPoseViewer({
       </Canvas>}
       {/* The last frame before a change, fading out once the change has drawn (useViewerCrossfade). */}
       <canvas ref={attachCrossfade} hidden aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />
-      {slowSwitch && !failed && (
-        <div aria-hidden className="pointer-events-none absolute inset-0 animate-fade-in bg-bg-secondary">
-          <PreviewLoader hero={heroName} />
-        </div>
-      )}
       {/* The placeholder, which fades out in place once the viewer has all of the preview to show. */}
       {!failed && <ViewerPlaceholder hero={heroName}
-        up={placeholderShown}
+        up={placeholderShown || slowSwitch} atOnce={coveredAtOnce}
         progress={!hideoutWarm && (buildingHideout || waitingForRoom)
           ? hideoutWarmingProgress({ building: buildingHideout, built: hideoutBuilt, build: buildProgress, room: roomProgress }) : undefined} />}
       {failed ? <HeroPoseFailureState message={t('locker.pose.cannotPose')} />
