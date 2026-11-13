@@ -407,7 +407,9 @@ async function rebuildLockerColors(
     const valid = [...byCodename.values()];
 
     if (valid.length === 0) {
-        await fs.unlink(destPath).catch(() => {});
+        // A pack the running game holds open must fail here, or its colors stay live in game with
+        // nothing left in the Locker to clear them.
+        await fs.unlink(destPath).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
         removeModMetadata(LOCKER_COLORS_KEY);
         invalidateVpkParseCache(destPath);
         return { fileName: null };

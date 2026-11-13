@@ -20,7 +20,7 @@ import {
     resolvePortableProfile,
     createProfileFromPortable,
 } from '../services/portableProfile';
-import { applyProfileLocker, currentProfileLocker } from '../services/profileLocker';
+import { applyProfileLocker, currentProfileLocker, releaseLockerHold } from '../services/profileLocker';
 import { writeSnapshot } from '../services/snapshots';
 import type {
     PortableProfile,
@@ -70,7 +70,9 @@ ipcMain.handle('update-profile', async (_, profileId: string, crosshairSettings?
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    return await updateProfile(deadlockPath, profileId, crosshairSettings, profileShuffleSchema.optional().parse(shuffle), currentProfileLocker());
+    const profile = await updateProfile(deadlockPath, profileId, crosshairSettings, profileShuffleSchema.optional().parse(shuffle), currentProfileLocker());
+    releaseLockerHold(profileId);
+    return profile;
 });
 
 // apply-profile
@@ -92,7 +94,7 @@ ipcMain.handle('apply-profile', async (_, profileId: string): Promise<ApplyProfi
     const result = await applyProfile(deadlockPath, profileId);
     // Must finish before the profile becomes active: Locker edits save into the
     // active profile, and this rebuild is not one of them.
-    const lockerError = await applyProfileLocker(deadlockPath, result.profile.locker);
+    const lockerError = await applyProfileLocker(deadlockPath, profileId, result.profile.locker);
     if (lockerError) result.lockerError = lockerError;
 
     // Save as active profile

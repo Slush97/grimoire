@@ -1212,6 +1212,9 @@ export interface AppSettings {
   steamLaunchOptionsManaged: boolean;
   /** Currently active profile. */
   activeProfileId: string | null;
+  /** The profile whose Locker effects last failed to apply. The Locker then holds a mix of two
+   *  profiles, so its edits don't save into this one until an apply succeeds or it is updated. */
+  lockerUnappliedProfileId: string | null;
   /** Ask for confirmation before "Update" overwrites a profile with the current
    *  mod set. On by default: Update sits next to Apply and overwriting is easy to
    *  trigger by accident, with no undo. Turn off to overwrite immediately. */

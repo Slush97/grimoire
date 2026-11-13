@@ -38,7 +38,7 @@ import { applyHeroColor, listAppliedColors, revertHeroColor } from './heroColors
 import { applyTrippySkin, listAppliedTrippySkins } from './trippyEffects';
 import { lockerColorsVpkPath, lockerTrippySkinsVpkPath, sameLockerSelections } from './lockerVpk';
 import { applyProfile, createProfile, loadProfiles } from './profiles';
-import { applyProfileLocker, currentProfileLocker, saveLockerToActiveProfile } from './profileLocker';
+import { applyProfileLocker, currentProfileLocker, releaseLockerHold, saveLockerToActiveProfile } from './profileLocker';
 import { loadSettings, saveSettings } from './settings';
 
 let root: string;
@@ -69,7 +69,9 @@ const save = (name: string) => createProfile(deadlockPath, name, undefined, unde
 /** Apply a profile and its Locker effects, the way the apply-profile IPC does. */
 async function apply(profileId: string) {
     const { profile } = await applyProfile(deadlockPath, profileId);
-    return applyProfileLocker(deadlockPath, profile.locker);
+    const error = await applyProfileLocker(deadlockPath, profileId, profile.locker);
+    setActiveProfile(profileId);
+    return error;
 }
 
 const hues = () => listAppliedColors().map((c) => `${c.heroName}:${c.hue}`).sort();
@@ -146,6 +148,54 @@ describe('profile Locker effects', () => {
         state.failBakes = true;
 
         expect(await apply(mine.id)).toBe('bake failed');
+    });
+
+    it('reports a pack it cannot remove and keeps its colors listed', async () => {
+        const empty = await save('Empty');
+        await applyHeroColor(deadlockPath, 'Paige', 120, 1, 1);
+        // Stands in for a pack the running game holds open: removing it fails with something other than ENOENT
+        const pack = lockerColorsVpkPath(deadlockPath);
+        rmSync(pack);
+        mkdirSync(join(pack, 'held'), { recursive: true });
+
+        expect(await apply(empty.id)).toBeTruthy();
+        expect(hues()).toEqual(['Paige:120']);
+    });
+
+    it('keeps a profile\'s saved effects while its rebuild has failed', async () => {
+        await applyHeroColor(deadlockPath, 'Paige', 120, 1, 1);
+        const mine = await save('Mine');
+        await revertHeroColor(deadlockPath, 'Paige');
+        rmSync(join(state.userData, 'ability-colors'), { recursive: true });
+        state.failBakes = true;
+        expect(await apply(mine.id)).toBe('bake failed');
+        state.failBakes = false;
+        const stored = () => loadProfiles().find((p) => p.id === mine.id)?.locker?.colors.map((c) => `${c.heroName}:${c.hue}`);
+
+        await applyHeroColor(deadlockPath, 'Abrams', 40, 1, 1);
+        saveLockerToActiveProfile();
+        expect(stored()).toEqual(['Paige:120']);
+
+        expect(await apply(mine.id)).toBeUndefined();
+        expect(hues()).toEqual(['Paige:120']);
+        await applyHeroColor(deadlockPath, 'Paige', 200, 1, 1);
+        saveLockerToActiveProfile();
+        expect(stored()).toEqual(['Paige:200']);
+    });
+
+    it('lets an Update end a failed apply\'s hold', async () => {
+        await applyHeroColor(deadlockPath, 'Paige', 120, 1, 1);
+        const mine = await save('Mine');
+        rmSync(join(state.userData, 'ability-colors'), { recursive: true });
+        await revertHeroColor(deadlockPath, 'Paige');
+        state.failBakes = true;
+        await apply(mine.id);
+        state.failBakes = false;
+
+        releaseLockerHold('profile_other');
+        expect(loadSettings().lockerUnappliedProfileId).toBe(mine.id);
+        releaseLockerHold(mine.id);
+        expect(loadSettings().lockerUnappliedProfileId).toBeNull();
     });
 
     it('stores a Locker edit in the active profile only', async () => {
