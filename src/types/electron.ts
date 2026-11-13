@@ -45,6 +45,8 @@ import type {
     TrippySpriteResult,
     TrippyVfxChoice,
     LockerOverview,
+    LockerColorSelection,
+    LockerTrippySkinSelection,
     LockerCardThumbnail,
     LockerClearScope,
     SoulImportStatus,
@@ -1683,6 +1685,14 @@ export interface ProfileMod {
  *  with normalizeCrosshairSettings before use. */
 export type ProfileCrosshairSettings = CrosshairSettings;
 
+/** The Locker effect picks a profile carries: ability colors and trippy skins.
+ *  Both are stored as parameters and rebuilt from the base game, so they don't
+ *  depend on any installed mod. Hero cards and ability sounds are not included. */
+export interface ProfileLocker {
+    colors: LockerColorSelection[];
+    trippySkins: LockerTrippySkinSelection[];
+}
+
 export interface Profile {
     id: string;
     name: string;
@@ -1690,6 +1700,9 @@ export interface Profile {
     crosshair?: ProfileCrosshairSettings;
     autoexecCommands?: string[];
     shuffle?: ProfileShuffle;
+    /** Absent on profiles saved before profiles carried Locker effects, and on
+     *  imported ones. Applying such a profile leaves the Locker as it is. */
+    locker?: ProfileLocker;
     createdAt: string;
     updatedAt: string;
 }
@@ -1701,6 +1714,9 @@ export interface Profile {
 export interface ApplyProfileResult {
     profile: Profile;
     failures: string[];
+    /** Set when the profile's Locker effects could not be rebuilt. The mods,
+     *  autoexec and crosshair are applied regardless. */
+    lockerError?: string;
 }
 
 declare global {

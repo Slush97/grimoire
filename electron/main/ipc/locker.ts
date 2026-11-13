@@ -4,6 +4,7 @@ import { listAppliedCards, clearAllHeroCards, getAppliedCardThumbnails } from '.
 import { listAppliedSounds, clearAllHeroSounds } from '../services/heroSounds';
 import { clearAllHeroColors, listAppliedColors } from '../services/heroColors';
 import { clearAllTrippySkins, listAppliedTrippySkins } from '../services/trippyEffects';
+import { saveLockerToActiveProfile } from '../services/profileLocker';
 import type { LockerCardThumbnail, LockerClearScope, LockerOverview } from '../../../src/types/mod';
 
 /** Active Deadlock install path (dev override wins, same as the other locker IPC). */
@@ -41,5 +42,6 @@ ipcMain.handle(
         if (scope === 'sounds' || scope === 'all') await clearAllHeroSounds(deadlockPath);
         if (scope === 'colors' || scope === 'all') await clearAllHeroColors(deadlockPath);
         if (scope === 'trippy' || scope === 'all') await clearAllTrippySkins(deadlockPath);
+        if (scope === 'colors' || scope === 'trippy' || scope === 'all') saveLockerToActiveProfile();
     },
 );
