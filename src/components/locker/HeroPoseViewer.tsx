@@ -2015,7 +2015,8 @@ export default function HeroPoseViewer({
         return from && to ? matchingClipTime(from, fromTime, to) : 0;
       },
     });
-    if (!timeline) return undefined;
+    // Loaded with nothing to stage: null, not undefined, so the preview stops waiting for it
+    if (!timeline) return null;
     // Each actor where the timeline stands it (the heavy melee's target past the lunge)
     const heroSourceFrame = sourceFrame(scene);
     const actors = actorLoads.flatMap(({ actor, scene: actorScene, clips: actorClips, clothModel: actorCloth }): StagedActorMount[] => {
@@ -2043,7 +2044,7 @@ export default function HeroPoseViewer({
   // and the placeholder takes over when that runs long or there is no frame to hold (a first open).
   const [compiledActors, setCompiledActors] = useState<LoadedStagedActor[] | null>(null);
   const stageWaiting = movementEngineEnabled && movementEngineFailed !== movementEngineKey
-    && (!movementEngine || !!actorLoads?.length && compiledActors !== actorLoads);
+    && (movementEngine === undefined || !!movementEngine && !!actorLoads?.length && compiledActors !== actorLoads);
   const stageKey = movementEngineEnabled ? movementEngineKey : '';
   const [stageWait, setStageWait] = useState<{ key: string; phase: 'long' | 'over' } | null>(null);
   if (!stageWaiting && stageWait) setStageWait(null);
@@ -2396,11 +2397,14 @@ export default function HeroPoseViewer({
   }, [sourceParticlesKey, sourceParticlesEnabled, particleModelReady]);
 
   // The whole preview is not there to show yet: the placeholder covers the viewer.
-  const placeholderShown = revealed === null || buildingHideout || waitingForRoom && !roomWaitOver || stageHold && (stagePhase === 'long' || !heroDrawn);
+  // The hideout's first build can take minutes, so the toolbar stays up through it: its scene picker
+  // puts another backdrop a click away instead of a wait.
+  const previewIncomplete = revealed === null || waitingForRoom && !roomWaitOver || stageHold && (stagePhase === 'long' || !heroDrawn);
+  const placeholderShown = previewIncomplete || buildingHideout;
 
   const toolbar = (
     <HeroViewerToolbar
-      hidden={!failed && (placeholderShown || slowSwitch)}
+      hidden={!failed && (previewIncomplete || slowSwitch)}
       heroName={heroName}
       actionPreview={!!movementPreview}
       animated={features.riggedPreviewEnabled} clips={clips.map((c) => c.name)}
@@ -2410,7 +2414,7 @@ export default function HeroPoseViewer({
         setPlayback((p) => ({ ...p, paused: true }));
         setSeek((s) => ({ time, revision: s.revision + 1 }));
       }}
-      cloth={devFlags.cloth} bloom={devFlags.bloom} particles={devFlags.effects} sourceParticles={devFlags.sourceParticles} fullResolutionFog={devFlags.fullResolutionFog} scene={viewerScene}
+      cloth={devFlags.cloth} bloom={devFlags.bloom} particles={devFlags.effects} sourceParticles={devFlags.sourceParticles} fullResolutionFog={devFlags.fullResolutionFog} scene={buildingHideout ? chosenScene : viewerScene}
       backdropControls={<ViewerBackdropControls hasImage={!!backdrop.texture} loading={backdrop.loading}
         preset={backdrop.preset} onPreset={(value) => {
           if (value !== 'none' && viewerScene === 'transparent') setViewerScene('studio');
