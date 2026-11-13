@@ -1287,6 +1287,10 @@ export async function applyProfile(profileId: string): Promise<ApplyProfileResul
   const result = await withGameRunningWarning(() => window.electronAPI.applyProfile(profileId));
   const { useAppStore } = await import('../stores/appStore');
   useAppStore.getState().restoreProfileShuffle(result.profile.shuffle);
+  if (result.profile.locker) {
+    const { clearEffectDrafts, foundryDraftScope } = await import('./foundryDrafts');
+    try { clearEffectDrafts(localStorage, foundryDraftScope(useAppStore.getState().settings)); } catch { /* Storage may be unavailable. */ }
+  }
   return result;
 }
 

@@ -29,7 +29,7 @@ import { generateCrosshairCommands, normalizeCrosshairSettings } from '../../../
 // The Profile wire types are single-sourced in src/types/electron.ts
 // (docstrings included); re-exported because portableProfile.ts and the
 // ipc layer import them from this service.
-import type { Profile, ProfileMod, ProfileCrosshairSettings, ApplyProfileResult } from '../../../src/types/electron';
+import type { Profile, ProfileMod, ProfileCrosshairSettings, ProfileLocker, ApplyProfileResult } from '../../../src/types/electron';
 export type { Profile, ProfileMod, ProfileCrosshairSettings, ApplyProfileResult };
 
 /**
@@ -211,9 +211,24 @@ function dedupeEnabledForProfile<T extends { metaKey: string; fileName: string; 
 }
 
 /**
- * Create a new profile from current mod state and provided crosshair settings
+ * Replace the Locker effects stored in a profile, leaving its mods, crosshair
+ * and autoexec untouched. Returns false when the profile no longer exists.
  */
-export async function createProfile(deadlockPath: string, name: string, crosshairSettings?: ProfileCrosshairSettings, shuffle?: ProfileShuffle): Promise<Profile> {
+export function setProfileLocker(profileId: string, locker: ProfileLocker): boolean {
+    const profiles = loadProfiles();
+    const profile = profiles.find((p) => p.id === profileId);
+    if (!profile) return false;
+    profile.locker = locker;
+    profile.updatedAt = new Date().toISOString();
+    saveProfiles(profiles);
+    return true;
+}
+
+/**
+ * Create a new profile from current mod state and the provided crosshair
+ * settings, shuffle and Locker effects
+ */
+export async function createProfile(deadlockPath: string, name: string, crosshairSettings?: ProfileCrosshairSettings, shuffle?: ProfileShuffle, locker?: ProfileLocker): Promise<Profile> {
     const mods = await scanMods(deadlockPath);
     // Only save enabled mods, and never the Locker-managed VPKs (cards/sounds):
     // they're owned by the Locker, hidden, and auto-pinned, so they don't belong
@@ -236,6 +251,7 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
         crosshair: crosshairSettings ? normalizeCrosshairSettings(crosshairSettings) : undefined,
         autoexecCommands: autoexecData.commands,
         shuffle,
+        locker,
         createdAt: now,
         updatedAt: now,
     };
@@ -326,7 +342,7 @@ export async function createProfileFromGameBananaIds(
  * Update an existing profile with current mod state
  * Only saves enabled mods - disabled mods are not included
  */
-export async function updateProfile(deadlockPath: string, profileId: string, crosshairSettings?: ProfileCrosshairSettings, shuffle?: ProfileShuffle): Promise<Profile> {
+export async function updateProfile(deadlockPath: string, profileId: string, crosshairSettings?: ProfileCrosshairSettings, shuffle?: ProfileShuffle, locker?: ProfileLocker): Promise<Profile> {
     const mods = await scanMods(deadlockPath);
     // Only save enabled mods, and never the Locker-managed VPKs (cards/sounds):
     // they're owned by the Locker, hidden, and auto-pinned, so they don't belong
@@ -359,6 +375,7 @@ export async function updateProfile(deadlockPath: string, profileId: string, cro
         crosshair: crosshairSettings ? normalizeCrosshairSettings(crosshairSettings) : undefined,
         autoexecCommands: autoexecData.commands,
         shuffle,
+        locker,
         updatedAt: new Date().toISOString(),
     };
 

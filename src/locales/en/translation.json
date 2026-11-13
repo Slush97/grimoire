@@ -2824,7 +2824,8 @@
       "deleteSnapshotFailed": "Failed to delete snapshot: {{error}}",
       "bulkDeleteSnapshotsFailed": "Failed to delete {{failed}} of {{total}} snapshots: {{error}}",
       "applyPartial_one": "Profile applied, but 1 mod couldn't be toggled (it may be locked by the running game).",
-      "applyPartial_other": "Profile applied, but {{count}} mods couldn't be toggled (they may be locked by the running game)."
+      "applyPartial_other": "Profile applied, but {{count}} mods couldn't be toggled (they may be locked by the running game).",
+      "applyLockerFailed": "Profile applied, but its Locker effects couldn't be rebuilt: {{error}}"
     },
     "create": {
       "title": "Create New Profile",

@@ -29,7 +29,12 @@ import { app } from 'electron';
 import { getCitadelPath, getGrimoirePath } from './deadlock';
 import { invalidateVpkParseCache } from './vpk';
 import { runVpkmerge, vpkmergeBinaryPath, verifyVpkOutput } from './modMerger';
-import { LOCKER_TRIPPY_SKINS_KEY, lockerTrippySkinsVpkPath, ensureGrimoireConfigured } from './lockerVpk';
+import {
+    LOCKER_TRIPPY_SKINS_KEY,
+    lockerTrippySkinsVpkPath,
+    ensureGrimoireConfigured,
+    sameLockerSelections,
+} from './lockerVpk';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { colorCodenameForHero } from './heroColors';
 import { TRIPPY_STYLES } from '../../../src/types/mod';
@@ -226,7 +231,9 @@ async function rebuildTrippySkins(
     const valid = [...byCodename.values()];
 
     if (valid.length === 0) {
-        await fs.unlink(destPath).catch(() => {});
+        // A pack the running game holds open must fail here, or its effects stay live in game with
+        // nothing left in the Locker to clear them.
+        await fs.unlink(destPath).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
         removeModMetadata(LOCKER_TRIPPY_SKINS_KEY);
         invalidateVpkParseCache(destPath);
         return;
@@ -333,6 +340,20 @@ export function getActiveTrippySkin(heroName: string): ActiveTrippySkin | null {
               targets: sel.targets,
           }
         : null;
+}
+
+/** Make the applied trippy skins exactly `desired` (a profile's saved set).
+ *  Mirrors setLockerColors. */
+export async function setTrippySkins(
+    deadlockPath: string,
+    desired: LockerTrippySkinSelection[],
+): Promise<void> {
+    if (sameLockerSelections(currentSkinSelections(), desired)) return;
+    if (desired.length > 0) {
+        vpkmergeBinaryPath();
+        ensureGrimoireConfigured(deadlockPath);
+    }
+    await rebuildTrippySkins(deadlockPath, desired);
 }
 
 /** Clear every applied trippy skin (rebuild to empty, deleting the VPK). */

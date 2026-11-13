@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     steamLaunchOptions: '',
     steamLaunchOptionsManaged: false,
     activeProfileId: null,
+    lockerUnappliedProfileId: null,
     confirmProfileUpdate: true,
     promptOptionalRequirements: false,
     experimentalStats: false,
