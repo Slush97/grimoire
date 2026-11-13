@@ -51,6 +51,8 @@ interface Props {
   gifAvailable: boolean;
   gif: ViewerGifControls;
   onGif: () => void;
+  /** Out of sight and out of reach while the loader stands in for the preview: nothing here acts on a loader. */
+  hidden?: boolean;
 }
 
 function AnimationTimeline({ progressRef, frozen = false, onSeek }: Pick<Props, 'progressRef' | 'frozen' | 'onSeek'>) {
@@ -102,7 +104,7 @@ export function HeroViewerToolbar(p: Props) {
     other: t('locker.pose.clipGroups.other'),
   };
   return (
-    <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-10 flex flex-col items-start gap-2">
+    <div inert={p.hidden} className={`pointer-events-none absolute bottom-3 left-3 right-3 z-10 flex flex-col items-start gap-2 transition-opacity duration-200 ${p.hidden ? 'invisible opacity-0' : ''}`}>
       {open && (
         <div id={panelId} className="pointer-events-auto max-h-80 w-64 max-w-full overflow-y-auto rounded-sm border border-hl/10 bg-bg-secondary/95 p-3 shadow-lg backdrop-blur-sm">
           <div className="space-y-3">

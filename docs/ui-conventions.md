@@ -62,6 +62,7 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
 - **Overlays:** `Modal` + `ModalHeader` for dialogs, `ConfirmModal` for confirmations, the `menu.tsx` family for context menus, `showToast()` for transient feedback.
 - **Drag previews:** portal `DragOverlay` to `document.body`. Its coordinates are relative to the viewport; blur and transforms on a containing panel would offset or clip it. Keep the overlay mounted, disable its pointer events, and use the z-index ladder.
 - **Status:** `Tag` (HUD-style card markers), `Badge` (pills), `Skeleton` (placeholders).
+- **3D previews:** `PreviewLoader` (`common/PreviewLoader.tsx`) is the loading state of a 3D preview (the hideout's news computer, see `docs/viewer-backgrounds.md`), and `FanSpinner` the small spinner for a change inside one. A preview shows once all of it is ready, behind the loader until then.
 
 ## Page anatomy
 

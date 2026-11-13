@@ -50,6 +50,7 @@ import UpdateModal from './UpdateModal';
 import { CrashLaunchIndicator } from './CrashAdvisories';
 import { useCrashLaunchSuspect } from '../stores/crashAdvisoryStore';
 import Tx from './translation/Tx';
+import { knockOnLogo } from '../lib/loaderToy';
 import { SidebarActiveBackdrop, SurfaceBackdrop } from './sidebar/surfaceArt';
 
 const COLLAPSED_KEY = 'grimoire:sidebar-collapsed';
@@ -861,7 +862,15 @@ export default function Sidebar() {
               style={{ fontFamily: "'IM Fell English', serif" }}
               aria-hidden={!labelsVisible}
             >
-              <GrimoireTitleIcon />
+              {/* Easter egg: knocking on the logo opens the news computer (LoaderToy). */}
+              <span className="pointer-events-auto" onClick={(event) => {
+                // It answers each knock a little more than the last, which is what brings the next one.
+                const knocks = knockOnLogo();
+                if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                  event.currentTarget.animate([{ rotate: '0deg', scale: '1' }, { rotate: `${-5 * knocks}deg`, scale: `${1 + 0.06 * knocks}` },
+                    { rotate: `${4 * knocks}deg`, scale: `${1 + 0.04 * knocks}` }, { rotate: '0deg', scale: '1' }], { duration: 260 + 30 * knocks, easing: 'ease-out' });
+                }
+              }}><GrimoireTitleIcon /></span>
               {t('sidebar.brand')}
             </span>
           </div>

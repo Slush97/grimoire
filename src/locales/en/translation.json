@@ -2689,8 +2689,7 @@
       "wireframe": "Wireframe",
       "hideoutLoading": "Loading hideout. First load takes a few minutes.",
       "hideoutBuilding": "Building hideout",
-      "hideoutFailed": "Could not load the hideout. Choose another scene.",
-      "hideoutWarming": "Loading hideout"
+      "hideoutFailed": "Could not load the hideout. Choose another scene."
     },
     "downloadSkins": {
       "browseMore": "Browse more skins"
@@ -3667,6 +3666,9 @@
     "hideUntilNextLaunch": "Hide until next launch"
   },
   "layout": {
+    "newsComputer": "News computer",
+    "newsComputerMute": "Mute the computer",
+    "newsComputerUnmute": "Unmute the computer",
     "rateLimited": "GameBanana is rate-limiting Grimoire. Pause a moment before retrying.",
     "fixNow": "Fix now",
     "perfRestored": "Performance config restored.",
