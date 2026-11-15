@@ -1006,19 +1006,20 @@ export function ModCard({
   // Construct it only when Radix mounts the open menu, rather than on every
   // closed card's render.
   // A group card's click may open the picker, so its "View details" has its own handler.
-  const localGroup = !!group && canJoinLocalVariantGroup(mod);
+  const localMod = canJoinLocalVariantGroup(mod);
+  const localGroup = !!group && localMod;
   const viewDetails = localGroup ? group.onOpenPicker : group ? group.onViewDetails : onOpenDetails;
   const hasTopActions =
-    !!onAddVariant || !!onOpenDetails || !!onViewAuthor
+    !!(onAddVariant && localMod) || !!onOpenDetails || !!onViewAuthor
     || !!cardImageSource || !!group;
   const hasSecondaryActions =
     !!onSoloLaunch || !!onSetPriority || !!onFixUnknown
     || !!(mod.merged && (onCopyShareCode || onUnmerge));
   const renderCardMenuItems = () => (
     <>
-      {onAddVariant && (
+      {onAddVariant && localMod && (
         <MenuItem icon={FilePlus} onSelect={onAddVariant}>
-          {canJoinLocalVariantGroup(mod) ? t('installed.card.addVariant') : t('variantPicker.addFiles')}
+          {t('installed.card.addVariant')}
         </MenuItem>
       )}
       {viewDetails && (
@@ -1079,6 +1080,11 @@ export function ModCard({
         onDelete={setBackupToDelete}
       />
       {(hasTopActions || modBackups.length > 0) && <MenuSeparator />}
+      {onToggleFavorite && (
+        <MenuItem icon={Star} onSelect={onToggleFavorite}>
+          {favoriteMenuLabel}
+        </MenuItem>
+      )}
       {onSetTags && <MenuSub>
         <MenuSubTrigger icon={TagIcon}>{t('installed.tag.setTags')}</MenuSubTrigger>
         <MenuSubContent className="max-h-72 max-w-72 overflow-y-auto">
@@ -1133,14 +1139,15 @@ export function ModCard({
           onCreateNew={onCreateList}
         />
       )}
-      {onToggleFavorite && (
-        <MenuItem icon={Star} onSelect={onToggleFavorite}>
-          {favoriteMenuLabel}
-        </MenuItem>
-      )}
+      {hasListActions && <MenuSeparator />}
       <MenuItem icon={FolderOpen} onSelect={handleRevealInFolder}>
         {t('installed.card.revealInFolder')}
       </MenuItem>
+      {onAddVariant && !localMod && (
+        <MenuItem icon={FilePlus} onSelect={onAddVariant}>
+          {t('installed.card.addVariant')}
+        </MenuItem>
+      )}
       {onViewImprint && (
         <MenuItem icon={Fingerprint} onSelect={onViewImprint}>
           {t('installed.imprintDetails.menuEntry')}
