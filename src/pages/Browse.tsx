@@ -2621,7 +2621,7 @@ export default function Browse() {
                             )}
                           </div>
                           {heroOptions.length > 0 && (
-                            <div className="space-y-3">
+                            <div className="space-y-1.5">
                             <HeroSelect
                               ariaLabel={t('browse.filters.filterByHero')}
                               value={String(heroCategoryId)}
@@ -2649,14 +2649,14 @@ export default function Browse() {
                                 clearLabel: t('browse.filters.clearSearch'),
                               }}
                             />
-                            <label title={t('browse.filters.extendedHeroMatchingDescription')}
-                              className={`flex w-fit max-w-full items-center gap-2 text-xs text-text-secondary ${!hasLocalCache || localSearchFailed || submitter ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:text-text-primary'}`}>
-                              <input type="checkbox" checked={extendedHeroMatching} className="peer sr-only"
-                                onChange={event => setBrowseUi({ extendedHeroMatching: event.target.checked })}
-                                disabled={!hasLocalCache || localSearchFailed || !!submitter} />
-                              <CheckboxMark checked={extendedHeroMatching} tone="neutral" variant="menu" />
-                              <span>{t('browse.filters.extendedHeroMatching')}</span>
-                            </label>
+                            <button type="button" role="checkbox" aria-checked={extendedHeroMatching}
+                              title={t('browse.filters.extendedHeroMatchingDescription')}
+                              onClick={() => setBrowseUi({ extendedHeroMatching: !extendedHeroMatching })}
+                              disabled={!hasLocalCache || localSearchFailed || !!submitter}
+                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-hl/5 hover:text-text-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50">
+                              <CheckboxMark checked={extendedHeroMatching} variant="menu" />
+                              <span className="flex-1 truncate">{t('browse.filters.extendedHeroMatching')}</span>
+                            </button>
                             </div>
                           )}
                         </div>

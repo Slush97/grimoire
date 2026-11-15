@@ -156,10 +156,10 @@ describe('Browse navigation and refresh', () => {
     await render();
     const filters = host.querySelector<HTMLButtonElement>('[title="browse.filters.title"]')!;
     await click(filters);
-    const toggle = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-    expect(toggle.closest('label')?.title).toBe('browse.filters.extendedHeroMatchingDescription');
+    const toggle = document.querySelector<HTMLButtonElement>('button[role="checkbox"][title="browse.filters.extendedHeroMatchingDescription"]')!;
+    expect(toggle.title).toBe('browse.filters.extendedHeroMatchingDescription');
     expect(document.body.textContent).not.toContain('browse.filters.extendedHeroMatchingDescription');
-    expect(toggle.checked).toBe(false);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
     const remoteCalls = vi.mocked(browseMods).mock.calls.length;
     await act(async () => toggle.click());
     expect(useAppStore.getState().browseUi.extendedHeroMatching).toBe(true);
