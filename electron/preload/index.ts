@@ -360,6 +360,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('swap-mod-priority', modIdA, modIdB),
     importCustomMods: (args: ImportCustomModsBatchArgs) =>
         ipcRenderer.invoke('import-custom-mods', args),
+    prepareLocalModImport: (path: string, requestId: string) => ipcRenderer.invoke('prepare-local-mod-import', path, requestId),
+    releaseLocalModImport: (requestId: string) => ipcRenderer.invoke('release-local-mod-import', requestId),
+    getLocalModGallery: (groupId: string) => ipcRenderer.invoke('get-local-mod-gallery', groupId),
+    setLocalModGallery: (groupId: string, images: string[]) => ipcRenderer.invoke('set-local-mod-gallery', groupId, images),
+    setModsNsfw: (modIds: string[], nsfw: boolean) => ipcRenderer.invoke('set-mods-nsfw', modIds, nsfw),
     onImportCustomModsProgress: (callback: (progress: ImportCustomModsProgress) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, progress: ImportCustomModsProgress) =>
             callback(progress);

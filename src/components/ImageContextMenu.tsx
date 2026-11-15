@@ -9,11 +9,12 @@ interface ImageContextMenuProps {
   alt: string;
   copySrc?: string;
   children: ReactNode;
+  actions?: ReactNode;
 }
 
 type CopyState = 'idle' | 'copying' | 'copied' | 'failed';
 
-export default function ImageContextMenu({ src, alt, copySrc, children }: ImageContextMenuProps) {
+export default function ImageContextMenu({ src, alt, copySrc, children, actions }: ImageContextMenuProps) {
   const { t } = useTranslation();
   const [imageCopyState, setImageCopyState] = useState<CopyState>('idle');
   const [urlCopyState, setUrlCopyState] = useState<CopyState>('idle');
@@ -90,6 +91,7 @@ export default function ImageContextMenu({ src, alt, copySrc, children }: ImageC
           <MenuLabel>
             {alt || t('imageContextMenu.image')}
           </MenuLabel>
+          {actions && <>{actions}<MenuSeparator /></>}
           <MenuItem
             icon={imageCopyIcon}
             spinning={imageCopyState === 'copying'}

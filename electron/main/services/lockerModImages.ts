@@ -25,7 +25,8 @@
  * also clears the flag.
  */
 import { promises as fs } from 'fs';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
+import { createHash, randomUUID } from 'crypto';
 import { join, extname, basename } from 'path';
 import { app } from 'electron';
 
@@ -60,6 +61,84 @@ function backgroundsDir(): string {
  *  grid card instead of the skin-panel card, so it's an independent override. */
 function thumbnailsDir(): string {
     return join(app.getPath('userData'), 'locker-mod-thumbnails');
+}
+
+// Imported galleries share the existing local group identity. Only one manifest
+// and one copy of each image are needed, regardless of the number of variants.
+const galleryThumbnails = new Map<string, string | undefined>();
+function localGalleryDir(groupId: string): string {
+    if (!/^[a-zA-Z0-9-]{1,100}$/.test(groupId)) throw new Error('Invalid local group id');
+    return join(app.getPath('userData'), 'local-mod-galleries', groupId);
+}
+
+function localGalleryFiles(groupId: string): string[] {
+    try {
+        const files: unknown = JSON.parse(readFileSync(join(localGalleryDir(groupId), 'manifest.json'), 'utf8'));
+        return Array.isArray(files) ? files.filter((file): file is string => typeof file === 'string'
+            && (/^[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(file) || /^https?:\/\//.test(file))) : [];
+    } catch { return []; }
+}
+
+export function hasLocalModGallery(groupId: string): boolean {
+    try { return existsSync(join(localGalleryDir(groupId), 'manifest.json')); }
+    catch { return false; }
+}
+
+function readLocalGalleryImage(dir: string, file: string): string | undefined {
+    if (/^https?:\/\//.test(file)) return file;
+    try { return `data:${MIME_BY_EXT[extname(file)]};base64,${readFileSync(join(dir, file)).toString('base64')}`; }
+    catch { return undefined; }
+}
+
+export function getLocalModGallery(groupId: string): string[] {
+    const dir = localGalleryDir(groupId);
+    return [...new Set(localGalleryFiles(groupId).map(file => readLocalGalleryImage(dir, file))
+        .filter((image): image is string => image !== undefined))];
+}
+
+export function localModGalleryThumbnail(groupId: string): string | undefined {
+    if (galleryThumbnails.has(groupId)) return galleryThumbnails.get(groupId);
+    let thumbnail: string | undefined;
+    for (const file of localGalleryFiles(groupId)) {
+        thumbnail = readLocalGalleryImage(localGalleryDir(groupId), file);
+        if (thumbnail !== undefined) break;
+    }
+    if (galleryThumbnails.size >= 128) galleryThumbnails.delete(galleryThumbnails.keys().next().value!);
+    galleryThumbnails.set(groupId, thumbnail);
+    return thumbnail;
+}
+
+export async function setLocalModGallery(groupId: string, sources: string[]): Promise<void> {
+    const dir = localGalleryDir(groupId);
+    const images = sources.map(source => {
+        // Preserve existing catalogue artwork by reference without fetching it.
+        if (/^https?:\/\//.test(source)) return { file: source, buf: undefined };
+        const { buf, ext } = decodeDataUrl(source);
+        return { buf, file: `${createHash('sha256').update(buf).digest('hex')}${ext}` };
+    });
+    await ensureDir(dir);
+    const files = [...new Set(images.map(image => image.file))];
+    const created: string[] = [];
+    const temporary = join(dir, `${randomUUID()}.tmp`);
+    try {
+        for (const image of images) {
+            if (!image.buf) continue;
+            const path = join(dir, image.file);
+            if (existsSync(path)) continue;
+            await fs.writeFile(path, image.buf);
+            created.push(path);
+        }
+        await fs.writeFile(temporary, JSON.stringify(files));
+        await fs.rename(temporary, join(dir, 'manifest.json'));
+    } catch (error) {
+        await Promise.all(created.map(path => fs.unlink(path).catch(() => {})));
+        throw error;
+    } finally { await fs.unlink(temporary).catch(() => {}); }
+    galleryThumbnails.delete(groupId);
+    // Only files owned by this gallery can be removed here.
+    for (const file of await fs.readdir(dir).catch(() => [])) {
+        if (/^[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(file) && !files.includes(file)) await fs.unlink(join(dir, file)).catch(() => {});
+    }
 }
 
 function metaPath(dir: string): string {

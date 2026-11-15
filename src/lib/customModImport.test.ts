@@ -5,12 +5,22 @@ import {
   deriveModNameFromPath,
   deriveVariantLabel,
   imprintVariantLabel,
+  localImportErrorMessage,
   fileNameOf,
   pathDedupeKey,
   planLocalImport,
   resolveImportedVariantLabel,
-  suggestVariantGroupName,
 } from './customModImport';
+
+describe('local import error messages', () => {
+  it.each([
+    new Error("Error invoking remote method 'prepare-local-mod-import': Error: No .vpk file was found inside the archive."),
+    "Error: Error invoking remote method 'prepare-local-mod-import': Error: No .vpk file was found inside the archive.",
+    'No .vpk file was found inside the archive.',
+  ])('keeps only the actionable error text', reason => {
+    expect(localImportErrorMessage(reason)).toBe('No .vpk file was found inside the archive.');
+  });
+});
 
 describe('deriveModNameFromPath', () => {
   it('strips the _dir suffix and the vpk extension', () => {
@@ -106,29 +116,6 @@ describe('variant labels from imprints', () => {
   it('prefers the imprint label over the file name for an archive member', () => {
     expect(resolveImportedVariantLabel(undefined, 'addons', 3, 0, 'Minimal HUD')).toBe('Minimal HUD');
     expect(resolveImportedVariantLabel('Pack', 'addons', 3, 0, 'Minimal HUD')).toBe('Pack: Minimal HUD');
-  });
-});
-
-describe('suggestVariantGroupName', () => {
-  it('offers the first row name when the files are not known to be different mods', () => {
-    expect(suggestVariantGroupName([{ name: ' skin gold ' }, { name: 'skin silver' }])).toBe('skin gold');
-    expect(
-      suggestVariantGroupName([
-        { name: 'Royal Abrams', imprintTitle: 'Royal Abrams' },
-        { name: 'Royal Abrams', imprintTitle: 'royal abrams' },
-        { name: 'extra' },
-      ])
-    ).toBe('Royal Abrams');
-  });
-
-  it('offers nothing when the imprints name different mods', () => {
-    expect(
-      suggestVariantGroupName([
-        { name: 'Minimal HUD', imprintTitle: 'Minimal HUD' },
-        { name: 'Brighter lighting', imprintTitle: 'Brighter lighting' },
-      ])
-    ).toBe('');
-    expect(suggestVariantGroupName([])).toBe('');
   });
 });
 

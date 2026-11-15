@@ -3,6 +3,8 @@ import { act, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModCard } from './ModCard';
+import { InstalledEntryCard } from '../../pages/Installed';
+import { MemoryRouter } from 'react-router-dom';
 import { HERO_NAMES_SORTED } from '../../lib/lockerUtils';
 import { useCategoryStore } from '../../stores/categoryStore';
 import { buildCategoryPaths } from '../../lib/categoryPaths';
@@ -69,6 +71,30 @@ describe('installed card menu mounting', () => {
       await act(async () => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     }
   }
+
+  it.each(['grid', 'list'] as const)('opens a single-file local mod from its %s card', async viewMode => {
+    const mod: Mod = { ...input.mod, id: 'local', name: 'Local mod', metaKey: 'local.vpk', path: '/addons/local.vpk' };
+    const onOpen = vi.fn();
+    const noop = vi.fn(async () => {});
+    const props: ComponentProps<typeof InstalledEntryCard> = {
+      entry: { kind: 'single', mod, key: 'local' }, viewMode, hideNsfwPreviews: false,
+      soundVolume: 0, groupClickOpensDetails: true, conflicts: [], updateAvailable: false,
+      staleSourceCount: 0, updatableSourceCount: 0, fixingUnknown: false, loadPosition: undefined,
+      loadCount: 1, selectMode: false, shiftHeld: false, selected: false, soloBusy: false, favorite: false,
+      onOpenDetails: onOpen, onViewAuthor: noop, onOpenPicker: noop, onOpenGroupDetails: noop,
+      onToggle: async () => true, onSwap: noop, onSoloLaunch: noop, onDelete: noop,
+      onRenameLocal: noop, onAddVariant: noop, onViewImprint: noop,
+      onSetTags: noop, onSetPriority: noop, onFixUnknown: noop, onUnmerge: noop, onCopyShareCode: noop,
+      occurrenceKey: undefined, onSelectToggle: noop, onToggleFavorite: noop, lists: [], listIds: [],
+      onToggleList: noop, onCreateList: noop,
+    };
+    await act(async () => root.render(<MemoryRouter><InstalledEntryCard {...props} /></MemoryRouter>));
+    const media = host.querySelector<HTMLElement>('[aria-label="installed.card.chooseFilesFor"]')!;
+    expect(media).not.toBeNull();
+    expect(media.hasAttribute('disabled')).toBe(false);
+    await act(async () => media.click());
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(mod);
+  });
 
   async function openLockerTags() {
     const trigger = [...document.querySelectorAll<HTMLElement>('[role="menuitem"][aria-haspopup="menu"]')]
@@ -436,7 +462,7 @@ describe('installed card menu mounting', () => {
     expect(onViewDetails).toHaveBeenCalledTimes(1);
   });
 
-  it('labels a local group click as choosing files and keeps one picker entry in the menu', async () => {
+  it('keeps View details as the local group picker action', async () => {
     const onOpenPicker = vi.fn();
     input = { ...input, onOpenDetails: onOpenPicker, group: {
       variantCount: 2, enabledCount: 1, enabledLabels: [], onOpenPicker, opensPicker: true,
@@ -444,8 +470,12 @@ describe('installed card menu mounting', () => {
     await act(async () => root.render(<ModCard {...input} />));
     expect(host.querySelector('[aria-label="installed.card.chooseFilesFor"]')).not.toBeNull();
     await openMenu('context');
-    expect(menuItemLabels()).toContain('installed.card.chooseFiles');
-    expect(menuItemLabels()).not.toContain('installed.card.viewDetails');
+    expect(menuItemLabels()).toContain('installed.card.viewDetails');
+    expect(menuItemLabels()).not.toContain('installed.card.chooseFiles');
+    expect(menuItemLabels()).not.toContain('installed.card.ungroupVariants');
+    const details = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === 'installed.card.viewDetails')!;
+    await act(async () => details.click());
+    expect(onOpenPicker).toHaveBeenCalledOnce();
   });
 
   it.each(['grid', 'compact', 'list'] as const)('shows every grouped hero and puts additional %s tags in a mouse tooltip', async viewMode => {

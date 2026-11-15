@@ -5,6 +5,10 @@ import { getHeroChipIconPath } from '../../lib/lockerUtils';
 import type { Mod } from '../../types/mod';
 import soulUrn from '../../assets/soul-urn.png';
 
+// Shared geometry and neutral colors for Installed cards and import tag controls.
+export const MOD_TAG_CHIP_CLASS = 'inline-flex h-[22px] min-w-0 items-center overflow-hidden rounded-md px-1.5 text-2xs font-semibold leading-none';
+export const MOD_TAG_SURFACE_CLASS = 'border border-hl/[0.06] bg-bg-tertiary/65 text-text-secondary/80';
+
 /** Stand-in for PriorityEditor on Global (priority-root) cards. They load
  *  before every numbered mod and reorderMods filters them out of reposition
  *  batches, so a position number would be both a lie and dead UI. Echoes the

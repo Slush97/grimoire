@@ -155,7 +155,6 @@ import { InstalledIssuesButton, InstalledIssuesModal } from '../components/insta
 import { useInstalledIssuesStore } from '../stores/installedIssuesStore';
 import { ModCard } from '../components/installed/ModCard';
 import { EMPTY_LIST_IDS } from '../components/installed/emptyIds';
-import { EditLocalModModal } from '../components/installed/EditLocalModModal';
 import { DeleteModsModal, type DeleteModsTarget } from '../components/installed/DeleteModsModal';
 import { ModBackupDeletePrompt } from '../components/installed/ModBackupsSubmenu';
 import { MakeCustomModModal } from '../components/installed/MakeCustomModModal';
@@ -305,12 +304,10 @@ interface InstalledEntryCardProps {
   onSwap: (entry: ModEntry, outgoingEntryKey: string) => Promise<void>;
   onSoloLaunch: (entry: ModEntry) => void;
   onDelete: (entry: ModEntry) => void;
-  onEditLocal: (mod: Mod) => void;
   onRenameLocal: (mod: Mod, newName: string) => Promise<void>;
   /** Open the add-variants import dialog for a local entry. */
   onAddVariant: (entry: ModEntry) => void;
   /** Dissolve a local variant group (every member becomes its own card). */
-  onUngroupVariants: (entry: ModEntry) => Promise<void>;
   /** Open the imprint details modal for a mod whose wire `imprinted` flag is
    *  true. Externally-imprinted files without the local flag simply do not get
    *  the menu entry: the flag is the cheap client hint, and the modal's empty
@@ -346,7 +343,7 @@ interface InstalledEntryCardProps {
  * The thin per-card closures ModCard wants are rebuilt here, inside the memo
  * boundary, where they are cheap.
  */
-const InstalledEntryCard = memo(function InstalledEntryCard({
+export const InstalledEntryCard = memo(function InstalledEntryCard({
   entry,
   viewMode,
   hideNsfwPreviews,
@@ -373,10 +370,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onSwap,
   onSoloLaunch,
   onDelete,
-  onEditLocal,
   onRenameLocal,
   onAddVariant,
-  onUngroupVariants,
   onViewImprint,
   onSetTags,
   onSetPriority,
@@ -436,9 +431,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         staleSourceCount={staleSourceCount}
         updatableSourceCount={updatableSourceCount}
         entryKey={entry.key}
-        onOpenDetails={
-          mod.merged || mod.gameBananaId ? () => onOpenDetails(mod) : undefined
-        }
+        onOpenDetails={() => onOpenDetails(mod)}
+        opensPicker={canJoinLocalVariantGroup(mod)}
         onViewAuthor={mod.gameBananaId ? () => onViewAuthor(mod) : undefined}
         onToggle={() => onToggle(entry)}
         swapTargets={swapTargets}
@@ -446,7 +440,6 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         onSoloLaunch={() => onSoloLaunch(entry)}
         soloBusy={soloBusy}
         onDelete={() => onDelete(entry)}
-        onEditLocal={entryIsLocal(entry) ? () => onEditLocal(mod) : undefined}
         onRenameLocal={
           entryIsLocal(entry) ? (newName) => onRenameLocal(mod, newName) : undefined
         }
@@ -518,6 +511,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         enabled: entry.enabledVariants.length > 0,
         // Card meta shows total size across the grouped files.
         size: entry.totalSize,
+        nsfw: entry.variants.some(variant => variant.hasLocalGallery) ? entry.variants.some(variant => variant.nsfw) : entry.primary.nsfw,
         installedAt: entry.variants.reduce(
           (latest, v) => (v.installedAt > latest ? v.installedAt : latest),
           entry.primary.installedAt
@@ -543,7 +537,6 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       // extended and dissolved from the card. A GameBanana group can do none of
       // those: its files and its name come from the submission. Renaming the
       // primary renames every member (main fans the name out).
-      onEditLocal={entryIsLocal(entry) ? () => onEditLocal(entry.primary) : undefined}
       onRenameLocal={
         entryIsLocal(entry) ? (newName) => onRenameLocal(entry.primary, newName) : undefined
       }
@@ -552,7 +545,6 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
           ? () => onAddVariant(entry)
           : undefined
       }
-      onUngroupVariants={entryIsLocal(entry) ? () => void onUngroupVariants(entry) : undefined}
       onSetTags={tags => onSetTags(entry, tags)}
       onSetPriority={(priority) => onSetPriority(entry, priority)}
       loadPosition={loadPosition}
@@ -916,7 +908,6 @@ export default function Installed() {
   // peers, that math produces fractional or wrong totals.
   const [conflictPairCount, setConflictPairCount] = useState(0);
   const [modToDelete, setModToDelete] = useState<DeleteModsTarget | null>(null);
-  const [localEditMod, setLocalEditMod] = useState<Mod | null>(null);
   const [customUnknownMod, setCustomUnknownMod] = useState<Mod | null>(null);
   // Sources for the in-progress merge. Non-null means the modal is open.
   const [mergeSources, setMergeSources] = useState<Mod[] | null>(null);
@@ -1070,6 +1061,8 @@ export default function Installed() {
     modIds: string[];
     groupId: string | null;
     modName: string;
+    pendingPaths?: string[];
+    nsfw?: boolean;
     /** Set once this dialog minted the group, so a retry after a partial
      *  failure joins the same group instead of minting another, and closing
      *  without a single file landing can undo the mint. */
@@ -2546,7 +2539,7 @@ export default function Installed() {
   // rebuilding entries every render would re-render every card on each
   // page-level setState.
   const allEntries = useMemo(() => buildModEntries(visibleMods), [visibleMods]);
-  const { pickerGroupId, setPickerGroupId, swapTargets, beginSwap, toggleVariant } = useInstalledModSwap(allEntries, taxonomyContext);
+  const { pickerGroupId, pickerEntry, setPickerGroupId, renamePickerMod, swapTargets, beginSwap, toggleVariant } = useInstalledModSwap(allEntries, taxonomyContext);
   const enabledEntries = useMemo(
     () =>
       allEntries
@@ -2637,6 +2630,10 @@ export default function Installed() {
   // boundary, so none of this re-renders the grid.
   const openEntryDetails = useStableCallback((mod: Mod) => {
     if (mod.merged) setMergedContentsMod(mod);
+    else if (canJoinLocalVariantGroup(mod)) {
+      const entry = allEntries.find(entry => entry.kind === 'single' ? entry.mod.id === mod.id : entry.variants.some(variant => variant.id === mod.id));
+      if (entry) setPickerGroupId(entry.key);
+    }
     else if (mod.gameBananaId) void openModDetails(mod);
   });
   const openEntryPicker = useStableCallback((groupKey: string) => {
@@ -2819,7 +2816,6 @@ export default function Installed() {
       setModToDelete({ mods: [entry.mod], name: entry.mod.name, isGroup: false });
     }
   });
-  const editLocalEntry = useStableCallback((mod: Mod) => setLocalEditMod(mod));
   const viewEntryImprint = useStableCallback((mod: Mod) => setImprintDetailsMod(mod));
   // Inline title rename (double-click). Reuses edit-local-mod but carries the
   // current thumbnail/NSFW flag through so renaming the name alone never wipes
@@ -2837,7 +2833,7 @@ export default function Installed() {
   // Grouping is derived from `localGroupId` (see lib/variantGroups.ts), so the
   // grid regroups on its own once main has written the sidecars: none of these
   // handlers touch entry state.
-  const openAddVariant = useStableCallback((entry: ModEntry) => {
+  const openAddVariant = useStableCallback((entry: ModEntry, pendingPaths?: string[]) => {
     const members = entry.kind === 'group' ? entry.variants : [entry.mod];
     setAddVariantTarget({
       modIds: members.map((m) => m.id),
@@ -2845,6 +2841,8 @@ export default function Installed() {
       // import time, so a dialog the user cancels leaves no stray id behind.
       groupId: members[0]?.localGroupId ?? null,
       modName: entry.kind === 'group' ? entry.primary.name : entry.mod.name,
+      nsfw: members.some(mod => !!mod.nsfw),
+      pendingPaths,
     });
   });
   const importVariantsIntoGroup = useStableCallback(async (items: ImportCustomModArgs[]) => {
@@ -2898,19 +2896,6 @@ export default function Installed() {
       showToast(
         t('installed.batchImport.failedToast', { count: failed.length, error: failed[0].error ?? '' }),
         { tone: 'error', duration: 9000 }
-      );
-    }
-  });
-  const ungroupEntry = useStableCallback(async (entry: ModEntry) => {
-    if (entry.kind !== 'group') return;
-    const count = entry.variants.length;
-    try {
-      await setLocalVariantGroup(entry.variants.map((v) => v.id), { mode: 'clear' });
-      showToast(t('installed.variants.ungrouped', { count }), { tone: 'success' });
-    } catch (err) {
-      showToast(
-        t('installed.variants.groupFailed', { error: toastErrorMessage(err) }),
-        { tone: 'error' }
       );
     }
   });
@@ -3453,10 +3438,8 @@ export default function Installed() {
     onSwap: beginSwap,
     onSoloLaunch: soloLaunchEntry,
     onDelete: deleteEntry,
-    onEditLocal: editLocalEntry,
     onRenameLocal: renameLocalMod,
     onAddVariant: openAddVariant,
-    onUngroupVariants: ungroupEntry,
     onViewImprint: viewEntryImprint,
     onSetTags: setEntryTags,
     onSetPriority: setEntryPriority,
@@ -3829,17 +3812,6 @@ export default function Installed() {
       />
       <ModBackupDeletePrompt />
 
-      {localEditMod && (
-        <EditLocalModModal
-          mod={localEditMod}
-          onClose={() => setLocalEditMod(null)}
-          onSave={async (args) => {
-            await editLocalInstalledMod(localEditMod, args);
-            setLocalEditMod(null);
-          }}
-        />
-      )}
-
       {/* Conditionally rendered so each opening is a fresh mount: draft names
           and armed delete confirmations reset without a sync effect. */}
       {creatingList && (
@@ -3874,7 +3846,9 @@ export default function Installed() {
           as the toolbar's, minus the per-row name: the group owns the name. */}
       {addVariantTarget && (
         <ImportCustomModsModal
-          addToGroup={{ modName: addVariantTarget.modName }}
+          addToGroup={{ modName: addVariantTarget.modName, nsfw: addVariantTarget.nsfw }}
+          pendingPaths={addVariantTarget.pendingPaths}
+          onConsumedPaths={() => setAddVariantTarget(target => target ? { ...target, pendingPaths: undefined } : target)}
           onClose={closeAddVariant}
           onImport={importVariantsIntoGroup}
           onFinished={reportVariantImport}
@@ -3886,17 +3860,17 @@ export default function Installed() {
         // Derive the live entry from current mods so deletes inside the
         // picker reflect immediately. If the group has disappeared (all
         // files deleted or moved), auto-close the picker.
-        const liveEntry = allEntries.find(
-          (e) => e.kind === 'group' && e.groupKey === pickerGroupId
-        ) as Extract<ModEntry, { kind: 'group' }> | undefined;
+        const liveEntry = pickerEntry;
         if (!liveEntry) {
           // Defer close to avoid setState during render warnings.
           queueMicrotask(() => setPickerGroupId(null));
           return null;
         }
-        const liveVariantIds = new Set(liveEntry.variants.map((v) => v.id));
+        const variants = liveEntry.kind === 'group' ? liveEntry.variants : [liveEntry.mod];
+        const primary = liveEntry.kind === 'group' ? liveEntry.primary : liveEntry.mod;
+        const liveVariantIds = new Set(variants.map((v) => v.id));
         const conflictsByVariantId = Object.fromEntries(
-          liveEntry.variants.map((variant) => {
+          variants.map((variant) => {
             const conflicts = (conflictMap.get(variant.id) ?? [])
               .filter((conflict) => {
                 const peerId = conflict.modA === variant.id ? conflict.modB : conflict.modA;
@@ -3909,9 +3883,9 @@ export default function Installed() {
             return [variant.id, conflicts];
           })
         );
-        const localGroup = liveEntry.groupKey.startsWith('local:');
+        const localGroup = canJoinLocalVariantGroup(primary);
         const variantsWithUpdate = new Set(
-          liveEntry.variants
+          variants
             .filter(
               (variant) =>
                 typeof variant.gameBananaId === 'number' &&
@@ -3922,18 +3896,19 @@ export default function Installed() {
         );
         return (
           <VariantPickerModal
-            modName={liveEntry.primary.name}
-            variants={liveEntry.variants}
+            modName={primary.name}
+            onRenameMod={localGroup ? name => renamePickerMod(primary, name, () => renameLocalMod(primary, name)) : undefined}
+            variants={variants}
             conflictsByVariantId={conflictsByVariantId}
             onToggle={toggleVariant}
-            onMoveVariant={(target, direction) => moveVariant(liveEntry, target, direction)}
+            onMoveVariant={(target, direction) => liveEntry.kind === 'group' ? moveVariant(liveEntry, target, direction) : undefined}
             onReorderVariantTo={(source, neighbor, position) =>
               reorderVariantTo(source, neighbor, position)
             }
             onDeleteVariant={deleteMod}
             onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
             onOpenModDetails={
-              liveEntry.primary.gameBananaId
+              primary.gameBananaId
                 ? () => {
                     // Stash the picker so the user can return to it after
                     // closing the details modal.
@@ -3947,20 +3922,22 @@ export default function Installed() {
             // picker (one modal at a time); the card reopens it.
             onAddVariant={
               localGroup
-                ? () => {
+                ? (paths) => {
                     setPickerGroupId(null);
-                    openAddVariant(liveEntry);
+                    openAddVariant(liveEntry, paths);
                   }
                 : undefined
             }
-            onDetachVariant={localGroup ? (variant) => detachVariant(variant) : undefined}
+            onGalleryChange={localGroup ? images => useAppStore.getState().setLocalModGallery(primary.id, images) : undefined}
+            onNsfwChange={localGroup ? nsfw => useAppStore.getState().setModsNsfw(variants.map(variant => variant.id), nsfw) : undefined}
+            onDetachVariant={localGroup && primary.localGroupId ? (variant) => detachVariant(variant) : undefined}
             variantsWithUpdate={variantsWithUpdate}
             onUpdateGroup={
               variantsWithUpdate.size > 0
-                ? () => handleUpdateGroup(liveEntry.variants.map((variant) => variant.id))
+                ? () => handleUpdateGroup(variants.map((variant) => variant.id))
                 : undefined
             }
-            isUpdating={liveEntry.variants.some(variant => unavailableUpdateIds.has(variant.id))}
+            isUpdating={variants.some(variant => unavailableUpdateIds.has(variant.id))}
             onClose={() => setPickerGroupId(null)}
           />
         );

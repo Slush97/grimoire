@@ -10,9 +10,7 @@ import { useBackdropDismiss } from './useBackdropDismiss';
 const openModalStack: symbol[] = [];
 
 function useModalStackEntry(open: boolean): () => boolean {
-    const idRef = useRef<symbol | null>(null);
-    if (idRef.current === null) idRef.current = Symbol('modal');
-    const id = idRef.current;
+    const [id] = useState(() => Symbol('modal'));
     useEffect(() => {
         if (!open) return;
         openModalStack.push(id);
@@ -51,6 +49,11 @@ interface ModalProps {
     open?: boolean;
     /** id of the element labelling the dialog (usually the title heading) */
     labelledBy?: string;
+    ariaLabel?: string;
+    /** Image viewers cover the viewport without the standard panel styling. */
+    fullScreen?: boolean;
+    /** Receives unhandled keys only while this dialog is topmost. */
+    onKeyDown?: (event: KeyboardEvent) => void;
     size?: ModalSize;
     /** false blocks Escape and backdrop-click closing (busy states, first-run flows) */
     dismissable?: boolean;
@@ -65,6 +68,9 @@ export function Modal({
     onClose,
     open = true,
     labelledBy,
+    ariaLabel,
+    fullScreen = false,
+    onKeyDown,
     size = 'md',
     dismissable = true,
     panelClassName = '',
@@ -88,16 +94,18 @@ export function Modal({
     useEffect(() => {
         if (!open || !dismissable) return;
         const onKey = (e: KeyboardEvent) => {
-            if (e.key !== 'Escape' || e.defaultPrevented) return;
+            if (e.defaultPrevented) return;
             // A dialog stacked above this one owns the keyboard; letting the
             // lower handler run too would close both on a single Escape.
             if (!isTopmost()) return;
+            onKeyDown?.(e);
+            if (e.defaultPrevented || e.key !== 'Escape') return;
             e.preventDefault();
             onClose();
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [open, dismissable, onClose, isTopmost]);
+    }, [open, dismissable, onClose, isTopmost, onKeyDown]);
 
     // Trap Tab focus inside the panel while open. The WAI-ARIA dialog pattern
     // (and Radix Dialog) keeps focus within a modal dialog; without this, Tab
@@ -112,9 +120,9 @@ export function Modal({
             if (!isTopmost()) return;
             const panel = panelRef.current;
             if (!panel) return;
-            const focusable = panel.querySelectorAll<HTMLElement>(
+            const focusable = [...panel.querySelectorAll<HTMLElement>(
                 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-            );
+            )].filter(element => !element.closest('[inert]'));
             // No focusable children: keep focus on the panel itself.
             if (focusable.length === 0) {
                 e.preventDefault();
@@ -124,6 +132,9 @@ export function Modal({
             const first = focusable[0];
             const last = focusable[focusable.length - 1];
             const active = document.activeElement;
+            // Portaled menus own Tab while open. Pulling their focus into the
+            // panel here prevents the menu's keyboard handler from running.
+            if (active instanceof Element && active.closest('[role="menu"]')) return;
             // Focus escaped the panel (or sits on the panel shell): pull it back.
             if (!panel.contains(active) || active === panel) {
                 e.preventDefault();
@@ -162,19 +173,20 @@ export function Modal({
     return createPortal(
         <div
             ref={backdropRef}
-            className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm ${
-                closing ? 'animate-overlay-out pointer-events-none' : 'animate-overlay-in'
+            className={`${fullScreen ? 'fixed inset-0 z-[60]' : 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm'} ${
+                closing ? 'animate-overlay-out pointer-events-none' : fullScreen ? 'animate-fade-in' : 'animate-overlay-in'
             } ${backdropClassName}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby={labelledBy}
+            aria-label={ariaLabel}
         >
             <div
                 ref={panelRef}
                 tabIndex={-1}
-                className={`modal-panel flex w-full flex-col overflow-hidden rounded-sm border border-border bg-bg-secondary shadow-2xl outline-none ${
-                    closing ? 'animate-panel-out' : 'animate-panel-in'
-                } ${SIZE_CLASSES[size]} ${panelClassName}`}
+                className={`${fullScreen ? 'relative h-full w-full outline-none' : 'modal-panel flex w-full flex-col overflow-hidden rounded-sm border border-border bg-bg-secondary shadow-2xl outline-none'} ${
+                    fullScreen ? '' : closing ? 'animate-panel-out' : 'animate-panel-in'
+                } ${fullScreen ? '' : SIZE_CLASSES[size]} ${panelClassName}`}
             >
                 {children}
             </div>

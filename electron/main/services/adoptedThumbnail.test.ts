@@ -12,6 +12,8 @@ const { fetchModDetails } = vi.hoisted(() => ({
     fetchModDetails: vi.fn<(id: number, section: string) => Promise<unknown>>(),
 }));
 vi.mock('./gamebanana', () => ({ fetchModDetails }));
+const { hasLocalModGallery } = vi.hoisted(() => ({ hasLocalModGallery: vi.fn(() => false) }));
+vi.mock('./lockerModImages', () => ({ hasLocalModGallery }));
 
 const metadataStore = vi.hoisted(() => new Map<string, Record<string, unknown>>());
 const { setModMetadata } = vi.hoisted(() => ({
@@ -47,6 +49,7 @@ function gbDetails(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
     vi.clearAllMocks();
     metadataStore.clear();
+    hasLocalModGallery.mockReturnValue(false);
 });
 
 describe('fetchAdoptedThumbnail', () => {
@@ -88,7 +91,7 @@ describe('fetchAdoptedThumbnail', () => {
         expect(setModMetadata).not.toHaveBeenCalled();
     });
 
-    it('does not clobber a thumbnail that appeared while in flight', async () => {
+    it('keeps user artwork while filling a missing sound preview', async () => {
         metadataStore.set('pak05_dir.vpk', {
             gameBananaId: 4242,
             sha256: SHA,
@@ -98,7 +101,29 @@ describe('fetchAdoptedThumbnail', () => {
 
         await fetchAdoptedThumbnail(TARGET);
 
+        expect(setModMetadata).toHaveBeenCalledWith(TARGET.metaKey, { audioUrl: 'https://files.gb/preview.mp3' });
+        expect(metadataStore.get(TARGET.metaKey)?.thumbnailUrl).toBe('https://user.set/art.png');
+    });
+
+    it('does not restore removed gallery artwork when an older request finishes', async () => {
+        let finish!: (value: unknown) => void;
+        fetchModDetails.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+        metadataStore.set(TARGET.metaKey, { gameBananaId: TARGET.gameBananaId, sha256: SHA, localGroupId: 'gallery', audioUrl: 'existing' });
+        const pending = fetchAdoptedThumbnail(TARGET);
+        hasLocalModGallery.mockReturnValue(true);
+        finish(gbDetails()); await pending;
         expect(setModMetadata).not.toHaveBeenCalled();
+    });
+
+    it('retains sound previews for mods with managed artwork and skips redundant requests', async () => {
+        hasLocalModGallery.mockReturnValue(true);
+        metadataStore.set(TARGET.metaKey, { gameBananaId: TARGET.gameBananaId, sha256: SHA, localGroupId: 'gallery' });
+        fetchModDetails.mockResolvedValue(gbDetails());
+        await fetchAdoptedThumbnail(TARGET);
+        expect(setModMetadata).toHaveBeenCalledWith(TARGET.metaKey, { audioUrl: 'https://files.gb/preview.mp3' });
+        fetchModDetails.mockClear();
+        await fetchAdoptedThumbnail(TARGET);
+        expect(fetchModDetails).not.toHaveBeenCalled();
     });
 
     it('swallows a fetch rejection without writing', async () => {

@@ -566,14 +566,29 @@ export async function swapModPriority(modIdA: string, modIdB: string): Promise<M
   return withGameRunningWarning(() => window.electronAPI.swapModPriority(modIdA, modIdB));
 }
 
-/** Import several local sources in one exclusive mutation. Per-source failures
+/** Import local sources with one exclusive mutation per source. Failures
  *  come back in `results` instead of throwing, so a bad file can't discard the
  *  ones that landed. */
 export async function importCustomMods(
   items: ImportCustomModArgs[]
 ): Promise<ImportCustomModsBatchResult> {
-  return withGameRunningWarning(() => window.electronAPI.importCustomMods({ items }));
+  const galleries = new Set<string>();
+  const compactItems = items.map(item => {
+    const group = item.localGroupId ? `group:${item.localGroupId}`
+      : item.localGroupBatchKey ? `batch:${item.localGroupBatchKey}` : undefined;
+    if (!group || item.galleryImages === undefined) return item;
+    const seen = galleries.has(group);
+    galleries.add(group);
+    return seen ? { ...item, galleryImages: [] } : item;
+  });
+  return withGameRunningWarning(() => window.electronAPI.importCustomMods({ items: compactItems }));
 }
+
+export const prepareLocalModImport = (path: string, requestId: string) => window.electronAPI.prepareLocalModImport(path, requestId);
+export const releaseLocalModImport = (requestId: string) => window.electronAPI.releaseLocalModImport(requestId);
+export const getLocalModGallery = (groupId: string) => window.electronAPI.getLocalModGallery(groupId);
+export const setLocalModGallery = (groupId: string, images: string[]) => window.electronAPI.setLocalModGallery(groupId, images);
+export const setModsNsfw = (modIds: string[], nsfw: boolean) => window.electronAPI.setModsNsfw(modIds, nsfw);
 
 /** Subscribe to batch-import progress. Returns an unsubscribe function. */
 export function onImportCustomModsProgress(

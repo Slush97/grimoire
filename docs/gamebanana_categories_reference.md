@@ -209,6 +209,71 @@ Filters also contains the Default/Lists view switch and list management, even
 when no custom lists exist. Its Source, Status, and view segments use neutral
 selection colors; selected hero and tag dropdown triggers retain accent hints.
 
+## Local import preparation
+
+The local import dialog checks selected VPKs and archives before enabling Import.
+Files appear immediately with a yellow checking state, changing to red on failure.
+Errors show the failure message without Electron's transport prefixes.
+Every source must finish successfully; one invalid source blocks the batch until
+removed. Archives retain their inspected VPKs in temporary storage until import
+or dismissal; an active import retains its files until copying finishes even if
+the dialog closes. Installation validates the copied bytes again. Checks validate
+readable, complete inline VPK contents, not whether
+an older mod still works with the current game. Split directory VPKs need to be
+packed into a self-contained VPK. Optional Mod Safety keeps its existing setting
+and approval behavior. Hero detection and imprint/category recognition use local
+data only and add no API requests. Archive rows show the combined detected heroes.
+
+New one-file imports keep the shared name, gallery, and tags in the same panel
+as multi-file imports, without a grouping toggle.
+Selecting multiple sources shows the original Import as one mod with variants
+checkbox, enabled by default. Turning it off gives each source an editable name,
+a removable 64px-wide 16:9 thumbnail, and an NSFW flag. Removing sources until
+only one remains restores the one-mod editor and retains that source's details.
+As before, imprint recognition fills untouched names and cached thumbnail
+references. In the dialog, manually chosen or cleared artwork takes precedence
+over late recognition.
+Archives keep their existing per-source grouping and pack detection. Switching
+modes preserves both drafts; the first return to a new shared gallery seeds it
+from the separate thumbnails without duplicates. Clear all resets a separate
+batch to the default mode. Adding variants to an existing mod has no grouping toggle.
+The shared mod's name defaults to the first source's detected title
+or filename and stays editable. All sources share a horizontal image gallery,
+one NSFW control beside the mod name, and a Custom/Base/Hero tag picker. Manual tag additions
+and removals preserve each member's other detected classifications; custom tags
+use the existing installation-scoped catalogue. Tags match the mod-card chips,
+keep their remove buttons visible, and use a compact plus chip to add more when
+tags are present.
+After a partial import, the mode stays locked for retries. Shared settings also
+stay locked so they cannot diverge from the variants already installed. Failed
+variant names and separate-mod details remain editable.
+Shared images are stored once in
+`userData/local-mod-galleries/<localGroupId>/`, with an ordered manifest and no
+extra gallery fields in `mod-metadata.json`. In the import dialog, clicking an image selects the card
+thumbnail by moving it to the front of the gallery, marked with the accent outline. That
+thumbnail stays the same regardless of the active variant. The variant picker displays all
+images using the shared full-size viewer and respects NSFW settings. Shared
+artwork inherits an NSFW flag from any member before visibility filtering.
+Changing privacy settings closes an open gallery viewer. A group with
+shared artwork keeps its picker even when only one variant remains. Adding more
+variants preserves the existing gallery and each file's own tags.
+Standalone local mods also open the picker. Its header menu marks the mod NSFW,
+adds images, and browses for additional VPKs or archives using the same import
+checks. Clicking a local picker title edits the shared mod name directly in
+place. Local cards open the picker through View details and have no Ungroup
+variants action. Non-local
+pickers have no NSFW control or local actions menu. The add-variants import
+dialog inherits the mod's NSFW flag without showing a second control.
+Thumbnail context menus remove images or make one the mod thumbnail by
+moving it to the front of the gallery. They also reuse the standard image copy
+and open actions. Import thumbnails keep their inline controls.
+Existing catalogue thumbnails can be retained by reference without
+fetching them during gallery edits; uploaded images remain in managed storage.
+Unreadable gallery files are skipped, promoting the next readable image. An
+explicitly emptied gallery remains user-owned, so a delayed catalogue thumbnail
+fetch cannot restore removed artwork. Artwork does not prevent missing Sound
+previews from being fetched through the existing recognition flow.
+
 ## Installed hero detection
 
 Mod-section skin ownership comes from its category ancestry. Skins assigned directly to Skins without a hero category use the textual steps below, skipping VPK asset inspection. This runs when downloading or updating them and during installed classification, using each file's own original metadata. Explicit hero categories and manual assignments take precedence. Installed Sound, Wip, and HUD files use the same local detector, which can return several supported heroes. Recognize HUD descendants through the cached Mod category path, with saved-label fallback offline:

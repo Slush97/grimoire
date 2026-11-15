@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAppStore } from './appStore';
+import { useInstalledTagsStore } from './installedTagsStore';
+import { getInstallationScope } from '../lib/appSettings';
+import type { AppSettings, Mod } from '../types/mod';
+import type { ImportCustomModsBatchArgs } from '../types/electron';
+import { importCustomMods as sendImport } from '../lib/api';
 
 vi.mock('../i18n', () => ({
   default: { changeLanguage: vi.fn() },
@@ -115,5 +120,35 @@ describe('appStore batch import handoff', () => {
 
     state().setSuppressGlobalModDrop(false);
     expect(state().suppressGlobalModDrop).toBe(false);
+  });
+
+  it('assigns custom tags only to successful imported mods using their final ids', async () => {
+    const settings = { deadlockPath: '/game', devMode: false } as AppSettings;
+    useAppStore.setState({ settings });
+    const scope = getInstallationScope(settings)!;
+    useInstalledTagsStore.setState({ byScope: { [scope]: [{ id: 'favorite', name: 'Favorites', keys: [] }] } });
+    const mod = { id: 'enabled-id', localGroupId: 'new-group', sha256: 'hash' } as Mod;
+    const importCustomMods = vi.fn(async (_args: ImportCustomModsBatchArgs) => ({ mods: [mod], results: [
+      { vpkPath: 'ok.vpk', ok: true, imported: 1, importedModIds: [mod.id] },
+      { vpkPath: 'failed.vpk', ok: false, imported: 0 },
+    ] }));
+    vi.stubGlobal('window', { electronAPI: { platform: 'linux', importCustomMods } });
+    await state().importCustomMods([
+      { vpkPath: 'ok.vpk', name: 'Shared', customTagIds: ['favorite'] },
+      { vpkPath: 'failed.vpk', name: 'Failed', customTagIds: ['favorite'] },
+    ]);
+    expect(useInstalledTagsStore.getState().byScope[scope][0].keys).toEqual(['localgroup:new-group']);
+    expect(importCustomMods.mock.calls[0][0].items[0]).not.toHaveProperty('customTagIds');
+  });
+
+  it('compacts shared artwork without confusing an existing group with a new batch key', async () => {
+    const importCustomMods = vi.fn(async (_args: ImportCustomModsBatchArgs) => ({ mods: [], results: [] }));
+    vi.stubGlobal('window', { electronAPI: { platform: 'linux', importCustomMods } });
+    await sendImport([
+      { vpkPath: 'first.vpk', name: 'First', localGroupId: 'same', galleryImages: ['first'] },
+      { vpkPath: 'second.vpk', name: 'Second', localGroupBatchKey: 'same', galleryImages: ['second'] },
+      { vpkPath: 'third.vpk', name: 'Second', localGroupBatchKey: 'same', galleryImages: ['second'] },
+    ]);
+    expect(importCustomMods.mock.calls[0][0].items.map(item => item.galleryImages)).toEqual([['first'], ['second'], []]);
   });
 });

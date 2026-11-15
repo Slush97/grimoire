@@ -522,6 +522,8 @@ interface AppState {
   /** Drop the solo-restore snapshot without touching enablement. */
   clearSoloRestore: () => void;
   editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
+  setLocalModGallery: (modId: string, images: string[]) => Promise<void>;
+  setModsNsfw: (modIds: string[], nsfw: boolean) => Promise<void>;
   /** Group local mods as variants of one mod, or take them back out. Resolves
    *  with the group they now share (null after a clear). */
   setLocalVariantGroup: (
@@ -1350,28 +1352,64 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearSoloRestore: () => set({ soloRestore: null }),
 
   editLocalMod: async (modId: string, args: EditLocalModArgs) => {
+    const scope = getInstallationScope(get().settings);
     const updated = await api.editLocalMod(modId, args);
+    if (scope !== getInstallationScope(get().settings)) return;
     // Renaming a member of a local variant group renames the whole group in
     // main, so mirror that here instead of leaving the siblings on their old
     // name until the next scan (the group card title reads from whichever
     // member is primary).
     const groupId = updated.localGroupId;
+    const sharedArtwork = updated.hasLocalGallery || get().mods.find(mod => mod.id === modId)?.hasLocalGallery;
     invalidateModsReads();
     set({
       mods: get().mods.map((m) => {
         if (m.id === modId) return updated;
-        if (!groupId || m.localGroupId !== groupId || m.name === updated.name) return m;
-        return { ...m, name: updated.name };
+        if (!groupId || m.localGroupId !== groupId) return m;
+        return { ...m, name: updated.name, nsfw: updated.nsfw, ...(sharedArtwork ? {
+          thumbnailUrl: updated.thumbnailUrl, hasLocalGallery: updated.hasLocalGallery,
+        } : {}) };
       }),
     });
   },
 
+  setModsNsfw: async (modIds, nsfw) => {
+    const scope = getInstallationScope(get().settings);
+    const mods = await api.setModsNsfw(modIds, nsfw);
+    if (scope !== getInstallationScope(get().settings)) return;
+    invalidateModsReads();
+    set({ mods });
+  },
+
+  setLocalModGallery: async (modId, images) => {
+    const target = get().mods.find(mod => mod.id === modId);
+    if (!target) throw new Error('Local mod not found');
+    const scope = getInstallationScope(get().settings);
+    const groupId = target.localGroupId ?? await get().setLocalVariantGroup([modId], { mode: 'mint' });
+    if (!groupId || scope !== getInstallationScope(get().settings)) throw new Error('The active installation changed');
+    let mods: Mod[];
+    try { mods = await api.setLocalModGallery(groupId, images); }
+    catch (error) {
+      const members = get().mods.filter(mod => mod.localGroupId === groupId);
+      if (!target.localGroupId && scope === getInstallationScope(get().settings)
+        && members.length === 1 && members[0].id === modId && !members[0].hasLocalGallery) {
+        await get().setLocalVariantGroup([modId], { mode: 'clear' }).catch(rollbackError =>
+          console.error('Failed to undo artwork grouping', rollbackError));
+      }
+      throw error;
+    }
+    if (scope !== getInstallationScope(get().settings)) return;
+    invalidateModsReads();
+    set({ mods });
+  },
+
   setLocalVariantGroup: async (modIds, target) => {
+    const tagScope = getInstallationScope(get().settings);
     try {
       const before = get().mods;
-      const tagScope = getInstallationScope(get().settings);
       const { groupId, mods } = await api.setLocalVariantGroup(modIds, target);
-      if (tagScope && tagScope === getInstallationScope(get().settings)) useInstalledTagsStore.getState().regroup(tagScope, before, mods);
+      if (tagScope !== getInstallationScope(get().settings)) return groupId;
+      if (tagScope) useInstalledTagsStore.getState().regroup(tagScope, before, mods);
       const plans = stablePreferencePlans(before, mods);
       const migrated = migrateStoredStableKeyPreferences(
         plans.preferencePlan,
@@ -1388,6 +1426,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       try {
         await migrateLockerImagePreferences(lockerImagePlan(before, mods));
+        if (tagScope !== getInstallationScope(get().settings)) return groupId;
         // The maps may already be loaded when grouping is invoked from Locker.
         // Refreshing is cheap compared with the image copies and keeps all
         // mounted surfaces on the canonical key immediately.
@@ -1406,7 +1445,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return groupId;
     } catch (err) {
-      set({ modsError: String(err) });
+      if (tagScope === getInstallationScope(get().settings)) set({ modsError: String(err) });
       throw err;
     }
   },
@@ -1480,12 +1519,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   importCustomMods: async (items) => {
+    const tagScope = getInstallationScope(get().settings);
     try {
-      const { mods, results } = await api.importCustomMods(items);
+      const { mods, results } = await api.importCustomMods(items.map(({ customTagIds: _tags, ...item }) => item));
       // Same generation bump as the single import: whatever landed must not be
       // overwritten by a scan taken before the copies finished.
+      const sameInstallation = tagScope === getInstallationScope(get().settings);
+      if (!sameInstallation) return results;
       invalidateModsReads();
       set({ mods });
+      if (tagScope && sameInstallation) {
+        results.forEach((result, index) => {
+          if (!result.ok) return;
+          const imported = mods.filter(mod => result.importedModIds?.includes(mod.id));
+          for (const tagId of items[index]?.customTagIds ?? []) {
+            useInstalledTagsStore.getState().setForMods(tagScope, tagId, imported, true);
+          }
+        });
+      }
       // Per-source failures come back in `results`, not as a throw, so the cap
       // check runs over them. The dialog shows each failed row inline; the
       // notice is what explains the cap itself (which no row-level message can).
@@ -1495,8 +1546,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       return results;
     } catch (err) {
       // A throw here means the whole batch never ran (no game path, empty list).
-      if (isEnableCapError(err)) { set({ modsNotice: enableCapNotice() }); }
-      else { set({ modsError: String(err) }); }
+      if (tagScope === getInstallationScope(get().settings)) {
+        if (isEnableCapError(err)) set({ modsNotice: enableCapNotice() });
+        else set({ modsError: String(err) });
+      }
       throw err;
     }
   },

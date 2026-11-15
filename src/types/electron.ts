@@ -335,6 +335,19 @@ export interface SaveDialogOptions {
     filters?: Array<{ name: string; extensions: string[] }>;
 }
 
+export interface PreparedLocalModMember {
+    fileName: string;
+    recognized: PeekImprintResult | null;
+    heroes: string[];
+    baseTags: string[];
+}
+
+export interface PreparedLocalModImport {
+    id: string;
+    size: number;
+    members: PreparedLocalModMember[];
+}
+
 export interface ImportCustomModArgs {
     vpkPath: string;
     name: string;
@@ -343,6 +356,12 @@ export interface ImportCustomModArgs {
     variantLabel?: string;
     thumbnailDataUrl?: string;
     nsfw?: boolean;
+    preparationId?: string;
+    /** Shared artwork is saved once under the resolved local group id. */
+    galleryImages?: string[];
+    tagChanges?: { add: ModTagOverrides; remove: ModTagOverrides };
+    /** Renderer-only assignments applied after the final imported ids arrive. */
+    customTagIds?: string[];
     /** Join this existing local variant group instead of standing alone. Every
      *  VPK this source yields gets the id, so a SINGLE-vpk source imported into
      *  a group joins it rather than collapsing it. Omitted for a normal import,
@@ -403,6 +422,7 @@ export interface ImportCustomModResult {
     ok: boolean;
     /** Mod slots this source produced (an archive can yield several). */
     imported: number;
+    importedModIds?: string[];
     /** Imported disabled; this source contains versions still needing consent. */
     needsReview?: boolean;
     /** Resolved local group id when this source was imported as a variant.
@@ -1125,6 +1145,11 @@ export interface ElectronAPI {
     ) => Promise<{ mods: Mod[]; failures: string[] }>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
     importCustomMods: (args: ImportCustomModsBatchArgs) => Promise<ImportCustomModsBatchResult>;
+    prepareLocalModImport: (path: string, requestId: string) => Promise<PreparedLocalModImport>;
+    releaseLocalModImport: (requestId: string) => Promise<void>;
+    getLocalModGallery: (groupId: string) => Promise<string[]>;
+    setLocalModGallery: (groupId: string, images: string[]) => Promise<Mod[]>;
+    setModsNsfw: (modIds: string[], nsfw: boolean) => Promise<Mod[]>;
     onImportCustomModsProgress: (
         callback: (progress: ImportCustomModsProgress) => void
     ) => () => void;

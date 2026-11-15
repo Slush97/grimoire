@@ -58,9 +58,9 @@ export function buildModEntries(mods: Mod[]): ModEntry[] {
     }
   }
   // Singletons (only one mod for a given group key) collapse back to single
-  // entries: the group concept only matters when there are 2+ variants.
+  // entries, except when its picker still owns a shared image gallery.
   for (const [groupKey, variants] of Array.from(byGroup.entries())) {
-    if (variants.length === 1) {
+    if (variants.length === 1 && !variants[0].hasLocalGallery) {
       singles.push(variants[0]);
       byGroup.delete(groupKey);
     }

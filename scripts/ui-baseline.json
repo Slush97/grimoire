@@ -9,9 +9,6 @@
     "raw-palette": 2,
     "em-dash": 4
   },
-  "src/components/ImportCustomModsModal.tsx": {
-    "raw-palette": 3
-  },
   "src/components/Layout.tsx": {
     "raw-palette": 1,
     "em-dash": 2

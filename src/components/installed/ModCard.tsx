@@ -1,8 +1,9 @@
+import { canJoinLocalVariantGroup } from '../../lib/localVariantEligibility';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import { RequirementWarning } from '../requirements/RequirementWarning';
-import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, ArrowLeftRight, Rotate3d } from 'lucide-react';
+import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, ArrowLeftRight, Rotate3d } from 'lucide-react';
 import type { EntrySwapTarget } from '../../lib/modEntries';
 import { MenuCheckboxItem, MenuContent, MenuItem, MenuLabel, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
@@ -36,7 +37,7 @@ import type { ModList } from '../../lib/modLists';
 import { ModListSubmenu } from './ModListMenu';
 import { Tag } from '../common/ui';
 import type { ViewMode } from '../common/PageComponents';
-import { GlobalLoadBadge, HeroTagLabel, HeroIconStack, RepairIssueIcons, FittingTagList, MetaTextChip } from './chips';
+import { GlobalLoadBadge, HeroTagLabel, HeroIconStack, RepairIssueIcons, FittingTagList, MetaTextChip, MOD_TAG_CHIP_CLASS, MOD_TAG_SURFACE_CLASS } from './chips';
 import { EMPTY_LIST_IDS } from './emptyIds';
 import { ModSafetyBadge } from '../ModSafety';
 import { CrashAdvisoryBadge } from '../CrashAdvisories';
@@ -101,6 +102,8 @@ interface ModCardProps {
    *  The rest need a manual extract or unmerge. */
   updatableSourceCount?: number;
   onOpenDetails?: () => void;
+  /** The card opens local files rather than a GameBanana page. */
+  opensPicker?: boolean;
   onOpenDoorStuck?: () => void;
   /** Pins this card in the 3D preview panel. */
   onPinPreview?: () => void;
@@ -120,7 +123,6 @@ interface ModCardProps {
   onSoloLaunch?: () => void;
   soloBusy?: boolean;
   onDelete: () => void;
-  onEditLocal?: () => void;
   /** Inline rename of a local mod's name (double-click the title). Undefined
    *  for GameBanana-sourced mods, which can't be renamed. */
   onRenameLocal?: (newName: string) => Promise<void>;
@@ -128,7 +130,6 @@ interface ModCardProps {
    *  GameBanana mod's files come from its submission. */
   onAddVariant?: () => void;
   /** Dissolve this local variant group. Passed only on local GROUP cards. */
-  onUngroupVariants?: () => void;
   /** Open the imprint details modal. Passed only when the mod's wire
    *  `imprinted` flag is true (the parent gates on it); shown in the card's
    *  right-click menu. */
@@ -715,6 +716,7 @@ export function ModCard({
   staleSourceCount = 0,
   updatableSourceCount = 0,
   onOpenDetails,
+  opensPicker = false,
   onOpenDoorStuck,
   onPinPreview,
   previewMetaKey,
@@ -727,10 +729,8 @@ export function ModCard({
   onSoloLaunch,
   soloBusy = false,
   onDelete,
-  onEditLocal,
   onRenameLocal,
   onAddVariant,
-  onUngroupVariants,
   onViewImprint,
   onSetTags,
   onSetPriority,
@@ -932,8 +932,8 @@ export function ModCard({
       : '';
   const chipMaxClass =
     viewMode === 'compact' ? 'max-w-[132px]' : viewMode === 'list' ? 'max-w-[148px]' : 'max-w-[170px]';
-  const baseChipClasses = `inline-flex h-[22px] min-w-0 ${chipMaxClass} items-center overflow-hidden rounded-md px-1.5 text-2xs font-semibold leading-none`;
-  const metaChipClasses = `${baseChipClasses} border border-hl/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
+  const baseChipClasses = `${MOD_TAG_CHIP_CLASS} ${chipMaxClass}`;
+  const metaChipClasses = `${baseChipClasses} ${MOD_TAG_SURFACE_CLASS}`;
   const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent`;
   const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
   const technicalMetaClasses = 'min-w-0 truncate font-mono text-2xs text-text-secondary/55 hover:text-text-secondary cursor-help';
@@ -1005,28 +1005,19 @@ export function ModCard({
   // Construct it only when Radix mounts the open menu, rather than on every
   // closed card's render.
   // A group card's click may open the picker, so its "View details" has its own handler.
-  const viewDetails = group ? group.onViewDetails : onOpenDetails;
+  const localGroup = !!group && canJoinLocalVariantGroup(mod);
+  const viewDetails = localGroup ? group.onOpenPicker : group ? group.onViewDetails : onOpenDetails;
   const hasTopActions =
-    !!onEditLocal || !!onAddVariant || !!onUngroupVariants || !!onOpenDetails || !!onViewAuthor
+    !!onAddVariant || !!onOpenDetails || !!onViewAuthor
     || !!cardImageSource || !!group;
   const hasSecondaryActions =
     !!onSoloLaunch || !!onSetPriority || !!onFixUnknown
     || !!(mod.merged && (onCopyShareCode || onUnmerge));
   const renderCardMenuItems = () => (
     <>
-      {onEditLocal && (
-        <MenuItem icon={Pencil} onSelect={onEditLocal}>
-          {t('installed.card.edit')}
-        </MenuItem>
-      )}
       {onAddVariant && (
         <MenuItem icon={FilePlus} onSelect={onAddVariant}>
           {t('installed.card.addVariant')}
-        </MenuItem>
-      )}
-      {onUngroupVariants && (
-        <MenuItem icon={Unlink} onSelect={onUngroupVariants}>
-          {t('installed.card.ungroupVariants')}
         </MenuItem>
       )}
       {viewDetails && (
@@ -1034,7 +1025,7 @@ export function ModCard({
           {t('installed.card.viewDetails')}
         </MenuItem>
       )}
-      {group && (
+      {group && !localGroup && (
         <MenuItem icon={Files} onSelect={group.onOpenPicker}>
           {t('installed.card.chooseFiles')}
         </MenuItem>
@@ -1390,7 +1381,7 @@ export function ModCard({
             onCommitPriority={onCommitPriority}
             loadPosition={loadPosition}
             loadCount={loadCount}
-            opensPicker={!!group?.opensPicker}
+            opensPicker={group?.opensPicker ?? opensPicker}
             group={group}
             variantStatusLabel={variantStatusLabel}
             variantStatusTitle={variantStatusTitle}
@@ -1538,7 +1529,7 @@ export function ModCard({
             audioOverlayClasses={audioOverlayClasses}
             audioPlayerClassName={audioPlayerClassName}
             onOpenDetails={onOpenDetails}
-            opensPicker={!!group?.opensPicker}
+            opensPicker={group?.opensPicker ?? opensPicker}
           />
         );
         })()}

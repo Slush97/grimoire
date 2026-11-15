@@ -18,7 +18,7 @@ export type LocalVariantSelectionEligibility =
  * server-owned grouping identity, but an existing explicit local group remains
  * user-managed if a re-import later discovers GameBanana provenance.
  */
-export function canJoinLocalVariantGroup(mod: Mod): boolean {
+export function canJoinLocalVariantGroup(mod: Pick<Mod, 'gameBananaId' | 'localGroupId' | 'merged'>): boolean {
   const hasGameBananaIdentity =
     typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0;
   return !mod.merged && (!!mod.localGroupId || !hasGameBananaIdentity);

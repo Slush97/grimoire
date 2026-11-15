@@ -24,6 +24,12 @@ const group = (variants: Mod[]): ModEntry => ({
   primary: variants[0], active: null, enabledVariants: [], totalSize: 1,
 });
 
+it('keeps a local gallery accessible when only one variant remains', () => {
+  const mod = { ...single({}).mod, gameBananaId: undefined, localGroupId: 'gallery', hasLocalGallery: true };
+  expect(buildModEntries([mod])[0].kind).toBe('group');
+  expect(buildModEntries([{ ...mod, hasLocalGallery: undefined }])[0].kind).toBe('single');
+});
+
 describe('hero swap targets', () => {
   const mod = (id: string, enabled: boolean, heroes: string[], extra: Partial<Mod> = {}): Mod => ({
     id, name: id, fileName: `${id}.vpk`, metaKey: `${id}.vpk`, path: '', size: 1,

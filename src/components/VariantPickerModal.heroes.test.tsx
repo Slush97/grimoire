@@ -3,16 +3,23 @@ import { act, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import VariantPickerModal from './VariantPickerModal';
-import type { Mod } from '../types/mod';
+import type { AppSettings, Mod } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
 import { useCategoryStore } from '../stores/categoryStore';
 import { buildCategoryPaths } from '../lib/categoryPaths';
 import { requestRequirementToggle, useRequirementsStore } from '../stores/requirementsStore';
 import soulUrn from '../assets/soul-urn.png';
+import { getLocalModGallery, readImageDataUrl, showOpenDialogMulti } from '../lib/api';
+
+vi.mock('../lib/api', async original => ({
+    ...await original<typeof import('../lib/api')>(),
+    getLocalModGallery: vi.fn(async () => []), readImageDataUrl: vi.fn(), showOpenDialogMulti: vi.fn(),
+}));
 
 vi.mock('react-i18next', () => ({
     initReactI18next: { type: '3rdParty', init: () => {} },
     useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
+    Trans: ({ i18nKey }: { i18nKey: string }) => <span>{i18nKey}</span>,
 }));
 
 const variant = (id: string, lockerHeroes: string[] = [], extra: Partial<Mod> = {}): Mod => ({
@@ -27,8 +34,11 @@ describe('variant hero indicators', () => {
     let props: ComponentProps<typeof VariantPickerModal>;
 
     beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getLocalModGallery).mockResolvedValue([]);
         vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
         useAppStore.getState().setLoadedGameModIds([]);
+        useAppStore.setState({ settings: null });
         useRequirementsStore.setState({ snapshots: {}, review: null, toggleReview: null, targets: [] });
         useCategoryStore.setState({ heroNames: [], heroByCategoryId: new Map(), pathsByModel: {} });
         host = document.createElement('div');
@@ -135,6 +145,189 @@ describe('variant hero indicators', () => {
         await render([first, variant('second', ['Wraith'])]);
         await act(async () => row('first').querySelector<HTMLButtonElement>('button[aria-pressed]')!.click());
         expect(props.onToggle).toHaveBeenCalledExactlyOnceWith(first, expect.any(Object));
+    });
+
+    const item = (key: string) => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(node => node.textContent === key)!;
+    const click = async (element: HTMLElement) => { await act(async () => element.click()); };
+    const openActions = async () => { await act(async () => document.querySelector('[aria-label="installed.card.moreActions"]')!
+        .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))); };
+    const openImageMenu = async (index: number) => {
+        const thumbnail = document.querySelectorAll('[aria-label="modDetails.images.viewFullSize"]')[index];
+        await act(async () => thumbnail.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 })));
+    };
+
+    it('keeps a single local file uncluttered and puts file additions in the header menu', async () => {
+        props = { ...props, onAddVariant: vi.fn(), onGalleryChange: vi.fn(async () => {}) };
+        await render([variant('local', [], { gameBananaId: undefined, thumbnailUrl: 'data:image/png;base64,old' })]);
+        const gallery = document.querySelector('[aria-label="installed.batchImport.gallery"]')!;
+        expect(gallery.className).toContain('overflow-x-auto');
+        expect(gallery.querySelector('.outline-accent')).toBeNull();
+        expect(gallery.querySelector('img')?.className).toContain('object-contain');
+        expect(document.querySelector('[aria-label="installed.batchImport.removeImage"]')).toBeNull();
+        expect(document.querySelector('[aria-label="installed.batchImport.thumbnailHint"]')).toBeNull();
+        expect(document.querySelector('[data-local-mod-drop]')).toBeNull();
+        vi.mocked(showOpenDialogMulti).mockResolvedValue(['/added.zip']);
+        await openActions(); await click(item('variantPicker.addFiles'));
+        expect(props.onAddVariant).toHaveBeenCalledExactlyOnceWith(['/added.zip']);
+        expect(showOpenDialogMulti).toHaveBeenCalledWith(expect.objectContaining({
+            filters: [{ name: 'common.fileTypes.vpkOrArchive', extensions: ['vpk', 'zip', '7z', 'rar'] }],
+        }));
+    });
+
+    it('appends selected images without duplicating existing artwork and promotes the next image when removed', async () => {
+        const first = 'data:image/png;base64,first'; const second = 'data:image/png;base64,second';
+        props = { ...props, onGalleryChange: vi.fn(async () => {}) };
+        vi.mocked(getLocalModGallery).mockResolvedValue([first, second]);
+        await render([variant('local', [], { localGroupId: 'artwork', thumbnailUrl: first })]);
+        vi.mocked(showOpenDialogMulti).mockResolvedValue(['/same.png', '/new.png']);
+        vi.mocked(readImageDataUrl).mockImplementation(async path => path === '/same.png' ? first : 'data:image/png;base64,new');
+        await openActions(); await click(item('variantPicker.addImages'));
+        expect(props.onGalleryChange).toHaveBeenLastCalledWith([first, second, 'data:image/png;base64,new']);
+        await openImageMenu(0); await click(item('common.actions.remove'));
+        expect(props.onGalleryChange).toHaveBeenLastCalledWith([second, 'data:image/png;base64,new']);
+    });
+
+    it('keeps the old gallery on a failed save and hides transport prefixes in the error', async () => {
+        const first = 'data:image/png;base64,first';
+        props = { ...props, onGalleryChange: vi.fn(async () => { throw new Error("Error invoking remote method 'set-local-mod-gallery': Error: Disk full"); }) };
+        await render([variant('local', [], { gameBananaId: undefined, thumbnailUrl: first })]);
+        await openImageMenu(0); await click(item('common.actions.remove'));
+        expect(document.querySelector('[role="alert"]')?.textContent).toBe('Disk full');
+        expect(document.querySelector<HTMLImageElement>('[aria-label="installed.batchImport.gallery"] img')?.src).toBe(first);
+    });
+
+    it('uses a thumbnail context action to select the card image through gallery order', async () => {
+        const images = ['data:image/png;base64,first', 'data:image/png;base64,second'];
+        props = { ...props, onGalleryChange: vi.fn(async () => {}) };
+        vi.mocked(getLocalModGallery).mockResolvedValue(images);
+        await render([variant('local', [], { localGroupId: 'artwork' })]);
+        await openImageMenu(1);
+        expect(item('imageContextMenu.copyImage')).toBeDefined();
+        expect(item('imageContextMenu.copyImageAddress')).toBeDefined();
+        await click(item('variantPicker.makeCardThumbnail'));
+        expect(props.onGalleryChange).toHaveBeenCalledExactlyOnceWith([images[1], images[0]]);
+        expect(document.querySelector<HTMLImageElement>('[aria-label="installed.batchImport.gallery"] img')?.src).toBe(images[1]);
+        expect(document.querySelector('[aria-label="installed.batchImport.gallery"] .outline-accent')).toBeNull();
+    });
+
+    it('leaves keyboard focus inside a portaled thumbnail menu', async () => {
+        props = { ...props, onGalleryChange: vi.fn(async () => {}) };
+        await render([variant('local', [], { gameBananaId: undefined, thumbnailUrl: 'data:image/png;base64,first' })]);
+        await openImageMenu(0);
+        const remove = item('common.actions.remove');
+        await act(async () => remove.focus());
+        await act(async () => remove.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })));
+        expect(document.activeElement?.closest('[role="menu"]')).not.toBeNull();
+    });
+
+    it('toggles NSFW for the whole mod and reflects the persisted flags', async () => {
+        props = { ...props, onNsfwChange: vi.fn(async () => {}) };
+        const mods = [variant('first', [], { localGroupId: 'local' }), variant('second', [], { localGroupId: 'local' })];
+        await render(mods); await openActions();
+        const toggle = () => document.querySelector<HTMLElement>('[role="menuitemcheckbox"]')!;
+        expect(toggle().getAttribute('aria-checked')).toBe('false');
+        await click(toggle()); expect(props.onNsfwChange).toHaveBeenLastCalledWith(true);
+        await render(mods.map(mod => ({ ...mod, nsfw: true })));
+        expect(toggle().getAttribute('aria-checked')).toBe('true');
+        await click(toggle()); expect(props.onNsfwChange).toHaveBeenLastCalledWith(false);
+    });
+
+    it('omits the actions menu for non-local mods even when given an NSFW callback', async () => {
+        props = { ...props, onNsfwChange: vi.fn(async () => {}) };
+        await render([variant('remote')]);
+        expect(document.querySelector('[aria-label="installed.card.moreActions"]')).toBeNull();
+    });
+
+    it('renames local mods from the title once and lets Escape cancel without closing', async () => {
+        let finish!: () => void;
+        props = { ...props, onRenameMod: vi.fn(() => new Promise<void>(resolve => { finish = resolve; })) };
+        const mods = [variant('local', [], { gameBananaId: undefined })];
+        await render(mods);
+        const title = () => document.querySelector<HTMLButtonElement>('[title="variantPicker.renameMod"]')!;
+        await click(title());
+        const input = () => document.querySelector<HTMLSpanElement>('[aria-label="variantPicker.renameMod"]')!;
+        expect(document.activeElement).toBe(input());
+        expect(window.getSelection()?.toString()).toBe(mods[0].name);
+        expect(input().tagName).toBe('SPAN');
+        await act(async () => {
+            input().textContent = 'New name';
+            input().dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await act(async () => input().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })));
+        expect(props.onRenameMod).toHaveBeenCalledExactlyOnceWith('New name');
+        await act(async () => finish());
+        props = { ...props, modName: 'New name' };
+        await render(mods.map(mod => ({ ...mod, name: 'New name' })));
+        expect(title().textContent).toBe('New name');
+        await click(title());
+        await act(async () => input().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+        expect(props.onRenameMod).toHaveBeenCalledOnce();
+        expect(props.onClose).not.toHaveBeenCalled();
+        expect(title().textContent).toBe('New name');
+    });
+
+    it('keeps the completed gallery write when a late thumbnail read returns', async () => {
+        const first = 'data:image/png;base64,first'; const second = 'data:image/png;base64,second';
+        let finishSave!: () => void; let finishRead!: (images: string[]) => void;
+        props = { ...props, onGalleryChange: vi.fn(() => new Promise<void>(resolve => { finishSave = resolve; })) };
+        vi.mocked(getLocalModGallery).mockResolvedValue([first, second]);
+        await render([variant('local', [], { localGroupId: 'artwork', thumbnailUrl: first })]);
+        await openImageMenu(0); await click(item('common.actions.remove'));
+        vi.mocked(getLocalModGallery).mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+        await render([variant('local', [], { localGroupId: 'artwork', thumbnailUrl: second })]);
+        await act(async () => finishSave());
+        await act(async () => finishRead([first, second]));
+        const images = [...document.querySelectorAll<HTMLImageElement>('[aria-label="installed.batchImport.gallery"] img')];
+        expect(images.map(image => image.src)).toEqual([second]);
+    });
+
+    it('accepts the minted group identity when saving the first artwork on a standalone file', async () => {
+        const image = 'data:image/png;base64,new';
+        let finishSave!: () => void; let finishRead!: (images: string[]) => void;
+        props = { ...props, onGalleryChange: vi.fn(() => new Promise<void>(resolve => { finishSave = resolve; })) };
+        await render([variant('local', [], { gameBananaId: undefined })]);
+        vi.mocked(showOpenDialogMulti).mockResolvedValue(['/new.png']);
+        vi.mocked(readImageDataUrl).mockResolvedValue(image);
+        await openActions(); await click(item('variantPicker.addImages'));
+        vi.mocked(getLocalModGallery).mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+        await render([variant('local', [], { gameBananaId: undefined, localGroupId: 'minted', thumbnailUrl: image, hasLocalGallery: true })]);
+        await act(async () => finishSave());
+        await act(async () => finishRead([]));
+        expect(document.querySelector<HTMLImageElement>('[aria-label="installed.batchImport.gallery"] img')?.src).toBe(image);
+        await openImageMenu(0);
+        expect(item('common.actions.remove').hasAttribute('data-disabled')).toBe(false);
+    });
+
+    it('closes an open NSFW viewer when privacy settings change and does not reopen it', async () => {
+        const settings = { nsfwContentMode: 'show', revealNsfwOnHover: false } as AppSettings;
+        props = { ...props, onGalleryChange: vi.fn(async () => {}) };
+        useAppStore.setState({ settings });
+        await render([variant('local', [], { gameBananaId: undefined, nsfw: true, thumbnailUrl: 'data:image/png;base64,nsfw' })]);
+        await click(document.querySelector<HTMLButtonElement>('[aria-label="modDetails.images.viewFullSize"]')!);
+        expect(document.querySelector('[aria-label="modDetails.images.fullSizeAria"]')).not.toBeNull();
+        await act(async () => useAppStore.setState({ settings: { ...settings, nsfwContentMode: 'blur' } }));
+        expect(document.querySelector('[aria-label="modDetails.images.fullSizeAria"]')).toBeNull();
+        await act(async () => useAppStore.setState({ settings }));
+        expect(document.querySelector('[aria-label="modDetails.images.fullSizeAria"]')).toBeNull();
+    });
+
+    it('uses the shared full-screen viewer and closes it before the picker on Escape', async () => {
+        const images = ['data:image/png;base64,first', 'data:image/png;base64,second'];
+        vi.mocked(getLocalModGallery).mockResolvedValue(images);
+        await render([variant('local', [], { localGroupId: 'artwork' })]);
+        await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="modDetails.images.viewFullSize"]')!.click());
+        const viewer = () => document.querySelector<HTMLElement>('[aria-label="modDetails.images.fullSizeAria"]');
+        expect(viewer()?.className).toContain('fixed inset-0');
+        expect(viewer()?.querySelector('.modal-panel')).toBeNull();
+        const overlay = viewer();
+        await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true })));
+        expect(viewer()).toBe(overlay);
+        expect(viewer()?.querySelector<HTMLImageElement>('[data-lightbox-viewport] img')?.src).toBe(images[1]);
+        await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })));
+        expect(viewer()).toBeNull();
+        expect(props.onClose).not.toHaveBeenCalled();
+        await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })));
+        expect(props.onClose).toHaveBeenCalledOnce();
     });
 
     it('asks once across row changes and asks again after the picker is reopened', async () => {

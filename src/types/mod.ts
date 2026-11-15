@@ -662,6 +662,8 @@ export interface Mod {
   description?: string;
   thumbnailUrl?: string;
   audioUrl?: string;
+  /** Runtime marker for a managed gallery, including an explicitly empty one. */
+  hasLocalGallery?: boolean;
   gameBananaId?: number;
   gameBananaFileId?: number;
   vpkIndex?: number;

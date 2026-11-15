@@ -67,6 +67,23 @@ describe('Installed hero swap lifecycle', () => {
     expect(useAppStore.getState().toggleMod).not.toHaveBeenCalled();
   });
 
+  it('keeps a local file open while it gains a group and loses its last sibling', async () => {
+    await render([incoming]);
+    await act(async () => swap.setPickerGroupId(entryFor(incoming.id).key));
+    expect(swap.pickerEntry?.kind).toBe('single');
+    const grouped = { ...incoming, localGroupId: 'artwork', hasLocalGallery: true };
+    await render([grouped]);
+    expect(swap.pickerGroupId).toBe('local:artwork');
+    expect(swap.pickerEntry?.kind).toBe('group');
+    const sibling = mod('sibling', false, 'artwork');
+    await render([grouped, sibling]);
+    await render([sibling]);
+    expect(swap.pickerEntry?.kind).toBe('single');
+    expect(swap.pickerEntry && entryFor(sibling.id).key).toBe(swap.pickerEntry?.key);
+    await render([]);
+    expect(swap.pickerEntry).toBeUndefined();
+  });
+
   it('defers swapping a variant group and leaves the old mod enabled on cancellation', async () => {
     const first = mod('first', false, 'new'); const second = mod('second', false, 'new');
     await render([first, second, outgoing]);
@@ -76,6 +93,44 @@ describe('Installed hero swap lifecycle', () => {
     expect(useAppStore.getState().swapMods).not.toHaveBeenCalled();
     await act(async () => swap.setPickerGroupId(null));
     expect(useAppStore.getState().swapMods).not.toHaveBeenCalled();
+  });
+
+  it('does not follow a recycled pak slot into an unrelated local mod', async () => {
+    await render([incoming]);
+    await act(async () => swap.setPickerGroupId(entryFor(incoming.id).key));
+    await render([{ ...incoming, sha256: 'unrelated', name: 'Another mod' }]);
+    expect(swap.pickerEntry).toBeUndefined();
+  });
+
+  it('keeps an unhashed local picker open when an intentional rename stamps its first hash', async () => {
+    const original = { ...incoming, sha256: undefined };
+    await render([original]);
+    await act(async () => swap.setPickerGroupId(entryFor(original.id).key));
+    const renamed = { ...original, name: 'Renamed', sha256: 'stamped' };
+    await act(async () => swap.renamePickerMod(original, renamed.name, () => render([renamed])));
+    expect(swap.pickerEntry?.kind).toBe('single');
+    expect(swap.pickerEntry?.kind === 'single' && swap.pickerEntry.mod.name).toBe('Renamed');
+    await render([{ ...renamed, name: 'Unrelated', sha256: 'other' }]);
+    expect(swap.pickerEntry).toBeUndefined();
+  });
+
+  it('does not choose arbitrarily between duplicate stable identities', async () => {
+    await render([incoming]);
+    await act(async () => swap.setPickerGroupId(entryFor(incoming.id).key));
+    await render([
+      { ...incoming, id: 'moved-one' },
+      { ...incoming, id: 'moved-two' },
+    ]);
+    expect(swap.pickerEntry).toBeUndefined();
+  });
+
+  it('follows an unhashed standalone file when its first artwork stamps its identity', async () => {
+    const unhashed = { ...incoming, sha256: undefined };
+    await render([unhashed]);
+    await act(async () => swap.setPickerGroupId(entryFor(unhashed.id).key));
+    await render([{ ...unhashed, sha256: 'new-hash', localGroupId: 'minted', hasLocalGallery: true }]);
+    expect(swap.pickerGroupId).toBe('local:minted');
+    expect(swap.pickerEntry?.kind).toBe('group');
   });
 
   it('swaps the chosen variant, then returns the picker to ordinary independent toggles', async () => {

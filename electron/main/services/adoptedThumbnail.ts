@@ -1,5 +1,6 @@
 import { fetchModDetails } from './gamebanana';
 import { getModMetadata, setModMetadata } from './metadata';
+import { hasLocalModGallery } from './lockerModImages';
 
 /**
  * One queued best-effort thumbnail fetch for a mod whose gamebananaId was just
@@ -35,6 +36,11 @@ export interface AdoptedThumbnailTarget {
  */
 export async function fetchAdoptedThumbnail(target: AdoptedThumbnailTarget): Promise<void> {
     try {
+        const before = getModMetadata(target.metaKey);
+        if (!before || target.expectedSha256 && before.sha256 !== target.expectedSha256
+            || before.gameBananaId !== target.gameBananaId) return;
+        const needsThumbnail = !before.thumbnailUrl && !(before.localGroupId && hasLocalModGallery(before.localGroupId));
+        if (!needsThumbnail && (target.section !== 'Sound' || before.audioUrl)) return;
         const details = await fetchModDetails(target.gameBananaId, target.section);
         const thumbnail = details.previewMedia?.images?.[0];
         const thumbnailUrl = thumbnail
@@ -47,12 +53,11 @@ export async function fetchAdoptedThumbnail(target: AdoptedThumbnailTarget): Pro
         if (!current) return;
         if (target.expectedSha256 && current.sha256 !== target.expectedSha256) return;
         if (current.gameBananaId !== target.gameBananaId) return;
-        if (current.thumbnailUrl) return;
-
-        setModMetadata(target.metaKey, {
-            ...(thumbnailUrl ? { thumbnailUrl } : {}),
-            ...(audioUrl ? { audioUrl } : {}),
-        });
+        const patch = {
+            ...(thumbnailUrl && !current.thumbnailUrl && !(current.localGroupId && hasLocalModGallery(current.localGroupId)) ? { thumbnailUrl } : {}),
+            ...(audioUrl && !current.audioUrl ? { audioUrl } : {}),
+        };
+        if (Object.keys(patch).length) setModMetadata(target.metaKey, patch);
     } catch (err) {
         console.warn(
             `[adoptedThumbnail] Best-effort thumbnail fetch failed for ${target.metaKey}:`,
