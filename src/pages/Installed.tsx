@@ -26,7 +26,6 @@ import {
   rectSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
-  verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
@@ -139,7 +138,8 @@ import { ManageModListsModal } from '../components/installed/ManageModListsModal
 import { InstalledProfilesMenu } from '../components/installed/InstalledProfilesMenu';
 import { Button, IconButton } from '../components/common/ui';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
-import { EmptyState, ConfirmModal, type ViewMode } from '../components/common/PageComponents';
+import type { InstalledWindowView as ViewMode } from '../components/installed/installedWindowing';
+import { EmptyState, ConfirmModal } from '../components/common/PageComponents';
 import { InstalledSection } from '../components/installed/InstalledSection';
 import { InstalledListGroups } from '../components/installed/InstalledListGroups';
 import { InstalledListSelectionMenu } from '../components/installed/InstalledListControls';
@@ -236,7 +236,7 @@ const SortableEntryCard = memo(function SortableEntryCard({
     isDragging,
   } = useSortable({ id: cardProps.entry.key, disabled: sortableDisabled });
 
-  const shell = entryCardShell(cardProps.viewMode === 'list');
+  const shell = entryCardShell();
   const style: CSSProperties = {
     ...shell.style,
     ...(!renderContent ? { height: '100%' } : {}),
@@ -267,7 +267,7 @@ const SortableEntryCard = memo(function SortableEntryCard({
 /** Lists-view grid item: the same shell as SortableEntryCard, without dnd-kit. */
 const StaticEntryCard = memo(function StaticEntryCard(cardProps: InstalledEntryCardProps) {
   return (
-    <div data-installed-entry-key={cardProps.entry.key} {...entryCardShell(cardProps.viewMode === 'list')}>
+    <div data-installed-entry-key={cardProps.entry.key} {...entryCardShell()}>
       <InstalledEntryCard {...cardProps} />
     </div>
   );
@@ -758,17 +758,7 @@ export default function Installed() {
     () => visibleMods.filter(isImprintPending).length,
     [visibleMods]
   );
-  // Layout = the user's structural choice (cards grid vs horizontal list).
-  const [layout, setLayout] = useState<'grid' | 'list'>(() => {
-    const stored = localStorage.getItem('installedLayout');
-    if (stored === 'grid' || stored === 'list') return stored;
-    // Migrate from the old three-mode key: only 'list' carried structure.
-    return localStorage.getItem('installedViewMode') === 'list' ? 'list' : 'grid';
-  });
   const [cardSizeMultiplier, setCardSizeMultiplierState] = useState(readInstalledCardSizeMultiplier);
-  useEffect(() => {
-    localStorage.setItem('installedLayout', layout);
-  }, [layout]);
   const setCardSizeMultiplier = useCallback((nextMultiplier: number) => {
     const clampedMultiplier = clampCardSizeMultiplier(nextMultiplier);
     setCardSizeMultiplierState(clampedMultiplier);
@@ -778,12 +768,7 @@ export default function Installed() {
     () => getCardSizeGridStyle(cardSizeMultiplier),
     [cardSizeMultiplier]
   );
-  const viewMode: ViewMode =
-    layout === 'list'
-      ? 'list'
-      : cardSizeMultiplier < CARD_SIZE_COMPACT_MULTIPLIER
-        ? 'compact'
-        : 'grid';
+  const viewMode: ViewMode = cardSizeMultiplier < CARD_SIZE_COMPACT_MULTIPLIER ? 'compact' : 'grid';
   // Locker overrides (hero cards + ability sounds) live off the mod list in
   // citadel/grimoire. The toolbar icon opens the manage popup; the badge shows
   // how many are applied. Count is fetched on mount (covers changes made over
@@ -3440,12 +3425,8 @@ export default function Installed() {
 
   const renderEntryCard = (entry: ModEntry) => <InstalledEntryCard {...cardPropsFor(entry)} />;
 
-  const gridClasses =
-    layout === 'list' ? 'space-y-1.5' : viewMode === 'compact' ? 'grid gap-3' : 'grid gap-4';
-  const gridStyle =
-    layout === 'list'
-      ? undefined
-      : cardSizeGridStyle;
+  const gridClasses = viewMode === 'compact' ? 'grid gap-3' : 'grid gap-4';
+  const gridStyle = cardSizeGridStyle;
 
   const renderSortableSection = (section: DragSection) => {
     const entries = previewEntriesForSection(section);
@@ -3468,7 +3449,7 @@ export default function Installed() {
       >
         <SortableContext
           items={section === 'enabled' ? enabledSortableKeys : disabledSortableKeys}
-          strategy={layout === 'list' ? verticalListSortingStrategy : rectSortingStrategy}
+          strategy={rectSortingStrategy}
         >
           <InstalledVirtualGrid
             entries={entries}
@@ -3623,7 +3604,7 @@ export default function Installed() {
                 setSourceSel(['gamebanana', 'local']); setStatusSel(['enabled', 'disabled']);
                 setHeroFilter([]); setTagFilter([]); setExcludedTagFilter([]); setListFilter([]);
               }} />
-            <InstalledOptionsMenu layout={layout} onLayoutChange={setLayout}
+            <InstalledOptionsMenu
               cardSizeMultiplier={cardSizeMultiplier} onCardSizeChange={setCardSizeMultiplier}
               cardSizeRange={{ min: CARD_SIZE_MULTIPLIER_MIN, max: CARD_SIZE_MULTIPLIER_MAX, step: CARD_SIZE_MULTIPLIER_STEP }}
               lockerOverrideCount={lockerOverrideCount} onLockerOverrides={() => setLockerOverridesOpen(true)}

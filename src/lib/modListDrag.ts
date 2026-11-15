@@ -40,7 +40,7 @@ export function listDropSlotIndex(entries: readonly ModEntry[], incoming: ModEnt
 export interface ListCardRect { left: number; top: number; width: number; height: number }
 
 /** Use layout boxes rather than animated transforms, so the slot cannot chase moving cards. */
-export function listPointerIndex(cards: readonly ListCardRect[], point: { x: number; y: number }, rows: boolean): number {
+export function listPointerIndex(cards: readonly ListCardRect[], point: { x: number; y: number }): number {
   if (!cards.length) return 0;
   if (point.y > Math.max(...cards.map(card => card.top + card.height))) return cards.length;
   let nearest = 0;
@@ -54,6 +54,6 @@ export function listPointerIndex(cards: readonly ListCardRect[], point: { x: num
     }
   });
   const card = cards[nearest];
-  const after = rows ? point.y > card.top + card.height / 2 : point.x > card.left + card.width / 2;
+  const after = point.x > card.left + card.width / 2;
   return nearest + Number(after);
 }

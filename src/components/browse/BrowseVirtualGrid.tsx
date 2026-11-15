@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { browseModKey, browseModSection } from '../../lib/browseSections';
 import type { GameBananaMod } from '../../types/gamebanana';
-import type { BrowseLayout } from '../../stores/appStore';
-import type { BrowseCardDesign, ViewMode } from './cardGeometry';
+import type { BrowseCardDesign } from './cardGeometry';
 import { MemoizedModCard } from './BrowseModCard';
 
 const BROWSE_GRID_OVERSCAN_ROWS = 4;
@@ -57,8 +56,6 @@ type BrowseVirtualGridProps = {
   columnWidth: number;
   cardHeight: number;
   gridGap: number;
-  layout: BrowseLayout;
-  viewMode: ViewMode;
   cardDesign: BrowseCardDesign;
   cardSize: number;
   installedIds: Set<string>;
@@ -89,8 +86,6 @@ export const BrowseVirtualGrid = memo(function BrowseVirtualGrid({
   columnWidth,
   cardHeight,
   gridGap,
-  layout,
-  viewMode,
   cardDesign,
   cardSize,
   installedIds,
@@ -136,15 +131,12 @@ export const BrowseVirtualGrid = memo(function BrowseVirtualGrid({
           <div
             key={virtualRow.key}
             data-index={virtualRow.index}
-            className={layout === 'list' ? 'absolute left-0 top-0 w-full' : 'absolute left-0 top-0 grid w-full'}
+            className="absolute left-0 top-0 grid w-full"
             style={{
               transform: `translateY(${virtualRow.start}px)`,
               height: `${cardHeight}px`,
-              gridTemplateColumns:
-                layout === 'list'
-                  ? undefined
-                  : `repeat(${columnCount}, minmax(0, 1fr))`,
-              gap: layout === 'list' ? undefined : `${gridGap}px`,
+              gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+              gap: `${gridGap}px`,
             }}
           >
             {rowMods.map((mod) => {
@@ -163,7 +155,6 @@ export const BrowseVirtualGrid = memo(function BrowseVirtualGrid({
                     installedDisabled={!!installedLocal && !installedLocal.enabled}
                     downloading={downloadingModId === mod.id}
                     queuePosition={queuedState?.position}
-                    viewMode={viewMode}
                     cardDesign={cardDesign}
                     cardSize={cardSize}
                     cardWidth={columnWidth}

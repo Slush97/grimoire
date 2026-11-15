@@ -550,7 +550,7 @@ export function ModalHeader({
 // styles (underline vs pill) collapse to one.
 // ============================================================================
 
-/** Joined single-selection tabs for Browse and Installed view options. */
+/** Joined single-selection tabs for view options. */
 export function ViewOptionControl<T extends string>({
     label,
     value,

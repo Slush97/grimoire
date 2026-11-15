@@ -224,13 +224,11 @@ async function migrateLockerImagePreferences(
 // Browse-page UI state. Kept in the store (not local component state) so it
 // survives navigation away from /browse and back — user complaint: search
 // query, view mode, and filters all reset when switching pages.
-export type BrowseLayout = 'grid' | 'list';
 export type { BrowseSortOption } from '../lib/browseSections';
 
 export type BrowseTimeRange = 'all' | 'today' | 'week' | 'month' | 'custom';
 export interface BrowseUiState {
   search: string;
-  layout: BrowseLayout;
   sort: BrowseSortOption;
   section: string;
   selectedSections: BrowseSections;
@@ -273,26 +271,9 @@ export interface BrowseArtistRef {
 // layout + sort behave like preferences. Cache them in localStorage so they
 // survive app restarts. The rest of BrowseUiState is session-only: search
 // queries and filters shouldn't follow across launches.
-const LAYOUT_KEY = 'browseLayout';
 const SORT_KEY = 'browseSort';
 const SOUND_VOLUME_KEY = 'grimoire:sound-preview-volume';
-// Pre-slider key holding 'grid' | 'compact' | 'dense' | 'list'. Read once for
-// migration so existing users keep a comparable layout and card size.
-const LEGACY_VIEW_MODE_KEY = 'browseViewMode';
-
 const SORT_OPTIONS: BrowseSortOption[] = ['default', 'popular', 'recent', 'updated', 'views', 'name'];
-
-function readPersistedLayout(): BrowseLayout {
-  try {
-    const stored = localStorage.getItem(LAYOUT_KEY);
-    if (stored === 'grid' || stored === 'list') return stored;
-    // Migrate from the old four-mode key: only 'list' carried structure.
-    if (localStorage.getItem(LEGACY_VIEW_MODE_KEY) === 'list') return 'list';
-  } catch {
-    // localStorage may be unavailable (e.g. SSR, restricted contexts).
-  }
-  return 'grid';
-}
 
 function readPersistedSort(): BrowseSortOption {
   try {
@@ -321,7 +302,6 @@ function readPersistedSoundVolume(): number {
 
 const DEFAULT_BROWSE_UI: BrowseUiState = {
   search: '',
-  layout: readPersistedLayout(),
   sort: readPersistedSort(),
   section: 'Mod',
   selectedSections: ['Mod'],
@@ -1642,9 +1622,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set({ browseUi: next });
     try {
-      if (partial.layout !== undefined) {
-        localStorage.setItem(LAYOUT_KEY, partial.layout);
-      }
       if (partial.sort !== undefined) {
         localStorage.setItem(SORT_KEY, partial.sort);
       }

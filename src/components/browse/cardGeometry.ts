@@ -1,6 +1,3 @@
-import type { BrowseLayout } from '../../stores/appStore';
-
-export type ViewMode = 'grid' | 'list';
 export type BrowseCardDesign = 'classic' | 'readable';
 
 export const BROWSE_READABLE_CARD_GOLDEN = 280;
@@ -35,10 +32,8 @@ function estimateReadableCardBodyHeight(density: BrowseReadableDensity, innerWid
 
 export function estimateBrowseRowHeight(
   columnWidth: number,
-  layout: BrowseLayout,
   cardDesign: BrowseCardDesign
 ): number {
-  if (layout === 'list') return 112;
   if (cardDesign === 'classic') {
     return Math.ceil(columnWidth * (2 / 3));
   }

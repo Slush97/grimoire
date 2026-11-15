@@ -14,7 +14,6 @@ import {
   LayoutGrid,
   Grid3x3,
   Grid2x2,
-  List,
   AlertTriangle,
   Funnel,
   ArrowDownUp,
@@ -63,7 +62,7 @@ import { getPrimaryFile, isModOutdated } from '../types/gamebanana';
 import {
   useAppStore,
 } from '../stores/appStore';
-import type { BrowseTimeRange, BrowseLayout, BrowseArtistRef, BrowseSortOption as SortOption } from '../stores/appStore';
+import type { BrowseTimeRange, BrowseArtistRef, BrowseSortOption as SortOption } from '../stores/appStore';
 import type { NsfwContentMode, HiddenCreator, HiddenMod } from '../types/mod';
 import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -94,7 +93,6 @@ import {
   getReadableCardGridGap,
   getReadableCardTargetWidth,
   type BrowseCardDesign,
-  type ViewMode,
 } from '../components/browse/cardGeometry';
 import { usePrefersReducedMotion } from '../components/browse/cardUtils';
 
@@ -339,7 +337,7 @@ export default function Browse() {
   );
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
-  const { search, layout, sort, section, selectedSections, addedWithin, addedFrom, addedTo, onlyNsfw, heroCategoryId, extendedHeroMatching, categoryId, submitter, hiddenCreatorOverrideId } = browseUi;
+  const { search, sort, section, selectedSections, addedWithin, addedFrom, addedTo, onlyNsfw, heroCategoryId, extendedHeroMatching, categoryId, submitter, hiddenCreatorOverrideId } = browseUi;
   const heroMatchingMode = typeof heroCategoryId === 'number' && extendedHeroMatching;
   const sectionStamp = selectedSections.slice().sort().join(',');
   const combinedFeed = selectedSections.length > 1;
@@ -350,9 +348,7 @@ export default function Browse() {
   const [browseViewportMetrics, setBrowseViewportMetrics] = useState<BrowseViewportMetrics>(DEFAULT_BROWSE_VIEWPORT_METRICS);
   const [browseCardSizeMultiplier, setBrowseCardSizeMultiplierState] = useState(readBrowseCardSizeMultiplier);
   const browseCardSize = getResponsiveBrowseCardSize(browseViewportMetrics, browseCardSizeMultiplier);
-  const viewMode: ViewMode = layout === 'list' ? 'list' : 'grid';
   const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
-  const setLayout = useCallback((v: BrowseLayout) => setBrowseUi({ layout: v }), [setBrowseUi]);
   const setSort = useCallback((v: SortOption) => setBrowseUi({ sort: v }), [setBrowseUi]);
   const setSection = useCallback((v: string) => setBrowseUi({ section: v }), [setBrowseUi]);
   const setAddedWithin = useCallback((v: BrowseTimeRange) => setBrowseUi({ addedWithin: v }), [setBrowseUi]);
@@ -2063,28 +2059,12 @@ export default function Browse() {
   }, [selectedMod, installedMods, loadMods]);
 
   const readableCardTargetWidth = getReadableCardTargetWidth(browseCardSize);
-  const gridGap =
-    layout === 'list'
-      ? 12
-      : browseCardDesign === 'readable'
-        ? getReadableCardGridGap(readableCardTargetWidth)
-        : 12;
-  const columnMinWidth =
-    layout === 'list'
-      ? Math.max(1, browseViewportMetrics.containerWidth - 32)
-      : browseCardDesign === 'readable'
-        ? readableCardTargetWidth
-        : browseCardSize;
+  const gridGap = browseCardDesign === 'readable' ? getReadableCardGridGap(readableCardTargetWidth) : 12;
+  const columnMinWidth = browseCardDesign === 'readable' ? readableCardTargetWidth : browseCardSize;
   const contentWidth = Math.max(columnMinWidth, browseViewportMetrics.containerWidth - 32);
-  const virtualColumnCount =
-    layout === 'list'
-      ? 1
-      : Math.max(1, Math.floor((contentWidth + gridGap) / (columnMinWidth + gridGap)));
-  const virtualColumnWidth =
-    layout === 'list'
-      ? contentWidth
-      : Math.floor((contentWidth - gridGap * (virtualColumnCount - 1)) / virtualColumnCount);
-  const virtualCardHeight = estimateBrowseRowHeight(virtualColumnWidth, layout, browseCardDesign);
+  const virtualColumnCount = Math.max(1, Math.floor((contentWidth + gridGap) / (columnMinWidth + gridGap)));
+  const virtualColumnWidth = Math.floor((contentWidth - gridGap * (virtualColumnCount - 1)) / virtualColumnCount);
+  const virtualCardHeight = estimateBrowseRowHeight(virtualColumnWidth, browseCardDesign);
   const virtualRowHeight = virtualCardHeight + gridGap;
   // Keep all fetched records; only complete filtered rows are revealed below.
   // Hide outdated mods if the user has opted in.
@@ -2503,20 +2483,7 @@ export default function Browse() {
                 className="p-3"
               >
                 <div className={BROWSE_MENU_SECTIONS_CLASS}>
-                  <div>
-                    <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
-                    <ViewOptionControl<BrowseLayout>
-                      label={t('browse.viewOptions.layout')}
-                      value={layout}
-                      onChange={setLayout}
-                      options={[
-                        { value: 'grid', label: t('browse.viewOptions.grid'), icon: LayoutGrid },
-                        { value: 'list', label: t('browse.viewOptions.list'), icon: List },
-                      ]}
-                    />
-                  </div>
-
-                  <div className={`space-y-3 ${layout === 'list' ? 'opacity-45' : ''}`}>
+                  <div className="space-y-3">
                     <div>
                       <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardSize')}</div>
                       <div className="flex items-center gap-2">
@@ -2527,7 +2494,7 @@ export default function Browse() {
                           max={BROWSE_CARD_SIZE_MULTIPLIER_MAX}
                           step={BROWSE_CARD_SIZE_MULTIPLIER_STEP}
                           value={browseCardSizeMultiplier}
-                          disabled={layout === 'list'}
+
                           onChange={(e) => setBrowseCardSizeMultiplier(Number(e.currentTarget.value))}
                           aria-label={t('browse.viewOptions.cardSize')}
                           aria-valuetext={`${browseCardSizeMultiplier.toFixed(2)}x card size`}
@@ -2540,7 +2507,7 @@ export default function Browse() {
                     <div>
                       <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
                       <ViewOptionControl<BrowseCardDesign>
-                        disabled={layout === 'list'}
+
                         label={t('browse.viewOptions.cardDesign')}
                         value={browseCardDesign}
                         onChange={setBrowseCardDesign}
@@ -2882,7 +2849,7 @@ export default function Browse() {
                 aria-live="polite"
               >
                 {Array.from({ length: Math.min(completeBrowseRowCount(perPage, virtualColumnCount, true) || virtualColumnCount, virtualColumnCount * 6) }).map((_, i) => (
-                  <ModCardSkeleton key={i} viewMode={viewMode} cardDesign={browseCardDesign} height={virtualCardHeight} index={i} />
+                  <ModCardSkeleton key={i} cardDesign={browseCardDesign} height={virtualCardHeight} index={i} />
                 ))}
               </div>
             );
@@ -2934,8 +2901,6 @@ export default function Browse() {
               columnWidth={virtualColumnWidth}
               cardHeight={virtualCardHeight}
               gridGap={gridGap}
-              layout={layout}
-              viewMode={viewMode}
               cardDesign={browseCardDesign}
               cardSize={browseCardSize}
               installedIds={installedItemKeys}

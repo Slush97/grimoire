@@ -48,7 +48,7 @@ describe('installed card menu mounting', () => {
         id: 'test', name: 'Test mod', fileName: 'pak01_dir.vpk', enabled: true,
         priority: 1, size: 100, installedAt: '2026-10-10T10:00:00Z',
       },
-      viewMode: 'list', hideNsfwPreviews: true, soundVolume: 0, conflicts: [], entryKey: 'test',
+      viewMode: 'grid', hideNsfwPreviews: true, soundVolume: 0, conflicts: [], entryKey: 'test',
       onToggle: vi.fn(), onDelete: vi.fn(), onSetTags: vi.fn(),
     };
   });
@@ -72,7 +72,7 @@ describe('installed card menu mounting', () => {
     }
   }
 
-  it.each(['grid', 'list'] as const)('opens a single-file local mod from its %s card', async viewMode => {
+  it.each(['grid', 'compact'] as const)('opens a single-file local mod from its %s card', async viewMode => {
     const mod: Mod = { ...input.mod, id: 'local', name: 'Local mod', metaKey: 'local.vpk', path: '/addons/local.vpk' };
     const onOpen = vi.fn();
     const noop = vi.fn(async () => {});
@@ -135,7 +135,7 @@ describe('installed card menu mounting', () => {
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('shows a dynamic hero once in %s cards', async viewMode => {
+  it.each(['grid', 'compact'] as const)('shows a dynamic hero once in %s cards', async viewMode => {
     useCategoryStore.setState({
       heroByCategoryId: new Map([[2, 'Solomon']]), heroNames: ['Solomon'],
       pathsByModel: { ModCategory: buildCategoryPaths([{
@@ -254,7 +254,7 @@ describe('installed card menu mounting', () => {
     expect(input.onToggle).not.toHaveBeenCalled();
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('places repair icons before hero and category tags in %s cards', async viewMode => {
+  it.each(['grid', 'compact'] as const)('places repair icons before hero and category tags in %s cards', async viewMode => {
     input = { ...input, viewMode, mod: { ...input.mod, lockerHeroes: ['Abrams'], categoryName: 'Skins',
       outdatedVdata: [{ entry: 'scripts/heroes.vdata_c', missing: 1, sample: ['field'] }],
       staleModels: [{ entry: 'models/hero.vmdl_c', attachments: ['aim'] }],
@@ -283,7 +283,7 @@ describe('installed card menu mounting', () => {
     expect(host.querySelector('[data-issue-stack]')).toBeNull();
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('groups the requirements icon with repair icons before taxonomy in %s cards', async viewMode => {
+  it.each(['grid', 'compact'] as const)('groups the requirements icon with repair icons before taxonomy in %s cards', async viewMode => {
     input = { ...input, viewMode, mod: { ...input.mod, gameBananaId: 1, lockerHeroes: ['Abrams'], categoryName: 'Skins',
       outdatedVdata: [{ entry: 'scripts/heroes.vdata_c', missing: 1, sample: ['field'] }],
       staleModels: [{ entry: 'models/hero.vmdl_c', attachments: ['aim'] }],
@@ -315,7 +315,7 @@ describe('installed card menu mounting', () => {
     expect(requirementsOnly.querySelectorAll('svg')).toHaveLength(1);
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('places the hover swap button directly after More actions in %s', async viewMode => {
+  it.each(['grid', 'compact'] as const)('places the hover swap button directly after More actions in %s', async viewMode => {
     input = { ...input, viewMode, mod: { ...input.mod, enabled: false, lockerHeroes: ['Haze'] },
       swapTargets: [{ key: 'old', name: 'Current Haze skin', heroNames: ['Haze'] }], onSwap: vi.fn(async () => {}) };
     await act(async () => root.render(<ModCard {...input} />));
@@ -478,7 +478,7 @@ describe('installed card menu mounting', () => {
     expect(onOpenPicker).toHaveBeenCalledOnce();
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('shows every grouped hero and puts additional %s tags in a mouse tooltip', async viewMode => {
+  it.each(['grid', 'compact'] as const)('shows every grouped hero and puts additional %s tags in a mouse tooltip', async viewMode => {
     const originalBounds = HTMLElement.prototype.getBoundingClientRect;
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
       if (this.hasAttribute('data-fitting-tags')) return DOMRect.fromRect({ width: 70, height: 22 });
@@ -515,7 +515,7 @@ describe('installed card menu mounting', () => {
     expect(host.querySelector('img[src*="haze"]')).toBeNull();
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('keeps single-hero Sound portrait art and image actions in %s', async viewMode => {
+  it.each(['grid', 'compact'] as const)('keeps single-hero Sound portrait art and image actions in %s', async viewMode => {
     const copyImage = vi.spyOn(imageActions, 'copyImageToClipboard').mockResolvedValue();
     const primary = { ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', lockerHeroes: ['Wraith'] };
     const earlier = { ...primary, id: 'earlier', enabled: false, lockerHeroes: ['Wraith'] };
@@ -540,7 +540,7 @@ describe('installed card menu mounting', () => {
     expect(copyImage).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('/locker/heroes/Wraith_Render.png'));
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('uses the normal Sound preview for a multihero file in %s', async viewMode => {
+  it.each(['grid', 'compact'] as const)('uses the normal Sound preview for a multihero file in %s', async viewMode => {
     input = { ...input, viewMode, mod: {
       ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', lockerHeroes: ['Haze', 'Wraith'],
     } };
@@ -554,7 +554,7 @@ describe('installed card menu mounting', () => {
       .some(item => item.textContent === 'imageContextMenu.image')).toBe(false);
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('does not choose a first portrait when Sound variants affect different heroes in %s', async viewMode => {
+  it.each(['grid', 'compact'] as const)('does not choose a first portrait when Sound variants affect different heroes in %s', async viewMode => {
     const primary = { ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', lockerHeroes: ['Wraith'] };
     const earlier = { ...primary, id: 'earlier', enabled: false, lockerHeroes: ['Haze'] };
     input = { ...input, viewMode, mod: primary, group: {
@@ -567,7 +567,7 @@ describe('installed card menu mounting', () => {
     expect(host.querySelector('img[src*="wraith.png"]')).not.toBeNull();
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('retains explicit thumbnail art for a multihero Sound in %s', async viewMode => {
+  it.each(['grid', 'compact'] as const)('retains explicit thumbnail art for a multihero Sound in %s', async viewMode => {
     const thumbnailUrl = 'https://example.invalid/authored-thumbnail.png';
     input = { ...input, viewMode, mod: {
       ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', thumbnailUrl, lockerHeroes: ['Haze', 'Wraith'],
@@ -580,7 +580,7 @@ describe('installed card menu mounting', () => {
       .some(item => item.textContent === 'imageContextMenu.image')).toBe(true);
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('does not borrow a sibling Sound hero for an unresolved %s representative', async viewMode => {
+  it.each(['grid', 'compact'] as const)('does not borrow a sibling Sound hero for an unresolved %s representative', async viewMode => {
     const primary = { ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', lockerHeroes: [] };
     const earlier = { ...primary, id: 'earlier', enabled: false, lockerHeroes: ['Haze'] };
     input = { ...input, viewMode, mod: primary, group: {

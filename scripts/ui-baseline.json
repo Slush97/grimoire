@@ -41,7 +41,7 @@
     "raw-palette": 4
   },
   "src/components/browse/BrowseModCard.tsx": {
-    "em-dash": 3
+    "em-dash": 2
   },
   "src/components/browse/cardUtils.ts": {
     "em-dash": 1

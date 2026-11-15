@@ -29,15 +29,15 @@ import { getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED } from '../..
 import { getInstalledDefaultTaxonomy, getInstalledGroupTaxonomy, installedBaseTagOptions, sortInstalledTags } from '../../lib/installedCardTaxonomy';
 import { baseTagHasLockerDestination } from '../../lib/categoryPaths';
 import { Pin, Vault } from 'lucide-react';
-import { formatRelativeDate, formatAbsoluteDate } from '../../lib/dates';
+import { formatAbsoluteDate } from '../../lib/dates';
 import { formatBytes } from '../../lib/formatBytes';
 import { shakeElement } from '../../lib/shakeElement';
 import { canOpenImageSource, copyImageToClipboard, resolveImageSource } from '../../lib/imageActions';
 import type { ModList } from '../../lib/modLists';
 import { ModListSubmenu } from './ModListMenu';
 import { Tag } from '../common/ui';
-import type { ViewMode } from '../common/PageComponents';
-import { GlobalLoadBadge, HeroTagLabel, HeroIconStack, RepairIssueIcons, FittingTagList, MetaTextChip, MOD_TAG_CHIP_CLASS, MOD_TAG_SURFACE_CLASS } from './chips';
+import type { InstalledWindowView as ViewMode } from './installedWindowing';
+import { GlobalLoadBadge, HeroTagLabel, HeroIconStack, RepairIssueIcons, FittingTagList, MOD_TAG_CHIP_CLASS, MOD_TAG_SURFACE_CLASS } from './chips';
 import { EMPTY_LIST_IDS } from './emptyIds';
 import { ModSafetyBadge } from '../ModSafety';
 import { CrashAdvisoryBadge } from '../CrashAdvisories';
@@ -356,29 +356,6 @@ function ModMediaPreview({
   );
 }
 
-interface ModListRowContentProps {
-  mod: ModCardProps['mod'];
-  taxonomy: ReturnType<typeof getInstalledGroupTaxonomy>;
-  hideNsfwPreviews: boolean;
-  soundVolume: number;
-  onOpenDetails?: () => void;
-  staleSourceCount: number;
-  updatableSourceCount: number;
-  onCommitPriority?: (newPosition: number) => Promise<void>;
-  loadPosition?: number;
-  loadCount?: number;
-  opensPicker: boolean;
-  group?: ModCardProps['group'];
-  variantStatusLabel: string | null;
-  variantStatusTitle: string;
-  metaChipClasses: string;
-  manualTagChipClasses: string;
-  dangerInlineChipClasses: string;
-  technicalMetaClasses: string;
-  favorite: boolean;
-  actions: ReactNode;
-}
-
 function InstalledTaxonomyChips({
   taxonomy,
   className,
@@ -412,177 +389,6 @@ function MergeSourceUpdateTag({ staleCount, updatableCount, variant }: {
     title={title}>
     {t('profiles.actions.update')}
   </Tag>;
-}
-
-function ModListRowContent({
-  mod,
-  taxonomy,
-  hideNsfwPreviews,
-  soundVolume,
-  onOpenDetails,
-  staleSourceCount,
-  updatableSourceCount,
-  onCommitPriority,
-  loadPosition,
-  loadCount,
-  opensPicker,
-  group,
-  variantStatusLabel,
-  variantStatusTitle,
-  metaChipClasses,
-  manualTagChipClasses,
-  dangerInlineChipClasses,
-  technicalMetaClasses,
-  favorite,
-  actions,
-}: ModListRowContentProps) {
-  const { t } = useTranslation();
-  const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
-  const canOpen = !!onOpenDetails;
-  const listHeroName = isSound && !mod.thumbnailUrl
-    ? taxonomy.previewHeroName
-    : null;
-  const listHeroRenderUrl = listHeroName ? getHeroRenderPath(listHeroName) : null;
-  const listHeroFacePosX = listHeroName ? getHeroFacePosition(listHeroName).x : 50;
-
-  return (
-    <>
-      <div className="flex min-w-0 items-center justify-start">
-        {mod.enabled && mod.priorityMod ? (
-          <GlobalLoadBadge variant="inline" />
-        ) : mod.enabled ? (
-          <span data-card-action="true">
-            <PriorityEditor
-              modName={mod.name}
-              value={loadPosition ?? mod.priority}
-              max={loadCount ?? 99}
-              variant="inline"
-              onCommit={onCommitPriority}
-            />
-          </span>
-        ) : (
-          <span className="inline-flex h-5 items-center rounded border border-hl/[0.06] bg-bg-tertiary/60 px-1.5 text-2xs font-semibold text-text-secondary/70">
-            {t('installed.card.off')}
-          </span>
-        )}
-      </div>
-
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenDetails?.();
-        }}
-        disabled={!canOpen}
-        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-bg-tertiary border border-hl/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
-          mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
-        }`}
-        aria-label={canOpen ? (opensPicker ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined}
-        data-card-action="true"
-        data-mod-drag-surface
-        draggable={false}
-        onDragStart={stopMediaDrag}
-      >
-        {listHeroRenderUrl ? (
-          <RevealImage
-            src={listHeroRenderUrl}
-            alt={listHeroName ?? mod.name}
-            draggable={false}
-            className="installed-card-media-zoom block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-installed-hover:scale-[1.03]"
-            style={{ objectPosition: `${listHeroFacePosX}% 25%` }}
-          />
-        ) : isSound && !mod.thumbnailUrl ? (
-          <SoundPlaceholder />
-        ) : (
-          <ModThumbnail
-            src={mod.thumbnailUrl}
-            movementFx={mod.movementFx}
-            alt={mod.name}
-            nsfw={mod.nsfw}
-            hideNsfw={hideNsfwPreviews}
-            className="w-full h-full"
-            enableImageContextMenu={false}
-            imageClassName="installed-card-media-zoom origin-center transition-transform duration-200 group-enabled:group-installed-hover:scale-[1.03]"
-            mergedSources={mod.merged?.sources}
-            forgeInstalled={!!mod.forgeInstall}
-            width={56}
-            height={40}
-          />
-        )}
-        {canOpen && (
-          <div className="installed-card-media-overlay pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-installed-hover:bg-bg-primary/20" />
-        )}
-      </button>
-
-      <div className="grid min-w-0">
-        <h3 className="min-w-0 truncate text-[13px] font-semibold leading-[22px] text-text-primary" title={mod.name}>
-          {mod.name}
-        </h3>
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
-          <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
-          <CrashAdvisoryBadge modIds={mod.crashModIds ?? [mod.id]} />
-          <MergeSourceUpdateTag staleCount={staleSourceCount} updatableCount={updatableSourceCount}
-            variant="inline" />
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
-          {favorite && <Star role="img" aria-label={t('installed.card.favorite')} className="h-4 w-4 shrink-0 fill-current text-accent" />}
-          <RequirementWarning mod={mod}>{(icon, title) => <RepairIssueIcons
-            outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} models={mod.staleModels}
-            requirement={{ icon, title }} />}</RequirementWarning>
-          {!mod.enabled && mod.priorityMod && (
-            <MetaTextChip
-              label={t('installed.priority.chip')}
-              className={manualTagChipClasses}
-              title={t('installed.priority.hint')}
-            />
-          )}
-          <InstalledTaxonomyChips taxonomy={taxonomy} className={metaChipClasses} />
-          {mod.nsfw && (
-            <MetaTextChip label="18+" className={dangerInlineChipClasses} />
-          )}
-          <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
-          <span className="flex-shrink-0 tabular-nums" title={t('installed.card.installedAt', { date: formatAbsoluteDate(mod.installedAt) })}>
-            {formatRelativeDate(mod.installedAt)}
-          </span>
-          {group && (
-            <span
-              className="inline-flex flex-shrink-0 items-center gap-1 tabular-nums text-text-secondary"
-              title={variantStatusTitle}
-            >
-              <Files className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
-              {variantStatusLabel}
-            </span>
-          )}
-          {!group && (
-            <span className={technicalMetaClasses} title={mod.fileName}>
-              {mod.fileName}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="ml-auto flex min-w-0 items-center justify-end gap-3">
-        {isSound && (
-          <div
-            className="hidden w-48 min-w-0 flex-shrink items-center rounded-md border border-hl/[0.06] bg-bg-secondary/45 px-2 py-1 opacity-85 transition-opacity duration-200 group-hover/card:opacity-100 lg:flex"
-            data-card-action="true"
-            data-mod-drag-ignore
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <AudioPreviewPlayer
-              src={mod.audioUrl!}
-              compact
-              variant="inline"
-              volume={soundVolume}
-              className="w-full gap-2 [&>button:first-of-type]:h-6 [&>button:first-of-type]:w-6 [&>div]:h-1 [&>span]:text-[10px]"
-            />
-          </div>
-        )}
-        {actions}
-      </div>
-    </>
-  );
 }
 
 export function ModCard({
@@ -790,15 +596,9 @@ export function ModCard({
     }
   };
 
-  const stateClasses = hasConflicts
-    ? 'bg-state-warning/5 border-state-warning/45'
-    : mod.enabled
-      ? 'bg-bg-tertiary border-hl/[0.08] installed-hover:border-hl/[0.14] installed-hover:bg-bg-secondary'
-      : 'bg-bg-tertiary/85 border-hl/[0.08] text-text-primary/80 installed-hover:border-hl/[0.14] installed-hover:bg-bg-secondary installed-hover:text-text-primary';
-
   // Glass surface for grid/compact cards: a translucent base over which a
   // blurred copy of the cover art (see glassBackdropUrl) bleeds, so the card
-  // is tinted by its own thumbnail. List view keeps the solid stateClasses.
+  // is tinted by its own thumbnail.
   const glassStateClasses = hasConflicts
     ? 'border-state-warning/45 bg-state-warning/[0.07] premium-card-glow premium-card-glow-warning'
     : mod.enabled
@@ -809,18 +609,15 @@ export function ModCard({
   // that read as cards-behind-the-card. Uses only neutral surface/border
   // tokens so it stays correct under any accent color the user picks.
   // Suppressed in compact view (cards are too small for the offset to look
-  // intentional) and in list view (the card is a horizontal strip).
+  // intentional).
   const mergedStackShadow =
     mod.merged && viewMode === 'grid'
       ? 'shadow-[3px_3px_0_0_var(--color-bg-secondary),3px_3px_0_1px_var(--color-border),6px_6px_0_0_var(--color-bg-secondary),6px_6px_0_1px_var(--color-border)] mr-1.5 mb-1.5'
       : '';
   const chipMaxClass =
-    viewMode === 'compact' ? 'max-w-[132px]' : viewMode === 'list' ? 'max-w-[148px]' : 'max-w-[170px]';
+    viewMode === 'compact' ? 'max-w-[132px]' : 'max-w-[170px]';
   const baseChipClasses = `${MOD_TAG_CHIP_CLASS} ${chipMaxClass}`;
   const metaChipClasses = `${baseChipClasses} ${MOD_TAG_SURFACE_CLASS}`;
-  const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent`;
-  const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
-  const technicalMetaClasses = 'min-w-0 truncate font-mono text-2xs text-text-secondary/55 hover:text-text-secondary cursor-help';
   const utilityActionClasses = 'inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer disabled:opacity-60';
   // Keyboard focus reveals actions without leaving mouse-clicked buttons visible.
   // Invisible buttons cannot receive pointer clicks, but remain reachable with Tab.
@@ -830,20 +627,15 @@ export function ModCard({
   const toggleTrackClasses = `relative h-6 w-11 rounded-full transition-colors duration-200 ${
     mod.enabled ? 'bg-accent shadow-[0_0_0_1px_rgba(255,122,47,0.25)]' : 'bg-bg-tertiary border border-border group-hover/toggle:border-hl/20'
   }`;
-  const isList = viewMode === 'list';
   const isCompact = viewMode === 'compact';
-  const quickActionSizeClasses = isList ? '' : '@max-[240px]/installed-card:hidden';
+  const quickActionSizeClasses = '@max-[240px]/installed-card:hidden';
   // Cover-art source for the glass backdrop. Skipped when NSFW previews are
   // hidden so we never bleed hidden imagery, even blurred.
   const glassBackdropUrl =
-    !isList && mod.thumbnailUrl && !(mod.nsfw && hideNsfwPreviews)
+    mod.thumbnailUrl && !(mod.nsfw && hideNsfwPreviews)
       ? mod.thumbnailUrl
       : null;
-  const shellClasses = isList
-    ? 'grid min-h-[58px] grid-cols-[32px_56px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-0'
-    : isCompact
-      ? 'flex h-full flex-col gap-0 p-2'
-      : 'flex h-full flex-col gap-0 p-2';
+  const shellClasses = 'flex h-full flex-col gap-0 p-2';
   const mediaSpacingClasses = isCompact ? 'mb-2' : 'mb-1.5';
   const mediaFrameClasses = isCompact ? 'h-[116px]' : 'aspect-video';
   const audioOverlayClasses = isCompact
@@ -1111,7 +903,7 @@ export function ModCard({
             <button
               type="button"
               onClick={(e) => e.stopPropagation()}
-              className={`${utilityActionClasses} ${selectMode ? 'hidden' : `${isList ? '' : hoverRevealClasses} aria-expanded:opacity-100 aria-expanded:pointer-events-auto`}`}
+              className={`${utilityActionClasses} ${selectMode ? 'hidden' : `${hoverRevealClasses} aria-expanded:opacity-100 aria-expanded:pointer-events-auto`}`}
               title={t('installed.card.moreActions')}
               aria-label={t('installed.card.moreActionsFor', { name: mod.name })}
               data-card-action="true"
@@ -1188,9 +980,9 @@ export function ModCard({
         }
       }}
       onContextMenu={captureContextImage}
-      className={`installed-card @container/installed-card group/card relative isolate rounded-xl border ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
+      className={`installed-card @container/installed-card group/card relative isolate rounded-xl border ${glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
     >
-      <div className={isList ? 'contents' : ''}>
+      <div>
         {(selectMode || selectionPreview) && (
         <>
           {/* Full-card click target. Sits above thumbnail button, toggle, and
@@ -1215,31 +1007,6 @@ export function ModCard({
         </>
         )}
 
-        {isList ? (
-          <ModListRowContent
-            mod={mod}
-            taxonomy={cardTaxonomy}
-            hideNsfwPreviews={hideNsfwPreviews}
-            soundVolume={soundVolume}
-            onOpenDetails={onOpenDetails}
-            staleSourceCount={staleSourceCount}
-            updatableSourceCount={updatableSourceCount}
-            onCommitPriority={onCommitPriority}
-            loadPosition={loadPosition}
-            loadCount={loadCount}
-            opensPicker={group?.opensPicker ?? opensPicker}
-            group={group}
-            variantStatusLabel={variantStatusLabel}
-            variantStatusTitle={variantStatusTitle}
-            metaChipClasses={metaChipClasses}
-            manualTagChipClasses={manualTagChipClasses}
-            dangerInlineChipClasses={dangerInlineChipClasses}
-            technicalMetaClasses={technicalMetaClasses}
-            favorite={favorite}
-            actions={actions}
-          />
-        ) : (
-        <>
         {glassBackdropUrl && (
           <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-xl">
             <RevealImage
@@ -1402,8 +1169,6 @@ export function ModCard({
             </div>
           </div>
         </div>
-      </>
-        )}
       </div>
 
     </div>
