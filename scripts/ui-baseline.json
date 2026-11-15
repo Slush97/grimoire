@@ -2,9 +2,6 @@
   "src/components/AudioPreviewPlayer.tsx": {
     "em-dash": 2
   },
-  "src/components/DownloadQueueIndicator.tsx": {
-    "raw-palette": 2
-  },
   "src/components/ImportCollectionModal.tsx": {
     "raw-palette": 2,
     "em-dash": 4

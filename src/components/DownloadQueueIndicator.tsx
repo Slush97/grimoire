@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, Replace, X, ChevronUp, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -22,6 +22,8 @@ import {
 interface DownloadQueueIndicatorProps {
     className?: string;
 }
+type QueueView = 'collapsed' | 'preview' | 'expanded';
+
 interface SpeedSample {
     target: string;
     time: number;
@@ -57,6 +59,30 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
         progress: downloadActivity.current ? downloadActivity.progress : null,
     };
     const [isExpanded, setIsExpanded] = useState(false);
+    const [collapsing, setCollapsing] = useState(false);
+    const [hovered, setHovered] = useState(false);
+    const [keyboardFocused, setKeyboardFocused] = useState(false);
+    const frameRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const viewsRef = useRef<Record<QueueView, HTMLDivElement | null>>({ collapsed: null, preview: null, expanded: null });
+    const restoreFocusRef = useRef(false);
+    const panelId = useId();
+    const view: QueueView = isExpanded ? 'expanded' : !collapsing && (hovered || keyboardFocused) ? 'preview' : 'collapsed';
+    const changeExpanded = (expanded: boolean) => {
+        restoreFocusRef.current = !!frameRef.current?.contains(document.activeElement);
+        if (!expanded) {
+            setHovered(false);
+            setCollapsing(true);
+        } else setCollapsing(false);
+        setIsExpanded(expanded);
+    };
+    useEffect(() => {
+        if (!collapsing) return;
+        const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        // Match the frame's duration-300 transition, including reduced motion.
+        const timer = window.setTimeout(() => setCollapsing(false), reducedMotion ? 0 : 300);
+        return () => window.clearTimeout(timer);
+    }, [collapsing]);
     const [cancellingQueued, setCancellingQueued] = useState(false);
     const [serverStatus, setServerStatus] = useState<DownloadServerStatusData | null>(null);
 
@@ -166,7 +192,46 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
         return remaining / currentSpeed;
     }, [queueState.progress, currentSpeed]);
 
-    if (totalItems === 0 && !preparingUpdates) return null;
+    const visible = totalItems > 0 || preparingUpdates;
+    if (!visible && (hovered || keyboardFocused)) {
+        setHovered(false);
+        setKeyboardFocused(false);
+    }
+
+    useLayoutEffect(() => {
+        const frame = frameRef.current;
+        const content = viewsRef.current[view];
+        if (!visible || !frame || !content) return;
+        // Each view retains its own intrinsic layout. Only the clipping frame
+        // changes size, so text never reflows during the size transition.
+        const transitionEnds = performance.now() + 300;
+        const measure = (contentChanged = false) => {
+            const bounds = content.getBoundingClientRect();
+            const width = `${Math.ceil(bounds.width)}px`;
+            const height = `${Math.ceil(bounds.height)}px`;
+            if (frame.style.width === width && frame.style.height === height) return;
+            const instant = contentChanged && performance.now() >= transitionEnds;
+            if (instant) frame.style.transitionProperty = 'none';
+            frame.style.width = width;
+            frame.style.height = height;
+            if (instant) {
+                // Commit content-driven sizes immediately without affecting view transitions.
+                frame.getBoundingClientRect();
+                frame.style.transitionProperty = '';
+            }
+        };
+        measure();
+        if (restoreFocusRef.current) {
+            restoreFocusRef.current = false;
+            const target = view === 'expanded' ? content.querySelector('button') : triggerRef.current;
+            target?.focus({ preventScroll: true });
+        }
+        const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => measure(true));
+        observer?.observe(content);
+        return () => observer?.disconnect();
+    }, [view, visible]);
+
+    if (!visible) return null;
 
     const currentFileName =
         queueState.currentDownload?.fileName ?? (preparingUpdates || queueState.queue.length > 0
@@ -187,69 +252,59 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
             : t('downloadQueue.serverAutomatic', { server: currentServerStatus.server })
         : '';
 
-    return (
-        <div className={`pointer-events-auto ${className}`}>
-            {/* Collapsed view: compact panel with filename + percent and an
-                inline progress bar across the bottom edge. Clicking opens
-                the expanded panel with its download controls. */}
-            {!isExpanded && (
-                <div
-                    className="group relative flex w-80 items-stretch overflow-hidden rounded-2xl border border-hl/10 bg-bg-secondary/95 text-left shadow-lg shadow-black/40 backdrop-blur-md transition-colors hover:border-accent/40 hover:bg-bg-tertiary/90"
-                >
-                    <button
-                        type="button"
-                        onClick={() => setIsExpanded(true)}
-                        className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 cursor-pointer text-left"
-                        title={t('downloadQueue.showDetails')}
-                    >
-                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent/15">
-                            {queueState.currentDownload || preparingUpdates ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
-                            ) : manualRequests.length > 0 ? (
-                                <Replace className="h-3.5 w-3.5 text-accent" />
-                            ) : (
-                                <Download className="h-3.5 w-3.5 text-accent" />
-                            )}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                            <div className="truncate text-[13px] font-medium leading-tight text-text-primary" title={currentTooltip}>
-                                {currentFileName}
-                            </div>
-                            <div className="mt-0.5 flex items-center gap-1.5 text-2xs text-text-secondary">
-                                {queueState.currentDownload && <span className="tabular-nums">{progressPercentRounded}%</span>}
-                                {currentSpeed > 0 && (
-                                    <>
-                                        <span className="opacity-50">·</span>
-                                        <span className="tabular-nums">{formatSpeed(currentSpeed)}</span>
-                                    </>
-                                )}
-                                {totalItems > 1 && (
-                                    <>
-                                        <span className="opacity-50">·</span>
-                                        <span>{t('downloadQueue.remainingQueued', { count: totalItems - 1 })}</span>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                        <ChevronUp className="h-4 w-4 flex-shrink-0 text-text-secondary opacity-0 transition-opacity group-hover:opacity-100" />
-                    </button>
-                    <span
-                        aria-hidden
-                        className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-hl/5"
-                    >
-                        <span
-                            className="block h-full bg-accent transition-[width] duration-200 ease-out"
-                            style={{ width: `${progressPercent}%` }}
-                        />
-                    </span>
-                </div>
-            )}
+    const activityIcon = queueState.currentDownload || preparingUpdates
+        ? <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+        : manualRequests.length > 0 ? <Replace className="h-3.5 w-3.5 text-accent" />
+            : <Download className="h-3.5 w-3.5 text-accent" />;
+    const summary = [
+        queueState.currentDownload ? `${progressPercentRounded}%` : '',
+        currentSpeed > 0 ? formatSpeed(currentSpeed) : '',
+        totalItems > 1 ? t('downloadQueue.remainingQueued', { count: totalItems - 1 }) : '',
+    ].filter(Boolean).join(' · ');
+    const layerClasses = 'absolute bottom-0 right-0 transition-opacity duration-200 ease-in-out motion-reduce:transition-none';
+    const contentLimit = 'max-w-[min(20rem,calc(100vw-2rem))]';
 
-            {/* Expanded panel: opens upward (transform-origin-bottom) so the
-                compact view stays anchored to the corner. Shows full progress detail
-                + the queue. */}
-            {isExpanded && (
-                <div className="w-80 rounded-2xl border border-hl/10 bg-bg-secondary/95 shadow-2xl shadow-black/50 backdrop-blur-md animate-fade-in">
+    return (
+        <div className={`pointer-events-auto ${className}`}
+            onPointerEnter={event => { if (event.pointerType !== 'touch' && !collapsing) setHovered(true); }}
+            onPointerLeave={() => setHovered(false)}
+            onPointerDownCapture={() => setKeyboardFocused(false)}
+            onFocusCapture={event => setKeyboardFocused(event.target.matches(':focus-visible'))}
+            onBlurCapture={event => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setKeyboardFocused(false);
+            }}
+            onKeyDown={event => {
+                if (event.key === 'Escape' && isExpanded) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    changeExpanded(false);
+                }
+            }}>
+            <div ref={frameRef} data-download-view={view}
+                className="relative overflow-hidden rounded-xl bg-bg-secondary/95 ring-1 ring-inset ring-hl/10 shadow-xl shadow-shade/40 backdrop-blur-md transition-[width,height,background-color,box-shadow] duration-300 ease-in-out motion-reduce:transition-none">
+                <button ref={triggerRef} type="button" onClick={() => changeExpanded(true)}
+                    aria-label={t('downloadQueue.showDetails')} aria-expanded={isExpanded} aria-controls={panelId}
+                    aria-description={`${currentFileName}${summary ? `, ${summary}` : ''}`}
+                    aria-hidden={isExpanded} inert={isExpanded}
+                    className={`absolute inset-0 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${isExpanded ? 'pointer-events-none' : ''}`}>
+                    <div ref={node => { viewsRef.current.collapsed = node; }} data-download-panel="collapsed" aria-hidden={view !== 'collapsed'}
+                        className={`${layerClasses} flex h-9 w-max items-center gap-2 px-2.5 text-xs tabular-nums text-text-secondary ${contentLimit} ${view === 'collapsed' ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+                        {activityIcon}
+                        {queueState.currentDownload ? `${progressPercentRounded}%` : totalItems > 0 ? totalItems : null}
+                    </div>
+                    <div ref={node => { viewsRef.current.preview = node; }} data-download-panel="preview" aria-hidden={view !== 'preview'}
+                        className={`${layerClasses} flex w-max items-center gap-2 px-2.5 py-2 ${contentLimit} ${view === 'preview' ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent/15">{activityIcon}</span>
+                        <span className="min-w-0 flex-auto">
+                            <span className="block truncate text-xs font-medium leading-4 text-text-primary" title={currentTooltip}>{currentFileName}</span>
+                            {summary && <span className="mt-0.5 block truncate text-2xs tabular-nums leading-4 text-text-secondary">{summary}</span>}
+                        </span>
+                        <ChevronUp className="h-3.5 w-3.5 shrink-0 text-text-secondary" />
+                    </div>
+                </button>
+                <div ref={node => { viewsRef.current.expanded = node; }} data-download-panel="expanded" id={panelId} role="region" aria-label={t('downloadQueue.downloads')}
+                    aria-hidden={view !== 'expanded'} inert={view !== 'expanded'}
+                    className={`${layerClasses} w-80 ${contentLimit} ${view === 'expanded' ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
                     <div className="flex items-center justify-between border-b border-hl/5 px-4 py-3">
                         <div className="flex items-center gap-2">
                             <Download className="h-4 w-4 text-accent" />
@@ -260,7 +315,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                         </div>
                         <button
                             type="button"
-                            onClick={() => setIsExpanded(false)}
+                            onClick={() => changeExpanded(false)}
                             className="rounded-md p-1 text-text-secondary hover:bg-hl/5 hover:text-text-primary transition-colors cursor-pointer"
                             aria-label={t('downloadQueue.collapse')}
                             title={t('downloadQueue.collapse')}
@@ -285,7 +340,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                 <button
                                     type="button"
                                     onClick={() => void handleCancelActive()}
-                                    className="rounded-md p-1 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-300 cursor-pointer"
+                                    className="rounded-md p-1 text-text-secondary transition-colors hover:bg-state-danger/10 hover:text-state-danger cursor-pointer"
                                     aria-label={t('downloadQueue.cancelDownload')}
                                     title={t('downloadQueue.cancelDownload')}
                                 >
@@ -351,7 +406,10 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                         </p>
                     )}
                 </div>
-            )}
+                <span aria-hidden className={`pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-hl/5 transition-opacity duration-200 motion-reduce:transition-none ${isExpanded ? 'opacity-0' : 'opacity-100'}`}>
+                    <span className="block h-full bg-accent transition-[width] duration-200 ease-out motion-reduce:transition-none" style={{ width: `${progressPercent}%` }} />
+                </span>
+            </div>
         </div>
     );
 }
