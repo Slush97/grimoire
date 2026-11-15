@@ -83,7 +83,7 @@ describe('installed card menu mounting', () => {
       loadCount: 1, selectMode: false, shiftHeld: false, selected: false, soloBusy: false, favorite: false,
       onOpenDetails: onOpen, onViewAuthor: noop, onOpenPicker: noop, onOpenGroupDetails: noop,
       onToggle: async () => true, onSwap: noop, onSoloLaunch: noop, onDelete: noop,
-      onRenameLocal: noop, onAddVariant: noop, onViewImprint: noop,
+      onAddVariant: noop, onViewImprint: noop,
       onSetTags: noop, onSetPriority: noop, onFixUnknown: noop, onUnmerge: noop, onCopyShareCode: noop,
       occurrenceKey: undefined, onSelectToggle: noop, onToggleFavorite: noop, lists: [], listIds: [],
       onToggleList: noop, onCreateList: noop,
@@ -462,7 +462,7 @@ describe('installed card menu mounting', () => {
     expect(onViewDetails).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps View details as the local group picker action', async () => {
+  it('keeps Choose files as the local group picker action', async () => {
     const onOpenPicker = vi.fn();
     input = { ...input, onOpenDetails: onOpenPicker, group: {
       variantCount: 2, enabledCount: 1, enabledLabels: [], onOpenPicker, opensPicker: true,
@@ -470,11 +470,11 @@ describe('installed card menu mounting', () => {
     await act(async () => root.render(<ModCard {...input} />));
     expect(host.querySelector('[aria-label="installed.card.chooseFilesFor"]')).not.toBeNull();
     await openMenu('context');
-    expect(menuItemLabels()).toContain('installed.card.viewDetails');
-    expect(menuItemLabels()).not.toContain('installed.card.chooseFiles');
+    expect(menuItemLabels()).toContain('installed.card.chooseFiles');
+    expect(menuItemLabels()).not.toContain('installed.card.viewDetails');
     expect(menuItemLabels()).not.toContain('installed.card.ungroupVariants');
-    const details = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === 'installed.card.viewDetails')!;
-    await act(async () => details.click());
+    const files = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === 'installed.card.chooseFiles')!;
+    await act(async () => files.click());
     expect(onOpenPicker).toHaveBeenCalledOnce();
   });
 

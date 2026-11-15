@@ -112,7 +112,7 @@ describe('Installed tag dropdown', () => {
     const input = document.querySelector<HTMLInputElement>('[aria-label="installed.tags.create"]')!;
     expect(input.value).toBe('');
     expect(document.querySelectorAll('[role="option"]')).toHaveLength(0);
-    expect(document.querySelectorAll('.lucide-plus')).toHaveLength(0);
+    expect(input.parentElement?.querySelector('.lucide-plus')).not.toBeNull();
     expect(button('installed.tags.edit').getAttribute('aria-pressed')).toBe('true');
     expect(button('installed.tags.edit').className).toContain('text-accent!');
     await change(input, '  New tag  ');

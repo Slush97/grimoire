@@ -1,5 +1,5 @@
 import { canJoinLocalVariantGroup } from '../../lib/localVariantEligibility';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import { RequirementWarning } from '../requirements/RequirementWarning';
@@ -111,8 +111,6 @@ interface ModCardProps {
   previewMetaKey?: string;
   /** Files the Alt preview can cycle through with the wheel, in picker order. */
   previewKeys?: string[];
-  /** Tooltip naming the Alt preview, set only when the card has something to preview. */
-  previewHint?: string;
   /** Open the mod author's GameBanana profile in the browser. Undefined for
    *  local mods with no GameBanana source. */
   onViewAuthor?: () => void;
@@ -124,13 +122,8 @@ interface ModCardProps {
   onSoloLaunch?: () => void;
   soloBusy?: boolean;
   onDelete: () => void;
-  /** Inline rename of a local mod's name (double-click the title). Undefined
-   *  for GameBanana-sourced mods, which can't be renamed. */
-  onRenameLocal?: (newName: string) => Promise<void>;
-  /** Import more local VPKs as variants of this mod. Local cards only: a
-   *  GameBanana mod's files come from its submission. */
+  /** Import local VPKs as variants of this mod. */
   onAddVariant?: () => void;
-  /** Dissolve this local variant group. Passed only on local GROUP cards. */
   /** Open the imprint details modal. Passed only when the mod's wire
    *  `imprinted` flag is true (the parent gates on it); shown in the card's
    *  right-click menu. */
@@ -371,7 +364,6 @@ interface ModListRowContentProps {
   onOpenDetails?: () => void;
   staleSourceCount: number;
   updatableSourceCount: number;
-  onRenameLocal?: (newName: string) => Promise<void>;
   onCommitPriority?: (newPosition: number) => Promise<void>;
   loadPosition?: number;
   loadCount?: number;
@@ -383,6 +375,7 @@ interface ModListRowContentProps {
   manualTagChipClasses: string;
   dangerInlineChipClasses: string;
   technicalMetaClasses: string;
+  favorite: boolean;
   actions: ReactNode;
 }
 
@@ -403,117 +396,9 @@ function InstalledTaxonomyChips({
   );
 }
 
-/**
- * The card's mod title. For local mods (no GameBanana source) double-clicking
- * the name swaps it for an inline input so it can be renamed in place without
- * opening the full Edit modal. Non-local cards just render a plain heading.
- * `onRename` is expected to persist the new name; rename preserves the mod's
- * existing thumbnail/NSFW flag (the caller threads those through edit-local-mod).
- */
-function EditableModTitle({
-  name,
-  className,
-  onRename,
-}: {
-  name: string;
-  className: string;
-  /** Undefined when the title isn't renamable (GameBanana-sourced mods). */
-  onRename?: (newName: string) => Promise<void>;
-}) {
-  const { t } = useTranslation();
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(name);
-  const [saving, setSaving] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Reflect an upstream name change (rename elsewhere, reload) while at rest.
-  useEffect(() => {
-    if (!editing) setValue(name);
-  }, [name, editing]);
-
-  useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [editing]);
-
-  if (!editing || !onRename) {
-    return (
-      <h3
-        className={`${className}${onRename ? ' cursor-text' : ''}`}
-        title={onRename ? t('installed.card.renameTitle', { name }) : name}
-        onDoubleClick={
-          onRename
-            ? (e) => {
-                e.stopPropagation();
-                setValue(name);
-                setEditing(true);
-              }
-            : undefined
-        }
-      >
-        {name}
-      </h3>
-    );
-  }
-
-  const commit = async () => {
-    // Enter commits, which sets `saving` and disables the input below. Disabling
-    // a focused input makes the browser fire focusout, so onBlur re-entered
-    // commit and renamed twice (the parent has not reloaded yet, so the
-    // trimmed !== name check still passed on the second pass).
-    if (saving) return;
-    const trimmed = value.trim();
-    if (!trimmed || trimmed === name) {
-      setEditing(false);
-      setValue(name);
-      return;
-    }
-    setSaving(true);
-    try {
-      await onRename(trimmed);
-      setEditing(false);
-    } catch (err) {
-      console.error('[Installed] Failed to rename local mod:', err);
-      // Stay in edit mode so the user can retry or cancel.
-      inputRef.current?.focus();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <input
-      ref={inputRef}
-      value={value}
-      disabled={saving}
-      onChange={(e) => setValue(e.target.value)}
-      onClick={(e) => e.stopPropagation()}
-      onPointerDown={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          void commit();
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          setEditing(false);
-          setValue(name);
-        }
-      }}
-      onBlur={() => void commit()}
-      data-card-action="true"
-      className={`${className} premium-inline-rename-input disabled:opacity-60`}
-    />
-  );
-}
-
-function MergeSourceUpdateTag({ staleCount, updatableCount, onOpen, variant }: {
+function MergeSourceUpdateTag({ staleCount, updatableCount, variant }: {
   staleCount: number;
   updatableCount: number;
-  onOpen?: () => void;
   variant: 'overlay' | 'inline';
 }) {
   const { t } = useTranslation();
@@ -523,16 +408,10 @@ function MergeSourceUpdateTag({ staleCount, updatableCount, onOpen, variant }: {
     updatableCount > 0 && t('mergedContents.staleSourcesUpdatable', { count: updatableCount }),
     manualCount > 0 && t('installed.card.staleSourcesTitle', { count: manualCount }),
   ].filter(Boolean).join('\n');
-  const tag = <Tag tone="update" variant={variant} icon={Download} className="uppercase tracking-wide"
+  return <Tag tone="update" variant={variant} icon={Download} className="uppercase tracking-wide"
     title={title}>
     {t('profiles.actions.update')}
   </Tag>;
-  return onOpen && updatableCount > 0 ? (
-    <button type="button" data-card-action="true" onClick={(event) => {
-      event.stopPropagation();
-      onOpen();
-    }} className="inline-flex rounded-sm cursor-pointer focus-visible:outline-2 focus-visible:outline-accent">{tag}</button>
-  ) : tag;
 }
 
 function ModListRowContent({
@@ -543,7 +422,6 @@ function ModListRowContent({
   onOpenDetails,
   staleSourceCount,
   updatableSourceCount,
-  onRenameLocal,
   onCommitPriority,
   loadPosition,
   loadCount,
@@ -555,6 +433,7 @@ function ModListRowContent({
   manualTagChipClasses,
   dangerInlineChipClasses,
   technicalMetaClasses,
+  favorite,
   actions,
 }: ModListRowContentProps) {
   const { t } = useTranslation();
@@ -636,18 +515,17 @@ function ModListRowContent({
       </button>
 
       <div className="grid min-w-0">
-        <EditableModTitle
-          name={mod.name}
-          className="min-w-0 truncate text-[13px] font-semibold leading-[22px] text-text-primary"
-          onRename={onRenameLocal}
-        />
+        <h3 className="min-w-0 truncate text-[13px] font-semibold leading-[22px] text-text-primary" title={mod.name}>
+          {mod.name}
+        </h3>
         <div className="flex min-w-0 flex-wrap items-center gap-1">
           <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
           <CrashAdvisoryBadge modIds={mod.crashModIds ?? [mod.id]} />
           <MergeSourceUpdateTag staleCount={staleSourceCount} updatableCount={updatableSourceCount}
-            onOpen={onOpenDetails} variant="inline" />
+            variant="inline" />
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
+          {favorite && <Star role="img" aria-label={t('installed.card.favorite')} className="h-4 w-4 shrink-0 fill-current text-accent" />}
           <RequirementWarning mod={mod}>{(icon, title) => <RepairIssueIcons
             outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} models={mod.staleModels}
             requirement={{ icon, title }} />}</RequirementWarning>
@@ -722,7 +600,6 @@ export function ModCard({
   onPinPreview,
   previewMetaKey,
   previewKeys,
-  previewHint,
   onViewAuthor,
   onToggle,
   swapTargets = [],
@@ -730,7 +607,6 @@ export function ModCard({
   onSoloLaunch,
   soloBusy = false,
   onDelete,
-  onRenameLocal,
   onAddVariant,
   onViewImprint,
   onSetTags,
@@ -757,6 +633,13 @@ export function ModCard({
 }: ModCardProps) {
   const { t } = useTranslation();
   const pointerInside = useRef(false);
+  const menuKeyboard = useRef(false);
+  const menuFocusProps = {
+    onKeyDownCapture: () => { menuKeyboard.current = true; },
+    onPointerDownCapture: () => { menuKeyboard.current = false; },
+    // Mouse actions need no focus restore; keyboard dismissal returns to the trigger.
+    onCloseAutoFocus: (event: Event) => { if (!menuKeyboard.current) event.preventDefault(); },
+  };
   const hasRequirements = useRequirementsStore(state => (group?.variants ?? [mod]).some(variant =>
     !!variant.skinEdit?.sources.length || modRequirementRefs(variant).some(ref => {
       const snapshot = state.snapshots[requirementKey(ref)];
@@ -939,22 +822,10 @@ export function ModCard({
   const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
   const technicalMetaClasses = 'min-w-0 truncate font-mono text-2xs text-text-secondary/55 hover:text-text-secondary cursor-help';
   const utilityActionClasses = 'inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer disabled:opacity-60';
-  // Hover-revealed card action. `pointer-events-none` while transparent is
-  // load-bearing: opacity-0 alone still accepts clicks, so an unrevealed button
-  // is a mis-click straight into a real action (delete, or a persisted
-  // favorite). pointer-events does not gate keyboard focus, so tab-then-Enter
-  // still reaches the button, and the focus: pair keeps it visible once there.
-  const hoverRevealClasses = 'installed-card-hover-action opacity-0 pointer-events-none group-installed-hover/card:opacity-90 group-installed-hover/card:pointer-events-auto focus:opacity-100 focus:pointer-events-auto';
+  // Keyboard focus reveals actions without leaving mouse-clicked buttons visible.
+  // Invisible buttons cannot receive pointer clicks, but remain reachable with Tab.
+  const hoverRevealClasses = 'installed-card-hover-action opacity-0 pointer-events-none group-installed-hover/card:opacity-90 group-installed-hover/card:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto';
   const hoverActionVisibilityClasses = selectMode ? 'hidden' : hoverRevealClasses;
-  // A set star stays permanently visible in both sections, so there is always an
-  // affordance to unpin. An unset star is hover-only like its delete / overflow
-  // siblings, in both sections: an always-on outline star on every card is visual
-  // noise. Reveal via opacity, never `hidden` plus another display utility:
-  // utilityActionClasses already sets inline-flex and two display utilities
-  // resolve by stylesheet order, not by attribute order.
-  const favoriteVisibilityClasses = favorite
-    ? (selectMode ? 'hidden' : '')
-    : hoverActionVisibilityClasses;
   const toggleHitboxClasses = 'inline-flex h-7 w-12 items-center justify-center rounded-md cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary';
   const toggleTrackClasses = `relative h-6 w-11 rounded-full transition-colors duration-200 ${
     mod.enabled ? 'bg-accent shadow-[0_0_0_1px_rgba(255,122,47,0.25)]' : 'bg-bg-tertiary border border-border group-hover/toggle:border-hl/20'
@@ -984,19 +855,6 @@ export function ModCard({
   const titleClasses = isCompact
     ? 'text-[14px] font-semibold leading-[18px] truncate'
     : 'text-[15px] font-medium leading-[18px] truncate';
-  // Enabled cards get their own copy: pinning only takes effect once the mod is
-  // disabled, and the disabled section's "top of disabled mods" wording would be
-  // a lie there.
-  const favoriteLabel = mod.enabled
-    ? favorite
-      ? t('installed.card.removeFavoriteWhenDisabled', { name: mod.name })
-      : t('installed.card.addFavoriteWhenDisabled', { name: mod.name })
-    : favorite
-      ? t('installed.card.removeDisabledFavorite', { name: mod.name })
-      : t('installed.card.addDisabledFavorite', { name: mod.name });
-  // Context-menu actions should scan like actions, not tooltips. Keep the
-  // longer placement explanation on the card button's title/aria label, while
-  // the right-click and kebab menus use the same concise wording as Locker.
   const favoriteMenuLabel = favorite
     ? t('installed.card.unfavorite')
     : t('installed.card.favorite');
@@ -1008,7 +866,7 @@ export function ModCard({
   // A group card's click may open the picker, so its "View details" has its own handler.
   const localMod = canJoinLocalVariantGroup(mod);
   const localGroup = !!group && localMod;
-  const viewDetails = localGroup ? group.onOpenPicker : group ? group.onViewDetails : onOpenDetails;
+  const viewDetails = localMod ? group?.onOpenPicker ?? onOpenDetails : group ? group.onViewDetails : onOpenDetails;
   const hasTopActions =
     !!(onAddVariant && localMod) || !!onOpenDetails || !!onViewAuthor
     || !!cardImageSource || !!group;
@@ -1024,7 +882,7 @@ export function ModCard({
       )}
       {viewDetails && (
         <MenuItem icon={Info} onSelect={viewDetails}>
-          {t('installed.card.viewDetails')}
+          {localMod ? t('installed.card.chooseFiles') : t('installed.card.viewDetails')}
         </MenuItem>
       )}
       {group && !localGroup && (
@@ -1231,27 +1089,7 @@ export function ModCard({
 
   const actions = (
     <div className="ml-auto flex items-center gap-1">
-      {/* At small sizes the direct favorite/delete buttons consumed 56px even
-          while transparent, squeezing the adjacent taxonomy chip down to a
-          one-pixel border. Both actions remain available from the kebab and
-          right-click menus; larger cards keep their faster hover affordances. */}
-      {onToggleFavorite && !isCompact && (
-        <button
-          type="button"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleFavorite();
-          }}
-          className={`${utilityActionClasses} ${quickActionSizeClasses} ${favoriteVisibilityClasses} ${favorite ? 'text-accent hover:text-accent/80' : 'text-text-tertiary hover:text-accent'}`}
-          title={favoriteLabel}
-          aria-label={favoriteLabel}
-          aria-pressed={favorite}
-          data-card-action="true"
-        >
-          <Star className={`h-4 w-4 ${favorite ? 'fill-current' : ''}`} />
-        </button>
-      )}
+      {/* Small cards keep Delete in the menu so taxonomy chips have room. */}
       {!mod.merged && !isCompact && (
         <button
           type="button"
@@ -1281,7 +1119,7 @@ export function ModCard({
               <MoreHorizontal className="w-4 h-4" />
             </button>
           </MenuTrigger>
-          <MenuContent className="max-h-[70vh] overflow-y-auto" data-card-menu-open>
+          <MenuContent {...menuFocusProps} className="max-h-[70vh] overflow-y-auto" data-card-menu-open>
             <DeferredMenuItems>{renderCardMenuItems}</DeferredMenuItems>
           </MenuContent>
         </MenuRoot>
@@ -1289,7 +1127,7 @@ export function ModCard({
       {!mod.enabled && !selectMode && cardTaxonomy.heroNames.length > 0 && swapTargets.length > 0 && onSwap && (
         chooseSwapTarget ? <MenuRoot kind="dropdown" open={swapOpen} onOpenChange={setSwapOpen}>
           <MenuTrigger asChild>{swapButton}</MenuTrigger>
-          <MenuContent side="bottom" align="end" className="max-h-[50vh] max-w-80 overflow-y-auto" data-swap-menu>
+          <MenuContent {...menuFocusProps} side="bottom" align="end" className="max-h-[50vh] max-w-80 overflow-y-auto" data-swap-menu>
             <MenuLabel>{t('installed.swap.choose')}</MenuLabel>
             <DeferredMenuItems>{() => swapTargets.map(target => <MenuItem key={target.key}
               leading={<span className="flex h-[22px] w-[66px] shrink-0 items-center" aria-hidden><HeroIconStack heroes={target.heroNames} /></span>}
@@ -1332,7 +1170,8 @@ export function ModCard({
       data-mod-preview-key={previewMetaKey ?? mod.metaKey}
       data-mod-preview-variants={previewKeys && previewKeys.length > 1 ? JSON.stringify(previewKeys) : undefined}
       data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
-      title={previewHint}
+      onKeyDownCapture={menuFocusProps.onKeyDownCapture}
+      onPointerDownCapture={menuFocusProps.onPointerDownCapture}
       onPointerEnter={() => {
         pointerInside.current = true;
         if (shiftHeld && !selectMode) setHovered(true);
@@ -1385,7 +1224,6 @@ export function ModCard({
             onOpenDetails={onOpenDetails}
             staleSourceCount={staleSourceCount}
             updatableSourceCount={updatableSourceCount}
-            onRenameLocal={onRenameLocal}
             onCommitPriority={onCommitPriority}
             loadPosition={loadPosition}
             loadCount={loadCount}
@@ -1397,6 +1235,7 @@ export function ModCard({
             manualTagChipClasses={manualTagChipClasses}
             dangerInlineChipClasses={dangerInlineChipClasses}
             technicalMetaClasses={technicalMetaClasses}
+            favorite={favorite}
             actions={actions}
           />
         ) : (
@@ -1510,7 +1349,7 @@ export function ModCard({
                 </Tag>
               )}
               <MergeSourceUpdateTag staleCount={staleSourceCount} updatableCount={updatableSourceCount}
-                onOpen={onOpenDetails} variant="overlay" />
+                variant="overlay" />
               {group && group.variantCount > 1 && (
                 <Tag
                   variant="overlay"
@@ -1543,16 +1382,15 @@ export function ModCard({
         })()}
 
         <div className="mt-auto min-w-0 px-0.5">
-          <EditableModTitle
-            name={mod.name}
-            className={`min-w-0 text-text-primary ${titleClasses}`}
-            onRename={onRenameLocal}
-          />
+          <h3 className={`min-w-0 text-text-primary ${titleClasses}`} title={mod.name}>
+            {mod.name}
+          </h3>
           <div
             className={`${isCompact ? 'mt-1.5' : 'mt-1'} grid min-h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-1.5`}
             title={t('installed.card.gridMetaTitle', { file: mod.fileName, size: formatBytes(mod.size), date: formatAbsoluteDate(mod.installedAt) })}
           >
             <div className="flex h-7 min-w-0 items-center gap-1 text-xs text-text-secondary">
+              {favorite && <Star role="img" aria-label={t('installed.card.favorite')} className="h-4 w-4 shrink-0 fill-current text-accent" />}
               <RequirementWarning mod={mod}>{(icon, title) => <RepairIssueIcons
                 outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} models={mod.staleModels}
                 requirement={selectMode ? undefined : { icon, title }} />}</RequirementWarning>
@@ -1570,7 +1408,7 @@ export function ModCard({
 
     </div>
       </MenuTrigger>
-      <MenuContent className="max-h-[70vh] overflow-y-auto" data-card-menu-open>
+      <MenuContent {...menuFocusProps} className="max-h-[70vh] overflow-y-auto" data-card-menu-open>
         <DeferredMenuItems>{renderCardMenuItems}</DeferredMenuItems>
       </MenuContent>
     </MenuRoot>

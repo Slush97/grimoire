@@ -305,10 +305,8 @@ interface InstalledEntryCardProps {
   onSwap: (entry: ModEntry, outgoingEntryKey: string) => Promise<void>;
   onSoloLaunch: (entry: ModEntry) => void;
   onDelete: (entry: ModEntry) => void;
-  onRenameLocal: (mod: Mod, newName: string) => Promise<void>;
-  /** Open the add-variants import dialog for a local entry. */
+  /** Open the add-variants import dialog for an entry. */
   onAddVariant: (entry: ModEntry) => void;
-  /** Dissolve a local variant group (every member becomes its own card). */
   /** Open the imprint details modal for a mod whose wire `imprinted` flag is
    *  true. Externally-imprinted files without the local flag simply do not get
    *  the menu entry: the flag is the cheap client hint, and the modal's empty
@@ -371,7 +369,6 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
   onSwap,
   onSoloLaunch,
   onDelete,
-  onRenameLocal,
   onAddVariant,
   onViewImprint,
   onSetTags,
@@ -401,8 +398,6 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
     .filter(variant => installedMotionTarget(variant) || installedSkinTarget(variant, taxonomyContext) || installedPropTarget(variant))
     .map(variant => variant.metaKey), [entry, taxonomyContext]);
   const previewKey = previewKeys.includes(previewMod.metaKey) ? previewMod.metaKey : previewKeys[0] ?? previewMod.metaKey;
-  const previewHint = previewKeys.length > 1 ? t('installed.card.previewHintVariants')
-    : previewKeys.length ? t('installed.card.previewHint') : undefined;
   const pinPreview = previewKeys.length ? () => pinInstalledPreview(previewKeys, previewKey) : undefined;
   const openDoorStuck = doorStuckEnabled && target ? () => {
     if ('kind' in target && target.kind === 'movement') {
@@ -422,7 +417,6 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
         mod={mod}
         onOpenDoorStuck={openDoorStuck}
         previewKeys={previewKeys}
-        previewHint={previewHint}
         onPinPreview={pinPreview}
         viewMode={viewMode}
         hideNsfwPreviews={hideNsfwPreviews}
@@ -441,9 +435,6 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
         onSoloLaunch={() => onSoloLaunch(entry)}
         soloBusy={soloBusy}
         onDelete={() => onDelete(entry)}
-        onRenameLocal={
-          entryIsLocal(entry) ? (newName) => onRenameLocal(mod, newName) : undefined
-        }
         // A local mod can adopt variants: the first add mints the group. A
         // merged VPK is excluded, like it is from the GameBanana link flow.
         onAddVariant={canGroupMod(mod) ? () => onAddVariant(entry) : undefined}
@@ -498,7 +489,6 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
       onOpenDoorStuck={openDoorStuck}
       previewMetaKey={previewKey}
       previewKeys={previewKeys}
-      previewHint={previewHint}
       onPinPreview={pinPreview}
       mod={{
         ...entry.primary,
@@ -535,13 +525,6 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
       onSoloLaunch={() => onSoloLaunch(entry)}
       soloBusy={soloBusy}
       onDelete={() => onDelete(entry)}
-      // A local group is the user's own construction, so it can be renamed,
-      // extended and dissolved from the card. A GameBanana group can do none of
-      // those: its files and its name come from the submission. Renaming the
-      // primary renames every member (main fans the name out).
-      onRenameLocal={
-        entryIsLocal(entry) ? (newName) => onRenameLocal(entry.primary, newName) : undefined
-      }
       onAddVariant={
         entry.variants.every(canGroupMod)
           ? () => onAddVariant(entry)
@@ -2819,9 +2802,7 @@ export default function Installed() {
     }
   });
   const viewEntryImprint = useStableCallback((mod: Mod) => setImprintDetailsMod(mod));
-  // Inline title rename (double-click). Reuses edit-local-mod but carries the
-  // current thumbnail/NSFW flag through so renaming the name alone never wipes
-  // them (the handler overwrites the full local-mod metadata triplet).
+  // Picker title edits preserve the current artwork and NSFW setting.
   const renameLocalMod = useStableCallback(async (mod: Mod, newName: string) => {
     await editLocalInstalledMod(mod, {
       name: newName,
@@ -3440,7 +3421,6 @@ export default function Installed() {
     onSwap: beginSwap,
     onSoloLaunch: soloLaunchEntry,
     onDelete: deleteEntry,
-    onRenameLocal: renameLocalMod,
     onAddVariant: openAddVariant,
     onViewImprint: viewEntryImprint,
     onSetTags: setEntryTags,

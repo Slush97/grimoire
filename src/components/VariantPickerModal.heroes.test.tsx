@@ -259,7 +259,7 @@ describe('variant hero indicators', () => {
         await click(title());
         const input = () => document.querySelector<HTMLSpanElement>('[aria-label="variantPicker.renameMod"]')!;
         expect(document.activeElement).toBe(input());
-        expect(window.getSelection()?.toString()).toBe(mods[0].name);
+        expect(window.getSelection()?.isCollapsed).toBe(true);
         expect(input().tagName).toBe('SPAN');
         await act(async () => {
             input().textContent = 'New name';

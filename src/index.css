@@ -353,10 +353,6 @@
   border-color: rgb(from var(--color-state-warning) r g b / 0.5);
 }
 
-:root[data-theme='light'] .premium-inline-rename-input {
-  background: rgb(from var(--color-hl) r g b / 0.06);
-}
-
 /* Bottom-up dark scrim for art/thumbnail overlays so foreground chrome stays
    legible over any underlying image. Pairs with `absolute inset-0`. Replaces
    the gradient that was copy-pasted across the Locker/Installed surfaces. */
@@ -1963,23 +1959,6 @@ body {
   letter-spacing: 0.05em;
   color: rgba(255, 255, 255, 0.9);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-/* Seamless Title Inline Renaming */
-.premium-inline-rename-input {
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  line-height: inherit;
-  color: inherit;
-  background: rgba(0, 0, 0, 0.3);
-  border: none;
-  border-bottom: 2px solid var(--color-accent);
-  padding: 0 4px;
-  border-radius: 2px;
-  outline: none;
-  width: 100%;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 @keyframes mod-list-count-pop {

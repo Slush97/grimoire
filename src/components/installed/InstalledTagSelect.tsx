@@ -134,6 +134,7 @@ export function InstalledTagSelect({ options, included, excluded, onInclude, onE
       ariaLabel: editing ? option.label : t(cycleFilters && included.includes(option.key) ? 'installed.tags.excludeHint'
         : selected.includes(option.key) ? 'installed.tags.clearFilter' : 'installed.tags.includeHint', { name: option.label }) }))}
     search={{ ariaLabel: renaming ? t('installed.tags.renameLabel') : editing ? t('installed.tags.create') : t('installed.filters.tags'),
+      icon: editing ? Plus : undefined,
       placeholder: editing ? t('installed.tags.createPlaceholder') : t('browse.filters.filterPlaceholder'),
       value: query, onChange: changeQuery, inputRef, disabled: busy,
       clearLabel: t('browse.filters.clearSearch'), getEmptyMessage: query => t('browse.filters.noOptionsMatch', { query }),

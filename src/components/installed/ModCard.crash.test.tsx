@@ -58,19 +58,18 @@ describe('crash badges on installed cards', () => {
     return document.body.textContent ?? '';
   };
 
-  it.each(['grid', 'compact', 'list'] as const)('opens merge updates without toggling the mod in %s', async view => {
+  it.each(['grid', 'compact', 'list'] as const)('keeps merged update badges passive like other tags in %s', async view => {
     const input = mergedCard(view);
     await act(async () => root.render(<ModCard {...input} staleSourceCount={3} updatableSourceCount={2} />));
-    expect(updateAction()?.textContent).toBe('profiles.actions.update');
-    expect(updateAction()?.className).not.toContain('hover:');
-    expect(updateAction()?.className).toContain('inline-flex');
-    expect(updateAction()?.className).toContain('focus-visible:outline-2');
-    expect(updateAction()?.querySelector('[title]')?.getAttribute('title')).toBe('mergedContents.staleSourcesUpdatable:2\ninstalled.card.staleSourcesTitle:1');
-    await act(async () => updateAction()?.click());
-    expect(onOpenDetails).toHaveBeenCalledOnce();
+    const title = 'mergedContents.staleSourcesUpdatable:2\ninstalled.card.staleSourcesTitle:1';
+    const badge = [...host.querySelectorAll<HTMLSpanElement>('span')].find(span => span.title === title)!;
+    expect(badge.textContent).toBe('profiles.actions.update');
+    expect(badge.closest('button')).toBeNull();
+    await act(async () => badge.click());
+    expect(onOpenDetails).not.toHaveBeenCalled();
     expect(onToggle).not.toHaveBeenCalled();
     await act(async () => root.render(<ModCard {...input} staleSourceCount={0} updatableSourceCount={0} />));
-    expect(updateAction()).toBeUndefined();
+    expect(host.textContent).not.toContain('profiles.actions.update');
   });
 
   it.each(['grid', 'compact', 'list'] as const)('offers no update action for outdated sources that cannot resolve in %s', async view => {

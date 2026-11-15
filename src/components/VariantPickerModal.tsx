@@ -244,6 +244,7 @@ export default function VariantPickerModal({
         titleEditor.current.focus();
         const range = document.createRange();
         range.selectNodeContents(titleEditor.current);
+        range.collapse(false);
         const selection = window.getSelection();
         selection?.removeAllRanges();
         selection?.addRange(range);
