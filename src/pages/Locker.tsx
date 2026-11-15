@@ -3,7 +3,7 @@ import { lazy, memo, Suspense, useCallback, useEffect, useId, useLayoutEffect, u
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowUpToLine, Box, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, FolderPlus, Ghost, Images, Layers, MoreVertical, Music, Palette, Plus, PowerOff, Settings2, Shield, Shirt, Shuffle, Sparkles, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Box, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, Ghost, Images, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Shuffle, Sparkles, Star, Trash2 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -18,17 +18,9 @@ import { modRestoreKey } from '../lib/soloRestore';
 import { getAssetPath } from '../lib/assetPath';
 import { shakeElement } from '../lib/shakeElement';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
-import { SkinLoadOrderStrip } from '../components/locker/HeroSkinsPanel';
 import { UnassignedModTagSelect } from '../components/locker/UnassignedModTagSelect';
-import GlobalModPicker from '../components/locker/GlobalModPicker';
 import CursorPackPane, { CursorImportButton } from '../components/locker/CursorPackPane';
-import CategoryModPicker from '../components/locker/CategoryModPicker';
-import { CreateCategoryModal, ManageCategoriesModal } from '../components/locker/ManageCategoriesModal';
-import {
-  ShuffleAlwaysOnBadge,
-  ShuffleBulkButton,
-  ShuffleIncludeButton,
-} from '../components/locker/ShuffleControls';
+import { ShuffleIncludeButton } from '../components/locker/ShuffleControls';
 import { LockerHeroView } from './LockerHero';
 import { LockerViewerPanel } from '../components/locker/LockerViewerHost';
 import { getLockerHeroNeighbors } from '../lib/lockerHeroNavigation';
@@ -82,28 +74,8 @@ import {
   shuffleGroupKind,
   shufflePoolKey,
   shuffleSkinKey,
-  summarizeShufflePool,
   type VariantChoice,
 } from '../lib/lockerRandomizer';
-import {
-  addCategoryMembership,
-  buildCategoryMembershipIndex,
-  countLiveCategoryMembers,
-  createCategory,
-  deleteCategory,
-  groupCategoryMods,
-  readStoredLockerCategories,
-  renameCategory,
-  toggleCategoryMembership,
-  writeStoredLockerCategories,
-  type LockerCategory,
-} from '../lib/lockerCategories';
-import { modPreferenceKey } from '../lib/disabledModPrefs';
-import {
-  STABLE_KEY_PREFERENCES_MIGRATED_EVENT,
-  type StableKeyPreferencesMigratedDetail,
-} from '../lib/stableKeyMigration';
-import { showToast } from '../stores/toastStore';
 import { SPIRIT_URN_MODEL } from '../lib/installedPropPreview';
 import { useCursorPackStore } from '../stores/cursorPackStore';
 import {
@@ -272,7 +244,7 @@ function FacetSheenDefs() {
 
 export default function Locker() {
   const { t } = useTranslation();
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, reorderPriorityMods, deleteMods, setModPriorityFolder, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, setShuffleIncluded, shuffleVariants, setShuffleVariant } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMods, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, shuffleVariants, setShuffleVariant } =
     useAppStore(useShallow((s) => ({
       settings: s.settings,
       mods: s.mods,
@@ -282,9 +254,7 @@ export default function Locker() {
       loadMods: s.loadMods,
       toggleMod: s.toggleMod,
       reorderMods: s.reorderMods,
-      reorderPriorityMods: s.reorderPriorityMods,
       deleteMods: s.deleteMods,
-      setModPriorityFolder: s.setModPriorityFolder,
       setBrowseUi: s.setBrowseUi,
       setLockerHeroName: s.setLockerHeroName,
       lockerModImages: s.lockerModImages,
@@ -296,7 +266,6 @@ export default function Locker() {
       setShuffleOnLaunch: s.setShuffleOnLaunch,
       shuffleIncluded: s.shuffleIncluded,
       toggleShuffleIncluded: s.toggleShuffleIncluded,
-      setShuffleIncluded: s.setShuffleIncluded,
       shuffleVariants: s.shuffleVariants,
       setShuffleVariant: s.setShuffleVariant,
     })));
@@ -560,146 +529,15 @@ export default function Locker() {
     () => mods.filter((m) => isLockerManagedSound(m) && !getEffectiveGlobalType(m)),
     [mods]
   );
-  // Global (priority-root) mods are a placement axis, not a classification, so
-  // they are NOT filtered out of the hero grouping: a Global hero skin still
-  // belongs in that hero's pile, it just also wins every collision. This list
-  // only feeds the General view's Global tab.
-  const priorityMods = useMemo(
-    () => mods.filter((m) => m.priorityMod).sort((a, b) => modLoadOrder(a) - modLoadOrder(b)),
-    [mods]
-  );
   const globalGroups = useMemo(() => groupGlobalMods(mods), [mods]);
-  // The General tile is the entry point for both independent axes. Count each
-  // mod once even when it has a General classification and Global placement.
   const globalCount = useMemo(
-    () => mods.reduce(
-      (count, mod) => count + (getEffectiveGlobalType(mod) || mod.priorityMod ? 1 : 0),
-      cursorPackCount
-    ),
-    [mods, cursorPackCount]
+    () => new Set(GLOBAL_MOD_TYPE_ORDER.flatMap(type => globalGroups[type].map(mod => mod.id))).size + cursorPackCount,
+    [globalGroups, cursorPackCount]
   );
-  const [globalPickerOpen, setGlobalPickerOpen] = useState(false);
-  // Sequential on purpose: each call renames a VPK under the main-process
-  // mutation lock, so firing them concurrently would just queue anyway, and
-  // serially means a mid-batch failure leaves a coherent partial result.
-  const addModsToGlobal = async (modIds: string[]) => {
-    for (const modId of modIds) await setModPriorityFolder(modId, true);
-  };
   const globalTypeCount = useMemo(
-    () =>
-      GLOBAL_MOD_TYPE_ORDER.filter((type) => globalGroups[type].length > 0).length +
-      (priorityMods.length > 0 ? 1 : 0) +
-      (cursorPackCount > 0 ? 1 : 0),
-    [globalGroups, priorityMods, cursorPackCount]
+    () => GLOBAL_MOD_TYPE_ORDER.filter(type => globalGroups[type].length > 0).length + (cursorPackCount > 0 ? 1 : 0),
+    [globalGroups, cursorPackCount]
   );
-
-  // User-defined categories for the General drill-in (see lib/lockerCategories.ts).
-  // A third axis, orthogonal to globalType (classification) and priorityMod
-  // (placement): filing a mod only groups it for browsing, and nothing here ever
-  // enables, disables, moves, or reorders anything.
-  const [lockerCategories, setLockerCategories] = useState(readStoredLockerCategories);
-  useEffect(() => {
-    const handleStableKeyPreferencesMigrated = (
-      event: CustomEvent<StableKeyPreferencesMigratedDetail>
-    ) => {
-      setLockerCategories(
-        event.detail.lockerCategories.map((category) => ({
-          ...category,
-          keys: [...category.keys],
-        }))
-      );
-    };
-    window.addEventListener(
-      STABLE_KEY_PREFERENCES_MIGRATED_EVENT,
-      handleStableKeyPreferencesMigrated
-    );
-    return () => {
-      window.removeEventListener(
-        STABLE_KEY_PREFERENCES_MIGRATED_EVENT,
-        handleStableKeyPreferencesMigrated
-      );
-    };
-  }, []);
-  const [categoryPickerId, setCategoryPickerId] = useState<string | null>(null);
-  // { modId } when the "New category..." dialog was opened from a card's kebab,
-  // so the created category can be filed with that mod straight away.
-  const [categoryDraft, setCategoryDraft] = useState<{ modId: string | null } | null>(null);
-  const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false);
-  // Persist outside the setState updater: StrictMode double-invokes an updater,
-  // and a write is a side effect even when it happens to be idempotent.
-  const commitLockerCategories = (next: LockerCategory[]) => {
-    writeStoredLockerCategories(next);
-    setLockerCategories(next);
-  };
-  const categoryMembership = useMemo(
-    () => buildCategoryMembershipIndex(lockerCategories),
-    [lockerCategories]
-  );
-  const categoryGroups = useMemo(
-    () => groupCategoryMods(lockerCategories, mods),
-    [lockerCategories, mods]
-  );
-  // Counts for the manage dialog only. They are distinct live keys, not cards,
-  // so they can read one low when the same content is installed twice; the tab
-  // rail counts cards instead, because that is what the grid then shows.
-  const categoryCounts = useMemo(
-    () => countLiveCategoryMembers(lockerCategories, new Set(mods.map(modPreferenceKey))),
-    [lockerCategories, mods]
-  );
-  const categoryPickerTarget = useMemo(
-    () => lockerCategories.find((category) => category.id === categoryPickerId) ?? null,
-    [lockerCategories, categoryPickerId]
-  );
-  const categoryPickerKeys = useMemo(
-    () => new Set(categoryPickerTarget?.keys ?? []),
-    [categoryPickerTarget]
-  );
-  const toggleModCategory = (modId: string, categoryId: string) => {
-    const mod = mods.find((m) => m.id === modId);
-    if (!mod) return;
-    commitLockerCategories(
-      toggleCategoryMembership(lockerCategories, categoryId, modPreferenceKey(mod))
-    );
-  };
-  // Create, and file the card the dialog was opened from into the result.
-  // createCategory reuses a category whose name already matches, so filing is
-  // add-only: a toggle here would un-file a mod already in the named category.
-  const createLockerCategory = (name: string) => {
-    const { categories, id } = createCategory(lockerCategories, name);
-    if (!id) return;
-    const draftMod = categoryDraft?.modId
-      ? mods.find((m) => m.id === categoryDraft.modId)
-      : undefined;
-    commitLockerCategories(
-      draftMod ? addCategoryMembership(categories, id, modPreferenceKey(draftMod)) : categories
-    );
-  };
-  const renameLockerCategory = (id: string, name: string) => {
-    // renameCategory no-ops on a rejected name (blank, or taken by another
-    // category) and reports which happened; the dialog uses this to restore the
-    // field and explain why.
-    const { categories, applied } = renameCategory(lockerCategories, id, name);
-    if (applied) commitLockerCategories(categories);
-    return applied;
-  };
-  const deleteLockerCategory = (id: string) => {
-    commitLockerCategories(deleteCategory(lockerCategories, id));
-  };
-  const addModsToCategory = (categoryId: string, modIds: string[]) => {
-    let next = lockerCategories;
-    for (const modId of modIds) {
-      const mod = mods.find((m) => m.id === modId);
-      if (mod) next = addCategoryMembership(next, categoryId, modPreferenceKey(mod));
-    }
-    commitLockerCategories(next);
-    showToast(
-      t('locker.categories.added', {
-        count: modIds.length,
-        name: lockerCategories.find((category) => category.id === categoryId)?.name ?? '',
-      }),
-      { tone: 'success' }
-    );
-  };
 
   // Calculate heroMods, passing heroList for name-based category inference
   const heroMods = useMemo(() => {
@@ -1662,67 +1500,13 @@ export default function Locker() {
             onRequestDelete={requestDeleteMods}
             onImportSoul={() => setSoulImportOpen(true)}
             onImportUrn={() => setUrnImportOpen(true)}
-            priorityMods={priorityMods}
-            onReorderPriorityMods={reorderPriorityMods}
-            onAddGlobal={() => setGlobalPickerOpen(true)}
-            onRemoveGlobal={(modId) => setModPriorityFolder(modId, false)}
             shuffleArmed={shuffleOnLaunch}
             includedShuffleKeys={shuffleIncluded}
             excludedShuffleKeys={excludedShuffleKeys}
             onToggleShuffleIncluded={toggleShuffleIncluded}
-            onSetShuffleIncluded={setShuffleIncluded}
             heroList={heroList}
-            categories={lockerCategories}
-            categoryGroups={categoryGroups}
-            categoryMembership={categoryMembership}
-            onAddModsToCategory={setCategoryPickerId}
-            onToggleModCategory={toggleModCategory}
-            onCreateCategory={(modId) => setCategoryDraft({ modId: modId ?? null })}
-            onManageCategories={() => setManageCategoriesOpen(true)}
           />
         </div>
-      )}
-
-      {categoryPickerTarget && (
-        <CategoryModPicker
-          mods={mods}
-          categoryName={categoryPickerTarget.name}
-          memberKeys={categoryPickerKeys}
-          hideNsfwPreviews={shouldBlurNsfw(settings)}
-          onClose={() => setCategoryPickerId(null)}
-          onConfirm={(modIds) => addModsToCategory(categoryPickerTarget.id, modIds)}
-        />
-      )}
-
-      {categoryDraft && (
-        <CreateCategoryModal
-          modName={
-            categoryDraft.modId
-              ? mods.find((m) => m.id === categoryDraft.modId)?.name
-              : undefined
-          }
-          onClose={() => setCategoryDraft(null)}
-          onCreate={createLockerCategory}
-        />
-      )}
-
-      {manageCategoriesOpen && (
-        <ManageCategoriesModal
-          categories={lockerCategories}
-          counts={categoryCounts}
-          onClose={() => setManageCategoriesOpen(false)}
-          onRename={renameLockerCategory}
-          onDelete={deleteLockerCategory}
-        />
-      )}
-
-      {globalPickerOpen && (
-        <GlobalModPicker
-          mods={mods}
-          hideNsfwPreviews={shouldBlurNsfw(settings)}
-          onClose={() => setGlobalPickerOpen(false)}
-          onConfirm={addModsToGlobal}
-        />
       )}
 
       {soulImportOpen && (
@@ -1869,60 +1653,10 @@ function GlobalGalleryCard({ count, typeCount, onNavigate, typeaheadClassName = 
   );
 }
 
-/**
- * Synthetic tab id for the Global (precedence) tab in the General view. It is
- * NOT a GlobalModType: these are the classification axis stored in the
- * metadata sidecar's `globalType`, while Global is folder placement
- * (Mod.priorityMod). Keeping it a separate sentinel is what stops a Global mod
- * from ever being written into the classification field.
- */
-const PRIORITY_TAB = 'priority' as const;
-
-/**
- * Synthetic tab id for cursor packs. Not a GlobalModType either: cursor mods
- * are loose BMPs over the game's cursor folder, not VPKs, so they have no
- * Mod entry to classify (see CursorPackPane).
- */
 const CURSOR_TAB = 'cursor' as const;
-
-/**
- * Tab id namespace for a user-defined category (src/lib/lockerCategories.ts).
- * Namespaced so a category id can never be mistaken for a GlobalModType or for
- * PRIORITY_TAB: categories are a third, view-only axis, and the same rule that
- * keeps Global out of the classification field keeps categories out of both.
- */
-const CUSTOM_TAB_PREFIX = 'custom:';
-type CustomTabId = `${typeof CUSTOM_TAB_PREFIX}${string}`;
-type GeneralTabId = GlobalModType | typeof PRIORITY_TAB | typeof CURSOR_TAB | CustomTabId;
-
-function customTabId(categoryId: string): CustomTabId {
-  return `${CUSTOM_TAB_PREFIX}${categoryId}`;
-}
-
-function isCustomTab(tab: GeneralTabId): tab is CustomTabId {
-  return tab.startsWith(CUSTOM_TAB_PREFIX);
-}
-
-function customTabCategoryId(tab: CustomTabId): string {
-  return tab.slice(CUSTOM_TAB_PREFIX.length);
-}
-
-/**
- * Display label for a General-view tab: builtin type labels, Global, and the
- * user's own category names (user data, so no i18n key).
- */
-function generalTabLabel(
-  tab: GeneralTabId,
-  t: (key: string) => string,
-  categories: readonly LockerCategory[]
-): string {
-  if (tab === PRIORITY_TAB) return t('installed.priority.chip');
-  if (tab === CURSOR_TAB) return t('locker.cursors.tab');
-  if (isCustomTab(tab)) {
-    const id = customTabCategoryId(tab);
-    return categories.find((category) => category.id === id)?.name ?? '';
-  }
-  return globalModTypeLabel(tab, t);
+type GeneralTabId = GlobalModType | typeof CURSOR_TAB;
+function generalTabLabel(tab: GeneralTabId, t: (key: string) => string): string {
+  return tab === CURSOR_TAB ? t('locker.cursors.tab') : globalModTypeLabel(tab, t);
 }
 
 interface LockerGlobalViewProps {
@@ -1938,13 +1672,6 @@ interface LockerGlobalViewProps {
   onImportSoul: () => void;
   /** Open the Spirit Urn GLB import modal (shown on the spirit-urn tab). */
   onImportUrn: () => void;
-  /** Mods living in the citadel/grimoire priority root (the "Global" tab). */
-  priorityMods: Mod[];
-  onReorderPriorityMods: (ids: string[]) => void | Promise<void>;
-  /** Open the picker that adds installed mods to Global. */
-  onAddGlobal: () => void;
-  /** Move a mod back out of the priority root. */
-  onRemoveGlobal: (modId: string) => void | Promise<unknown>;
   /** Master "shuffle on launch" switch: keeps the per-card opt-in visible. */
   shuffleArmed: boolean;
   /** Shuffle keys (shufflePoolKey) already in the launch-shuffle pool. */
@@ -1952,28 +1679,12 @@ interface LockerGlobalViewProps {
   excludedShuffleKeys: ReadonlySet<string>;
   /** Add/remove a mod from the launch-shuffle pool. */
   onToggleShuffleIncluded: (shuffleKey: string) => void;
-  /** Pool or un-pool many keys at once (the per-category bulk action). */
-  onSetShuffleIncluded: (shuffleKeys: readonly string[], included: boolean) => void;
   /**
    * Hero categories, so a card can tell whether the planner would actually
    * place it in a hero group. Without it a Locker-managed skin matching no hero
    * would get an opt-in the shuffle silently ignores.
    */
   heroList: { id: number; name: string }[];
-  /** User-defined categories, rendered as extra tabs after Global. */
-  categories: readonly LockerCategory[];
-  /** category id -> its installed mods (enabled first, then name). */
-  categoryGroups: ReadonlyMap<string, Mod[]>;
-  /** modPreferenceKey -> category ids, for the per-card membership toggles. */
-  categoryMembership: ReadonlyMap<string, string[]>;
-  /** Open the bulk picker that files installed mods into one category. */
-  onAddModsToCategory: (categoryId: string) => void;
-  /** Add or remove one mod from one category. Never touches placement or type. */
-  onToggleModCategory: (modId: string, categoryId: string) => void;
-  /** Open the "New category" dialog, optionally filing one mod into the result. */
-  onCreateCategory: (modId?: string) => void;
-  /** Open the rename/delete dialog. */
-  onManageCategories: () => void;
 }
 
 /**
@@ -1981,31 +1692,23 @@ interface LockerGlobalViewProps {
  * frosted-glass carousel of cosmetic types (echoing the LockerHeroView shell's
  * art + blur language). Selecting a tile reveals that type's toggleable mods.
  */
-function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn, priorityMods, onReorderPriorityMods, onAddGlobal, onRemoveGlobal, shuffleArmed, includedShuffleKeys, excludedShuffleKeys, onToggleShuffleIncluded, onSetShuffleIncluded, heroList, categories, categoryGroups, categoryMembership, onAddModsToCategory, onToggleModCategory, onCreateCategory, onManageCategories }: LockerGlobalViewProps) {
+function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn, shuffleArmed, includedShuffleKeys, excludedShuffleKeys, onToggleShuffleIncluded, heroList }: LockerGlobalViewProps) {
   const { t } = useTranslation();
   const soundVolume = useAppStore((s) => s.soundVolume);
   const revealNsfwOnHover = useAppStore((s) => s.settings?.revealNsfwOnHover ?? false);
   // Every tab is selectable, empty or not. We still default the landing tab to
   // the first populated type (or a prop container when nothing is installed),
   // so the view opens on something meaningful rather than a blank pane.
-  const firstPopulated = GLOBAL_MOD_TYPE_ORDER.filter(
-    (type) => groups[type].length > 0 || isPropContainerType(type)
-  );
   const [selectedType, setSelectedType] = useState<GeneralTabId>(
-    () => firstPopulated[0] ?? 'soul-container'
+    () => GLOBAL_MOD_TYPE_ORDER.find((type) => groups[type].length > 0) ?? 'soul-container'
   );
-  // Tab order: the classification types, Cursors, then Global (the precedence
-  // axis), with populated tabs pulled above empty ones so a mostly-empty rail
-  // leads with what is installed. The user's own categories follow, behind a
-  // separator, in their own order ("which pile did I put it in?").
+  // Keep populated built-in categories above empty categories.
   const cursorPackCount = useCursorPackStore((s) => s.packs.length);
   const countForTab = (tab: GeneralTabId) => {
-    if (tab === PRIORITY_TAB) return priorityMods.length;
     if (tab === CURSOR_TAB) return cursorPackCount;
-    if (isCustomTab(tab)) return categoryGroups.get(customTabCategoryId(tab))?.length ?? 0;
     return groups[tab].length;
   };
-  const builtinTabIds: readonly GeneralTabId[] = [...GLOBAL_MOD_TYPE_ORDER, CURSOR_TAB, PRIORITY_TAB];
+  const builtinTabIds: readonly GeneralTabId[] = [...GLOBAL_MOD_TYPE_ORDER, CURSOR_TAB];
   const fixedTabIds = [
     ...builtinTabIds.filter((tab) => countForTab(tab) > 0),
     ...builtinTabIds.filter((tab) => countForTab(tab) === 0),
@@ -2019,12 +1722,6 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // Open retag menu, anchored in viewport coords (fixed-positioned) so it never
   // clips against the scrolling card pane. Null when closed.
   const [retagMenu, setRetagMenu] = useState<{ id: string; x: number; y: number } | null>(null);
-  const [priorityActionBusy, setPriorityActionBusy] = useState(false);
-  const [priorityActionError, setPriorityActionError] = useState<string | null>(null);
-  useEffect(() => {
-    setPriorityActionBusy(false);
-    setPriorityActionError(null);
-  }, [retagMenu?.id]);
   // Close the menu on any scroll / resize / Escape — a fixed menu would
   // otherwise float away from its anchor once the pane scrolls.
   useEffect(() => {
@@ -2045,48 +1742,27 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // Any type is a valid selection now (empty tabs render their own empty
   // state), so the active tab is simply whatever the user picked.
   const activeType = selectedType;
-  const isPriorityTab = activeType === PRIORITY_TAB;
-  const activeCategoryId = isCustomTab(activeType) ? customTabCategoryId(activeType) : null;
   // Memoized: the shuffle derivations below key off this array, and a fresh
   // `?? []` on every render would recompute them for nothing.
   const activeMods: Mod[] = useMemo(() => {
-    if (activeType === PRIORITY_TAB) return priorityMods;
     if (activeType === CURSOR_TAB) return [];
-    if (isCustomTab(activeType)) return categoryGroups.get(customTabCategoryId(activeType)) ?? [];
     return groups[activeType] ?? [];
-  }, [activeType, priorityMods, categoryGroups, groups]);
-  // A category can be deleted from the manage dialog while its tab is open, so
-  // fall back to the landing tab rather than sitting on a tab that is gone.
-  const landingTab: GeneralTabId = firstPopulated[0] ?? 'soul-container';
-  useEffect(() => {
-    if (!isCustomTab(selectedType)) return;
-    const id = customTabCategoryId(selectedType);
-    if (categories.some((category) => category.id === id)) return;
-    setSelectedType(landingTab);
-  }, [selectedType, categories, landingTab]);
+  }, [activeType, groups]);
   // Track the active row's box so the highlight can glide to it. Measured in a
   // layout effect (pre-paint) to avoid a one-frame jump on first mount. Also
-  // re-measured when the rows move without the active tab changing: a category
-  // added or deleted, or a tab filling up or emptying out.
+  // re-measured when a tab fills up or empties out and changes the row order.
   useLayoutEffect(() => {
     const el = tabRefs.current.get(activeType);
     if (el) setTabIndicator({ top: el.offsetTop, height: el.offsetHeight });
-  }, [activeType, categories.length, fixedTabOrder]);
+  }, [activeType, fixedTabOrder]);
   // Soul containers and spirit urns share the single-select + live-3D-tile
   // treatment (frosted glass, content-stable key, active badge, import button).
-  // Never true for the Global tab: priority mods are ordinary multi-toggle
-  // cards, never the single-select live-3D treatment.
-  // Never true on a custom tab either: a category is a view grouping, so its
-  // cards stay ordinary multi-toggle cards whatever they are classified as.
   const isPropContainer =
-    activeType !== PRIORITY_TAB &&
     activeType !== CURSOR_TAB &&
-    !isCustomTab(activeType) &&
     isPropContainerType(activeType);
-  const total = new Set([
-    ...GLOBAL_MOD_TYPE_ORDER.flatMap((type) => groups[type].map((mod) => mod.id)),
-    ...priorityMods.map((mod) => mod.id),
-  ]).size + cursorPackCount;
+  const total = new Set(
+    GLOBAL_MOD_TYPE_ORDER.flatMap((type) => groups[type].map((mod) => mod.id))
+  ).size + cursorPackCount;
   // The scrollable card pane: the shared soul-container canvas clamps each
   // card's render rect to this element so models never bleed past the pane.
   const paneRef = useRef<HTMLDivElement>(null);
@@ -2098,93 +1774,11 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   const emptyTabClass =
     'my-auto flex min-h-60 w-full max-w-md -translate-y-5 self-center flex-col items-center justify-center gap-3 rounded-xl border border-hl/15 bg-bg-secondary/70 px-8 py-10 text-center shadow-2xl shadow-black/25 backdrop-blur-md';
 
-  // Where each visible card shuffles, asked once per card. A custom tab mixes
-  // hero skins, classified mods and non-shuffleable ones, so the affordance is
-  // decided per mod (shuffleGroupKind) rather than per tab.
+  // Offer shuffle controls only for a group the planner can handle.
   const shuffleKinds = useMemo(
     () => new Map(activeMods.map((mod) => [mod.id, shuffleGroupKind(mod, { heroList, excludedSkinKeys: excludedShuffleKeys })])),
     [activeMods, heroList, excludedShuffleKeys]
   );
-  // Pool math for the per-category bulk button. Only a custom tab shows it: the
-  // classification tabs ARE shuffle groups, where "add every card" would just
-  // be the pointless "re-roll among all of them".
-  const categoryShufflePool = useMemo(
-    () =>
-      activeCategoryId === null
-        ? { eligibleKeys: [] as string[], allIncluded: false }
-        : summarizeShufflePool(activeMods, includedShuffleKeys, { heroList, excludedSkinKeys: excludedShuffleKeys }),
-    [activeCategoryId, activeMods, includedShuffleKeys, heroList, excludedShuffleKeys]
-  );
-
-  // The card the retag menu is open on, and the categories it is already in.
-  // Resolved from the visible cards, so it follows a reload while the menu is
-  // open (the menu closes on scroll/resize/Escape, not on a mod list refresh).
-  const menuMod = retagMenu ? activeMods.find((mod) => mod.id === retagMenu.id) ?? null : null;
-  const menuCategoryIds = menuMod
-    ? categoryMembership.get(modPreferenceKey(menuMod)) ?? []
-    : [];
-
-  /**
-   * The "Categories" block of the retag menu: additive membership toggles, kept
-   * visually and semantically apart from the classification "Move to" list
-   * above it. Filing a mod never moves it, so these are checkboxes rather than
-   * the radio-style destinations, and picking one leaves the menu open so
-   * several categories can be ticked in one pass.
-   */
-  const renderMenuCategorySection = () => (
-    <>
-      <div className="my-1 h-px bg-border" />
-      <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-        {t('locker.categories.menuHeader')}
-      </div>
-      {categories.length > 0 && (
-        // Capped: a user with many categories would otherwise get a menu taller
-        // than the window.
-        <div className="max-h-44 overflow-y-auto">
-          {categories.map((category) => {
-            const isMember = menuCategoryIds.includes(category.id);
-            return (
-              <button
-                key={category.id}
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={isMember}
-                onClick={() => {
-                  if (retagMenu) onToggleModCategory(retagMenu.id, category.id);
-                }}
-                className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary"
-              >
-                <span
-                  className={`flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-sm border ${
-                    isMember ? 'border-accent bg-accent text-accent-foreground' : 'border-hl/25'
-                  }`}
-                >
-                  {isMember && <Check className="h-2.5 w-2.5" />}
-                </span>
-                <span className="truncate">{category.name}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      <button
-        type="button"
-        role="menuitem"
-        onClick={() => {
-          if (retagMenu) onCreateCategory(retagMenu.id);
-          setRetagMenu(null);
-        }}
-        className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        {t('locker.categories.newCategory')}
-      </button>
-    </>
-  );
-
-  // One rail row. Shared by the builtin tabs and the user's categories so the
-  // two blocks can be rendered separately (with a divider between) without the
-  // markup drifting apart.
   const renderTab = (type: GeneralTabId) => {
     const count = countForTab(type);
     const isActive = type === activeType;
@@ -2206,7 +1800,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
         }`}
       >
         <span className={`flex-1 truncate text-sm font-medium text-white ${isEmpty && !isActive ? 'opacity-50' : ''}`}>
-          {generalTabLabel(type, t, categories)}
+          {generalTabLabel(type, t)}
         </span>
         <span className="text-xs text-white/50">{count}</span>
       </button>
@@ -2310,32 +1904,6 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
             />
           )}
           {fixedTabIds.map(renderTab)}
-          {/* The user's own categories, kept behind a divider so the rail reads
-              as "what kind of mod", then "does it win", then "my piles". */}
-          {categories.length > 0 && (
-            <div aria-hidden className="mx-3 my-1 h-px bg-hl/10" />
-          )}
-          {categories.map((category) => renderTab(customTabId(category.id)))}
-          <div className="relative z-10 mt-1 flex flex-col items-start gap-0.5">
-            <button
-              type="button"
-              onClick={() => onCreateCategory()}
-              className="flex cursor-pointer items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs text-white/60 transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {t('locker.categories.railNew')}
-            </button>
-            {categories.length > 0 && (
-              <button
-                type="button"
-                onClick={onManageCategories}
-                className="flex cursor-pointer items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs text-white/60 transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                <Settings2 className="h-3.5 w-3.5" />
-                {t('locker.categories.railManage')}
-              </button>
-            )}
-          </div>
         </nav>
       </div>
 
@@ -2359,51 +1927,12 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
             <>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-base font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-                  {generalTabLabel(activeType, t, categories)}
+                  {generalTabLabel(activeType, t)}
                 </h3>
                 <span className="text-xs text-white/60">
                   {t('locker.page.modCount', { count: countForTab(activeType) })}
                 </span>
                 {activeType === CURSOR_TAB && <CursorImportButton />}
-                {isPriorityTab && (
-                  <button
-                    type="button"
-                    onClick={onAddGlobal}
-                    className="ml-auto inline-flex items-center gap-1.5 self-center rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
-                    title={t('locker.globalPicker.description')}
-                  >
-                    <ArrowUpToLine className="h-3.5 w-3.5" />
-                    {t('locker.globalPicker.trigger')}
-                  </button>
-                )}
-                {activeCategoryId !== null && (
-                  <div className="ml-auto flex items-center gap-2">
-                    {/* Bulk pool toggle: only once the master switch is armed
-                        (the per-card pills are hidden otherwise) and only when
-                        the category holds something the planner can re-roll. */}
-                    {shuffleArmed && categoryShufflePool.eligibleKeys.length > 0 && (
-                      <ShuffleBulkButton
-                        allIncluded={categoryShufflePool.allIncluded}
-                        count={categoryShufflePool.eligibleKeys.length}
-                        onClick={() =>
-                          onSetShuffleIncluded(
-                            categoryShufflePool.eligibleKeys,
-                            !categoryShufflePool.allIncluded
-                          )
-                        }
-                      />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => onAddModsToCategory(activeCategoryId)}
-                      className="inline-flex items-center gap-1.5 self-center rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
-                      title={t('locker.categories.pickerDescription')}
-                    >
-                      <FolderPlus className="h-3.5 w-3.5" />
-                      {t('locker.categories.addMods')}
-                    </button>
-                  </div>
-                )}
                 {isPropContainer && (
                   <button
                     type="button"
@@ -2416,10 +1945,6 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   </button>
                 )}
               </div>
-              {isPriorityTab && (
-                <SkinLoadOrderStrip mods={priorityMods} onReorder={onReorderPriorityMods}
-                  hideNsfwPreviews={hideNsfw} hint={t('locker.global.loadOrderHint')} />
-              )}
               {activeType === CURSOR_TAB ? (
                 <CursorPackPane />
               ) : activeMods.length === 0 && isPropContainer ? (
@@ -2443,38 +1968,6 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                     {activeType === 'spirit-urn' ? t('locker.urnImport.trigger.label') : t('locker.soulImport.trigger.label')}
                   </button>
                 </div>
-              ) : activeMods.length === 0 && isPriorityTab ? (
-                <div className={emptyTabClass}>
-                  <ArrowUpToLine className="h-8 w-8 text-white/40" />
-                  <p className="max-w-sm text-sm text-white/70">{t('locker.globalPicker.empty')}</p>
-                  <button
-                    type="button"
-                    onClick={onAddGlobal}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
-                  >
-                    <ArrowUpToLine className="h-3.5 w-3.5" />
-                    {t('locker.globalPicker.trigger')}
-                  </button>
-                </div>
-              ) : activeMods.length === 0 && activeCategoryId !== null ? (
-                // A category the user just made is empty by definition, so its
-                // empty state is the bulk picker rather than a Browse hint.
-                <div className={emptyTabClass}>
-                  <FolderPlus className="h-8 w-8 text-white/40" />
-                  <p className="max-w-sm text-sm text-white/70">
-                    {t('locker.categories.tabEmpty', {
-                      name: generalTabLabel(activeType, t, categories),
-                    })}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => onAddModsToCategory(activeCategoryId)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
-                  >
-                    <FolderPlus className="h-3.5 w-3.5" />
-                    {t('locker.categories.addMods')}
-                  </button>
-                </div>
               ) : activeMods.length === 0 ? (
                 // Non-prop types can't be imported, so the empty state just
                 // points the user at Browse instead of an import button.
@@ -2482,7 +1975,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   <Layers className="h-8 w-8 text-white/40" />
                   <p className="max-w-sm text-sm text-white/70">
                     {t('locker.global.typeEmpty', {
-                      type: generalTabLabel(activeType, t, categories),
+                      type: generalTabLabel(activeType, t),
                     })}
                   </p>
                 </div>
@@ -2493,17 +1986,9 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   // hidden imagery into the glass tint, even blurred.
                   const glassBackdropUrl =
                     mod.thumbnailUrl && !(mod.nsfw && hideNsfw) ? mod.thumbnailUrl : null;
-                  // Placement beats the pool: a priority-root mod is always on
-                  // and the planner never re-rolls it, so it shows the locked
-                  // marker instead of an opt-in the shuffle would have to
-                  // ignore. Checked per mod, not per tab: the two axes are
-                  // independent, so a classified mod can also be Global.
                   const shuffleKind = shuffleKinds.get(mod.id) ?? null;
-                  const shufflePinned = shuffleKind === 'priority';
                   // Only a mod the planner would actually re-roll gets the
-                  // opt-in (and the pooled ring). A card on a custom tab that
-                  // shuffles nowhere gets nothing: a control writing a key the
-                  // planner ignores is a lie.
+                  // opt-in and pooled ring. Legacy priority-root mods stay out.
                   const shuffleOptIn = shuffleKind === 'hero' || shuffleKind === 'bucket';
                   // Axis-qualified: a classified mod pools under its bucket, so
                   // one click here can never arm the hero-skin sibling of the
@@ -2666,14 +2151,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                               e.stopPropagation();
                               const r = e.currentTarget.getBoundingClientRect();
                               const MENU_W = 208;
-                              // Rough height, used only to keep the fixed menu
-                              // inside the viewport. A custom tab's menu is a
-                              // single row; elsewhere the Categories section
-                              // adds a header, a capped list, and a New row.
-                              const MENU_H =
-                                activeCategoryId !== null
-                                  ? 72
-                                  : 260 + Math.min(categories.length, 5) * 28;
+                              const MENU_H = 260;
                               const x = Math.max(
                                 8,
                                 Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)
@@ -2717,13 +2195,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             its HOME group (its hero, or its classification
                             bucket). A category is never a shuffle group of
                             its own. */}
-                        {shufflePinned ? (
-                          <ShuffleAlwaysOnBadge
-                            name={mod.name}
-                            armed={shuffleArmed}
-                            className="absolute right-2 top-2 z-20 group-hover/card:opacity-100"
-                          />
-                        ) : shuffleOptIn ? (
+                        {shuffleOptIn ? (
                           <ShuffleIncludeButton
                             name={mod.name}
                             included={inShufflePool}
@@ -2827,61 +2299,6 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
             className="fixed z-[80] w-52 rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
             style={{ top: retagMenu.y, left: retagMenu.x }}
           >
-            {/* A custom tab is one of the user's own piles, so its cards get the
-                membership action and nothing else: the classification
-                destinations belong to the tabs that own that axis. */}
-            {activeCategoryId !== null ? (
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  onToggleModCategory(retagMenu.id, activeCategoryId);
-                  setRetagMenu(null);
-                }}
-                className="w-full cursor-pointer rounded px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
-              >
-                {t('locker.categories.removeFrom', {
-                  name: generalTabLabel(activeType, t, categories),
-                })}
-              </button>
-            ) : /* The Global tab is folder placement, not classification, so its
-                cards get the one action that makes sense there. Offering the
-                classification types would write `globalType` on a mod
-                whose whole point is where its VPK lives. */
-            isPriorityTab ? (
-              <>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={priorityActionBusy}
-                onClick={() => {
-                  if (priorityActionBusy) return;
-                  setPriorityActionBusy(true);
-                  setPriorityActionError(null);
-                  void (async () => {
-                    try {
-                      await onRemoveGlobal(retagMenu.id);
-                      setRetagMenu(null);
-                    } catch (err) {
-                      setPriorityActionError(err instanceof Error ? err.message : String(err));
-                    } finally {
-                      setPriorityActionBusy(false);
-                    }
-                  })();
-                }}
-                className="w-full rounded px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {priorityActionBusy ? t('installed.priority.busy') : t('installed.priority.clear')}
-              </button>
-              {priorityActionError && (
-                <p role="alert" className="px-2 py-1 text-2xs text-state-danger">
-                  {priorityActionError}
-                </p>
-              )}
-              {renderMenuCategorySection()}
-              </>
-            ) : (
-            <>
             <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
               {t('locker.page.moveToCategory')}
             </div>
@@ -2919,9 +2336,6 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
             >
               {t('locker.page.removeFromGlobal')}
             </button>
-            {renderMenuCategorySection()}
-            </>
-            )}
           </div>
         </>
       )}

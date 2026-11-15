@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUpToLine, CameraOff, FileWarning } from 'lucide-react';
+import { CameraOff, FileWarning } from 'lucide-react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
 import type { Mod } from '../../types/mod';
 import soulUrn from '../../assets/soul-urn.png';
@@ -8,26 +8,6 @@ import soulUrn from '../../assets/soul-urn.png';
 // Shared geometry and neutral colors for Installed cards and import tag controls.
 export const MOD_TAG_CHIP_CLASS = 'inline-flex h-[22px] min-w-0 items-center overflow-hidden rounded-md px-1.5 text-2xs font-semibold leading-none';
 export const MOD_TAG_SURFACE_CLASS = 'border border-hl/[0.06] bg-bg-tertiary/65 text-text-secondary/80';
-
-/** Stand-in for PriorityEditor on Global (priority-root) cards. They load
- *  before every numbered mod and reorderMods filters them out of reposition
- *  batches, so a position number would be both a lie and dead UI. Echoes the
- *  PriorityEditor chip geometry, accent-tinted so Global reads as its own
- *  tier rather than position zero. */
-export function GlobalLoadBadge({ variant }: { variant: 'overlay' | 'inline' }) {
-  const { t } = useTranslation();
-  return (
-    <span
-      title={t('installed.priority.hint')}
-      aria-label={t('installed.priority.chip')}
-      className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-accent/60 px-2 text-accent ${
-        variant === 'overlay' ? 'bg-black/70' : 'bg-bg-tertiary'
-      }`}
-    >
-      <ArrowUpToLine className="h-3 w-3" strokeWidth={2.5} />
-    </span>
-  );
-}
 
 export function ChipText({ children }: { children: ReactNode }) {
   return <span className="relative top-[1.5px] min-w-0 truncate leading-[14px]">{children}</span>;

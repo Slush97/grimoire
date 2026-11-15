@@ -369,7 +369,7 @@
       "saveEnable": "Save & enable",
       "enabled": "Skin saved and enabled.",
       "customName": "{{hero}} custom",
-      "globalUnsupported": "Global skins can't be edited: they load above any skin saved here, so your changes would not show in game. Remove the skin from Global in the Locker to edit it.",
+      "globalUnsupported": "Skins in the legacy priority folder can't be edited here because they load above skins saved in this editor.",
       "sourceMissing_one": "A skin this edit was made from is missing. You're editing without it, and saving replaces the earlier edit.",
       "sourceMissing_other": "{{count}} skins this edit was made from are missing. You're editing without them, and saving replaces the earlier edit.",
       "thumbnailFailed": "Skin saved, but its preview image could not be generated.",
@@ -1895,7 +1895,7 @@
       "groupVariants": "Group",
       "groupVariantsMinHint": "Select 2+ mods to group as variants",
       "groupVariantsMergedHint": "Merged mods cannot be grouped as variants. Unmerge them first.",
-      "groupVariantsPlacementHint": "Variants must share the same Global load setting. Toggle Global on or off to match before grouping.",
+      "groupVariantsPlacementHint": "Variants must use the same load folder before grouping.",
       "groupVariantsHint_one": "Show {{count}} mod as one card with switchable files",
       "groupVariantsHint_other": "Show {{count}} mods as one card with switchable files",
       "tag": "Tag",
@@ -1912,13 +1912,6 @@
       "defaultTag": "Default tag",
       "global": "General",
       "hero": "Hero"
-    },
-    "priority": {
-      "make": "Make Global",
-      "clear": "Remove from Global",
-      "chip": "Global",
-      "hint": "Global mods load before every other mod, so they always win when two mods change the same file. Shuffling skins never turns them off.",
-      "busy": "Moving..."
     },
     "preview": {
       "previousFile": "Previous file",
@@ -2061,7 +2054,7 @@
       "groupFailed": "Could not change the variant group: {{error}}",
       "createGroupFailed": "Could not create the variant group",
       "updateRestoreFailed": "Could not safely preserve the local variant group during this update",
-      "updateRestoreGlobalFailed": "Could not safely preserve the Global local variant group during this update"
+      "updateRestoreGlobalFailed": "Could not safely preserve this local variant group's load folder during the update"
     },
     "repairs": {
       "backupNote": "Each repaired mod is backed up first. Close Deadlock before repairing mods it has loaded.",
@@ -2144,15 +2137,6 @@
       "onLaunchHint": "When on, each time you launch from Grimoire one of your chosen mods is equipped per hero and per General group. Add mods to the pool with the shuffle button on each card.",
       "addToShuffle": "Add {{name}} to the shuffle",
       "removeFromShuffle": "Remove {{name}} from the shuffle",
-      "alwaysOn": "{{name}} is Global: it always stays on, so the shuffle never re-rolls it.",
-      "bulk": {
-        "add": "Shuffle all",
-        "remove": "Remove all",
-        "addHint_one": "Add this category's {{count}} shuffleable mod to the pool. Each one still re-rolls in its own hero or General group.",
-        "addHint_other": "Add this category's {{count}} shuffleable mods to the pool. Each one still re-rolls in its own hero or General group.",
-        "removeHint_one": "Remove this category's {{count}} pooled mod from the shuffle.",
-        "removeHint_other": "Remove this category's {{count}} pooled mods from the shuffle."
-      },
       "inPool": "In shuffle",
       "variantChoiceFor": "Choose the shuffle variant for {{name}}",
       "defaultVariant": "Keep current files",
@@ -2193,59 +2177,13 @@
       "hideHeroName": "Hide hero name label",
       "hideHeroNameHint": "Turn on when the image already shows the hero's name."
     },
-    "globalPicker": {
-      "title": "Add mods to Global",
-      "description": "Global mods load before everything else, so they always win when two mods change the same file. Shuffling skins never turns them off.",
-      "trigger": "Add mods",
-      "searchPlaceholder": "Search installed mods...",
-      "selectedCount_one": "{{count}} selected",
-      "selectedCount_other": "{{count}} selected",
-      "add": "Add to Global",
-      "adding": "Adding...",
-      "disabled": "Off",
-      "noMatches": "No installed mods match that search.",
-      "allGlobal": "Every installed mod is already Global.",
-      "empty": "Nothing is Global yet. Add a mod here to keep it on and winning over everything else."
-    },
     "global": {
       "activeBadgeTitle": "This soul container is active and loaded in-game",
       "disabledBadge": "Disabled",
-      "loadOrderHint": "Drag to set which Global mod wins when files overlap. Top loads first.",
       "disabledBadgeTitle": "This mod is disabled and not loaded in-game",
       "deleteMod": "Delete {{name}}",
       "propEmpty": "No {{type}} installed yet. Import one from a 3D model (.glb) to get started.",
       "typeEmpty": "No {{type}} installed yet. Find some in Browse and they'll show up here."
-    },
-    "categories": {
-      "railNew": "New category",
-      "railManage": "Manage",
-      "menuHeader": "Categories",
-      "newCategory": "New category...",
-      "createTitle": "New category",
-      "create": "Create",
-      "nameLabel": "Category name",
-      "namePlaceholder": "e.g. My favorites",
-      "addMods": "Add mods",
-      "pickerTitle": "Add mods to {{name}}",
-      "pickerDescription": "Categories only group mods for browsing the Locker. Filing a mod here never enables, disables, or reorders it.",
-      "searchPlaceholder": "Search installed mods...",
-      "selectedCount_one": "{{count}} selected",
-      "selectedCount_other": "{{count}} selected",
-      "add": "Add to category",
-      "disabled": "Off",
-      "noMatches": "No installed mods match that search.",
-      "allFiled": "Every installed mod is already in this category.",
-      "added_one": "Added {{count}} mod to {{name}}",
-      "added_other": "Added {{count}} mods to {{name}}",
-      "tabEmpty": "Nothing in {{name}} yet. Add mods to file them here.",
-      "removeFrom": "Remove from {{name}}",
-      "manageTitle": "Manage categories",
-      "manageSubtitle": "Categories only group mods for browsing. Deleting one never deletes any mods.",
-      "emptyHint": "No categories yet. Create one from the General rail.",
-      "memberCount_one": "{{count}} mod",
-      "memberCount_other": "{{count}} mods",
-      "duplicateName": "Another category already uses that name.",
-      "deleteCategory": "Delete {{name}}"
     },
     "soulImport": {
       "trigger": {
@@ -3598,7 +3536,7 @@
       "pick": "Pick replacement",
       "confirmTitle": "Replace file?",
       "dontAskAgain": "Don't ask again",
-      "confirmBody": "{{oldName}} is no longer on GameBanana. Grimoire will install {{newName}} and delete {{oldName}}, keeping its enabled and Global settings.",
+      "confirmBody": "{{oldName}} is no longer on GameBanana. Grimoire will install {{newName}} and delete {{oldName}}, keeping its enabled state and load folder.",
       "confirm": "Replace"
     },
     "aria": {
@@ -4130,7 +4068,7 @@
     "locateOrder": "Show in Installed",
     "orderWarning": "Recolor won't show",
     "orderFixHint": "The base skin is hiding it.",
-    "orderGlobalHint": "Turn off Global on the base skin, then try again.",
+    "orderGlobalHint": "This base skin uses the legacy priority folder and can't be reordered here.",
     "fixOrder": "Fix it",
     "orderFixed": "Fixed.",
     "orderChanged": "Mods changed. Try again.",
@@ -4219,7 +4157,7 @@
       "ignoreTitle": "Stop showing this pair",
       "ignoreAll": "Ignore all",
       "ignoreAllTitle": "Stop showing every pair listed here",
-      "swapLocked": "Global mods always load first. Turn off Global to change this.",
+      "swapLocked": "This mod uses the legacy priority folder and always loads first.",
       "more": "More actions",
       "ignoreMod": "Ignore every overlap with {{name}}",
       "disableHeading": "Disable"

@@ -479,7 +479,6 @@ interface AppState {
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
   reorderMods: (orderedIds: string[]) => Promise<void>;
-  reorderPriorityMods: (orderedIds: string[]) => Promise<void>;
   captureProfileShuffle: () => ProfileShuffle | undefined;
   restoreProfileShuffle: (shuffle: unknown) => void;
   setShuffleOnLaunch: (enabled: boolean) => void;
@@ -513,9 +512,6 @@ interface AppState {
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
   setModTags: (modId: string, tags: Mod['tagOverrides'] | null) => Promise<void>;
-  /** Mark a mod Global (priority root) or clear it. Moves the VPK, so it goes
-   *  through the toggle queue like every other folder mutation. */
-  setModPriorityFolder: (modId: string, priority: boolean) => Promise<void>;
   setVariantLabel: (modId: string, label: string) => Promise<void>;
   /** Batch local import. Resolves with one result per source, in request order. */
   importCustomMods: (items: ImportCustomModArgs[]) => Promise<ImportCustomModResult[]>;
@@ -1131,20 +1127,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  reorderPriorityMods: async (orderedIds: string[]) => {
-    try {
-      const updated = await api.reorderPriorityMods(orderedIds);
-      invalidateModsReads();
-      set((state) => {
-        const mods = reconcileMods(state.mods, updated);
-        return mods === state.mods ? state : { mods };
-      });
-    } catch (err) {
-      if (!isGameRunningModLockError(err)) set({ modsError: String(err) });
-      get().loadMods({ force: true });
-    }
-  },
-
   // An empty pool with shuffle off is "never used shuffle", not a choice worth
   // saving: applying that snapshot later would wipe a pool built since, with no
   // undo. Returning undefined stores nothing, so the profile acts like a legacy
@@ -1163,8 +1145,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const result = profileShuffleSchema.safeParse(value);
     if (!result.success) return;
     const shuffle = result.data;
-    // A snapshot can predate a mod being pinned Global. Same rule as
-    // setModPriorityFolder: a pinned mod has no opt-in, so its key must not
+    // A snapshot can include legacy priority-root mods. Those mods have no
+    // shuffle opt-in, so their keys must not
     // come back through here.
     const { mods } = get();
     let included = new Set(shuffle.included);
@@ -1449,40 +1431,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     invalidateModsReads();
     set({
       mods: get().mods.map((m) => (m.id === modId ? updated : m)),
-    });
-  },
-
-  // Marking a mod Global renames its VPK into citadel/grimoire, which changes
-  // its id (ids derive from the filename). Route through enqueueToggle so the
-  // move can't interleave with a Locker/Installed toggle and work off a stale
-  // id, the same hazard documented on the mutation queue in mods.ts.
-  setModPriorityFolder: async (modId: string, priority: boolean) => {
-    await enqueueToggle(async () => {
-      try {
-        const updated = await api.setModPriorityFolder(modId, priority);
-        const mods = get().mods.map((m) => (m.id === modId ? updated : m));
-        invalidateModsReads();
-        // Pinning retires the mod's shuffle opt-in. Its card swaps the toggle
-        // for the always-on pin, so a key left behind would be invisible yet
-        // still counted, and unpinning would put the mod back in the shuffle
-        // without the user asking. Unpinning does not restore it: opting back
-        // in is one click on a control that is visible again.
-        const prunedPool = priority
-          ? prunePoolKeysForMod(get().shuffleIncluded, updated, mods)
-          : null;
-        if (prunedPool) {
-          writeStoredShuffleIncluded(prunedPool);
-          set({ mods, shuffleIncluded: prunedPool });
-        } else {
-          set({ mods });
-        }
-      } catch (err) {
-        // Reconcile any partial batch progress, then preserve the rejection for
-        // the initiating surface. The picker and card menus own contextual
-        // errors; swallowing here made them close as if a failed move worked.
-        await get().loadMods({ silent: true, force: true });
-        throw err;
-      }
     });
   },
 

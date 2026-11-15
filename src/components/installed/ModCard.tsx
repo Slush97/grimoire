@@ -3,7 +3,7 @@ import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMou
 import { useTranslation } from 'react-i18next';
 import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import { RequirementWarning } from '../requirements/RequirementWarning';
-import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, ArrowLeftRight, Rotate3d } from 'lucide-react';
+import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ImageDown, Link, ArrowLeftRight, Rotate3d } from 'lucide-react';
 import type { EntrySwapTarget } from '../../lib/modEntries';
 import { MenuCheckboxItem, MenuContent, MenuItem, MenuLabel, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
@@ -37,7 +37,7 @@ import type { ModList } from '../../lib/modLists';
 import { ModListSubmenu } from './ModListMenu';
 import { Tag } from '../common/ui';
 import type { InstalledWindowView as ViewMode } from './installedWindowing';
-import { GlobalLoadBadge, HeroTagLabel, HeroIconStack, RepairIssueIcons, FittingTagList, MOD_TAG_CHIP_CLASS, MOD_TAG_SURFACE_CLASS } from './chips';
+import { HeroTagLabel, HeroIconStack, RepairIssueIcons, FittingTagList, MOD_TAG_CHIP_CLASS, MOD_TAG_SURFACE_CLASS } from './chips';
 import { EMPTY_LIST_IDS } from './emptyIds';
 import { ModSafetyBadge } from '../ModSafety';
 import { CrashAdvisoryBadge } from '../CrashAdvisories';
@@ -129,8 +129,6 @@ interface ModCardProps {
    *  right-click menu. */
   onViewImprint?: () => void;
   onSetTags?: (tags: Mod['tagOverrides'] | null) => void | Promise<void>;
-  /** Toggle this mod's Global (priority root) placement. */
-  onSetPriority?: (priority: boolean) => void | Promise<void>;
   onFixUnknown?: () => void;
   fixingUnknown?: boolean;
   /** Reposition commit. Passed through to PriorityEditor; the argument is a
@@ -416,7 +414,6 @@ export function ModCard({
   onAddVariant,
   onViewImprint,
   onSetTags,
-  onSetPriority,
   onFixUnknown,
   fixingUnknown,
   onCommitPriority,
@@ -581,21 +578,6 @@ export function ModCard({
     }
   };
 
-  // Toggle the Global (priority root) placement. The move renames the VPK, so
-  // the resulting mod carries a new id; the store refreshes the list, and this
-  // card is re-rendered from the new entry rather than trying to patch itself.
-  const togglePriority = async () => {
-    if (!onSetPriority || menuBusy) return;
-    setMenuBusy(true);
-    try {
-      await onSetPriority(!mod.priorityMod);
-    } catch (err) {
-      reportMenuError('Failed to change Global placement', err);
-    } finally {
-      setMenuBusy(false);
-    }
-  };
-
   // Glass surface for grid/compact cards: a translucent base over which a
   // blurred copy of the cover art (see glassBackdropUrl) bleeds, so the card
   // is tinted by its own thumbnail.
@@ -663,7 +645,7 @@ export function ModCard({
     !!(onAddVariant && localMod) || !!onOpenDetails || !!onViewAuthor
     || !!cardImageSource || !!group;
   const hasSecondaryActions =
-    !!onSoloLaunch || !!onSetPriority || !!onFixUnknown
+    !!onSoloLaunch || !!onFixUnknown
     || !!(mod.merged && (onCopyShareCode || onUnmerge));
   const renderCardMenuItems = () => (
     <>
@@ -809,20 +791,6 @@ export function ModCard({
       {onSoloLaunch && (
         <MenuItem icon={Beaker} disabled={soloBusy} onSelect={onSoloLaunch}>
           {t('installed.card.soloLaunch')}
-        </MenuItem>
-      )}
-      {onSetPriority && (
-        <MenuItem
-          icon={ArrowUpToLine}
-          disabled={menuBusy}
-          tone={mod.priorityMod ? 'success' : 'default'}
-          onSelect={() => void togglePriority()}
-        >
-          {menuBusy
-            ? t('installed.priority.busy')
-            : mod.priorityMod
-              ? t('installed.priority.clear')
-              : t('installed.priority.make')}
         </MenuItem>
       )}
       {onFixUnknown && (
@@ -980,7 +948,7 @@ export function ModCard({
         }
       }}
       onContextMenu={captureContextImage}
-      className={`installed-card @container/installed-card group/card relative isolate rounded-xl border ${glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
+      className={`installed-card @container/installed-card group/card relative isolate rounded-xl border ${glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
     >
       <div>
         {(selectMode || selectionPreview) && (
@@ -1025,12 +993,7 @@ export function ModCard({
         {(() => {
         const overlayBadges = (
           <div className="always-dark pointer-events-none absolute inset-x-2 top-2 z-10 flex items-start justify-between gap-2">
-            {mod.enabled && !selectMode && !selectionPreview && (
-              mod.priorityMod ? (
-                <div className="pointer-events-auto flex h-5 shrink-0 items-start">
-                  <GlobalLoadBadge variant="overlay" />
-                </div>
-              ) : (
+            {mod.enabled && !mod.priorityMod && !selectMode && !selectionPreview && (
               <div className="pointer-events-auto flex h-5 shrink-0 items-start" data-card-action="true">
                 <PriorityEditor
                   modName={mod.name}
@@ -1040,23 +1003,12 @@ export function ModCard({
                   onCommit={onCommitPriority}
                 />
               </div>
-              )
             )}
             {!mod.enabled && !selectMode && !selectionPreview && (
               <div className="pointer-events-auto flex shrink-0 flex-col items-start gap-1">
                 <Tag tone="neutral" variant="overlay" icon={PowerOff} title={t('locker.global.disabledBadgeTitle')}>
                   {t('locker.global.disabledBadge')}
                 </Tag>
-                {mod.priorityMod && (
-                  <Tag
-                    tone="accent"
-                    variant="overlay"
-                    icon={ArrowUpToLine}
-                    title={t('installed.priority.hint')}
-                  >
-                    {t('installed.priority.chip')}
-                  </Tag>
-                )}
               </div>
             )}
               <div className="pointer-events-auto ml-auto flex min-w-0 flex-wrap items-start justify-end gap-1">

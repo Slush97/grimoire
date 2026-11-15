@@ -145,3 +145,15 @@ describe('category-based General classification', () => {
     expect(resolveInstalledGeneralType({ gameBananaId: 1, categoryName: 'Character HUD' })).toBeUndefined();
   });
 });
+
+
+describe('Locker built-in destinations', () => {
+  it('keeps tag-backed categories and excludes the retired default buckets', () => {
+    for (const name of ['Soul Container', 'Spirit Urn', 'Hideout', 'HUD', 'Animations', 'Maps', 'Killstreak Music']) {
+      expect(categoryGeneralType([{ name }])).toBeDefined();
+    }
+    for (const name of ['Icon Packs', 'Effects', 'Announcer / SFX']) {
+      expect(categoryGeneralType([{ name }])).toBeUndefined();
+    }
+  });
+});

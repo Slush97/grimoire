@@ -342,8 +342,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setModTags: (modId, tags) => ipcRenderer.invoke('set-mod-tags', modId, tags),
     setModIgnoreUpdates: (modId: string, ignore: boolean) =>
         ipcRenderer.invoke('set-mod-ignore-updates', modId, ignore),
-    setModPriorityFolder: (modId: string, priority: boolean) =>
-        ipcRenderer.invoke('set-mod-priority-folder', modId, priority),
     backfillGameBananaFileId: (
         modId: string,
         payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
@@ -352,8 +350,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('set-mod-priority', modId, priority),
     reorderMods: (orderedIds: string[]) =>
         ipcRenderer.invoke('reorder-mods', orderedIds),
-    reorderPriorityMods: (orderedIds: string[]) =>
-        ipcRenderer.invoke('reorder-priority-mods', orderedIds),
     applyModToggleBatch: (enableIds: string[], disableIds: string[]) =>
         ipcRenderer.invoke('apply-mod-toggle-batch', enableIds, disableIds),
     swapModPriority: (modIdA: string, modIdB: string) =>

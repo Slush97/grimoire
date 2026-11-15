@@ -106,11 +106,6 @@ export function categoryGeneralType(path: readonly GameBananaCategory[]): Global
       case 'spirit urns': return 'spirit-urn';
       case 'hideout': return 'hideout';
       case 'hud': return 'hud';
-      case 'icons':
-      case 'icon packs': return 'icons';
-      case 'effects': return 'effects';
-      case 'announcer':
-      case 'announcer / sfx': return 'announcer';
       case 'killstreak music': return 'killstreak-music';
       case 'animations': return 'animations';
       case 'maps': return 'maps';

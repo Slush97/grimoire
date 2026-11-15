@@ -262,7 +262,7 @@ function overflowFolderPaths(citadelPath: string): string[] {
  * Deliberately separate from getAddonFolderPaths, which stays the *allocation*
  * view: slot allocation, overflow minting, and the gameinfo SearchPaths rewrite
  * must never treat the priority root as somewhere a mod can spill into. A mod
- * only lands there by explicit user action (setModPriorityFolder).
+ * only returns there when preserving legacy priority placement.
  */
 export function getModScanRootPaths(deadlockPath: string): string[] {
     return [getGrimoirePath(deadlockPath), ...getAddonFolderPaths(deadlockPath)];

@@ -142,7 +142,8 @@ function homeGroupKind(
   heroList?: readonly HeroCategory[],
   excludedSkinKeys?: ReadonlySet<string>,
 ): 'hero' | 'bucket' | null {
-  if (getEffectiveGlobalType(mod)) return 'bucket';
+  const generalType = getEffectiveGlobalType(mod);
+  if (generalType) return GLOBAL_MOD_TYPE_ORDER.includes(generalType) ? 'bucket' : null;
   if (modHeroNames(mod).length > 1 || excludedSkinKeys?.has(shuffleExclusionKey(mod))) return null;
   if (!isLockerManagedMod(mod)) return null;
   if (!heroList) return 'hero';
@@ -168,60 +169,11 @@ export function shuffleGroupKind(
   return homeGroupKind(mod, options.heroList, options.excludedSkinKeys);
 }
 
-export interface ShufflePoolSummary {
-  /** Distinct shuffle keys of the mods the planner can actually re-roll. */
-  eligibleKeys: string[];
-  /** Every eligible key is already pooled. False when there are none. */
-  allIncluded: boolean;
-}
-
 /**
- * Pool math for a bulk "shuffle all / remove all" control over an arbitrary set
- * of cards (today: one user category, which is a view grouping and never a
- * shuffle group of its own). Keys are deduped because two installed cards can
- * share one shuffle identity, and pooling is per identity. Keys come from
- * shufflePoolKey, so a category mixing a hero skin with a classified sibling of
- * the same submission reports two entries, matching the two toggles it shows.
- */
-export function summarizeShufflePool(
-  mods: readonly Mod[],
-  included: ReadonlySet<string>,
-  options: ShuffleGroupOptions = {}
-): ShufflePoolSummary {
-  const eligibleKeys: string[] = [];
-  const seen = new Set<string>();
-  const excludedSkinKeys = new Set([...(options.excludedSkinKeys ?? []), ...getManualOnlyShuffleKeys(mods)]);
-  for (const mod of mods) {
-    const kind = shuffleGroupKind(mod, { ...options, excludedSkinKeys });
-    if (kind !== 'hero' && kind !== 'bucket') continue;
-    const key = shufflePoolKey(mod);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    eligibleKeys.push(key);
-  }
-  return {
-    eligibleKeys,
-    allIncluded: eligibleKeys.length > 0 && eligibleKeys.every((key) => included.has(key)),
-  };
-}
-
-/**
- * Drop a mod's pool keys when it becomes Global (priority root).
- *
- * A pinned mod is always on and the planner never re-rolls it, so its card
- * shows the pin instead of the opt-in. Left in the pool, the key would be
- * invisible yet still counted by the toolbar badge, and unpinning would slide
- * the mod back into the shuffle without the user ever asking for it again.
- * Unpinning deliberately does NOT restore the key: re-opting in is one click on
- * a control that is visible again.
- *
- * Both axis keys are considered (the bare hero-axis key and the qualified
- * bucket one) because a mod can have been pooled before it was classified.
- * A key another live non-priority mod still maps to is kept: that sibling's
- * opt-in is not ours to cancel.
- *
- * Pure: returns the new set, or null when there is nothing to remove (the
- * common case, so the caller can skip the write entirely).
+ * Remove stale shuffle keys for a legacy priority-root mod when restoring a
+ * profile. Both its former hero key and current bucket key are considered;
+ * a key still used by a non-priority sibling is kept. Returns null when no
+ * change is needed.
  */
 export function prunePoolKeysForMod(
   included: ReadonlySet<string>,

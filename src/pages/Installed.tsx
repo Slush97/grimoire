@@ -313,8 +313,6 @@ interface InstalledEntryCardProps {
    *  state covers a stale flag. */
   onViewImprint: (mod: Mod) => void;
   onSetTags: (entry: ModEntry, tags: Mod['tagOverrides'] | null) => Promise<void>;
-  /** Move an entry into or out of the citadel/grimoire priority root. */
-  onSetPriority: (entry: ModEntry, priority: boolean) => Promise<void>;
   onFixUnknown: (mod: Mod) => void;
   onCommitPriority?: (modId: string, newPosition: number) => Promise<void>;
   onUnmerge: (mod: Mod) => void;
@@ -372,7 +370,6 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
   onAddVariant,
   onViewImprint,
   onSetTags,
-  onSetPriority,
   onFixUnknown,
   onCommitPriority,
   onUnmerge,
@@ -440,7 +437,6 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
         onAddVariant={canGroupMod(mod) ? () => onAddVariant(entry) : undefined}
         onViewImprint={mod.imprinted ? () => onViewImprint(mod) : undefined}
         onSetTags={tags => onSetTags(entry, tags)}
-        onSetPriority={(priority) => onSetPriority(entry, priority)}
         onFixUnknown={
           // Any local (unlinked, non-merged) mod can search GameBanana and
           // link, not just ones flagged "unknown": naming a local mod via
@@ -531,7 +527,6 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
           : undefined
       }
       onSetTags={tags => onSetTags(entry, tags)}
-      onSetPriority={(priority) => onSetPriority(entry, priority)}
       loadPosition={loadPosition}
       loadCount={loadCount}
       onCommitPriority={onCommitPriority ? (p) => onCommitPriority((entry.active ?? entry.primary).id, p) : undefined}
@@ -654,7 +649,6 @@ export default function Installed() {
     setLocalVariantGroup,
     setModLockerHero,
     setModGlobalType,
-    setModPriorityFolder,
     setVariantLabel,
     importCustomMods,
     soundVolume,
@@ -680,7 +674,6 @@ export default function Installed() {
     setLocalVariantGroup: state.setLocalVariantGroup,
     setModLockerHero: state.setModLockerHero,
     setModGlobalType: state.setModGlobalType,
-    setModPriorityFolder: state.setModPriorityFolder,
     setVariantLabel: state.setVariantLabel,
     importCustomMods: state.importCustomMods,
     soundVolume: state.soundVolume,
@@ -2887,21 +2880,8 @@ export default function Installed() {
       await useAppStore.getState().setModTags(change.mod.id, change.tags);
     }
   });
-  // Marking a grouped entry Global moves every variant, so a submission whose
-  // files co-require each other (model plus voice lines) doesn't end up half in
-  // the priority root. Sequential, like the other per-variant loops here: each
-  // move renames a VPK under the main-process mutation lock.
-  const setEntryPriority = useStableCallback(async (entry: ModEntry, priority: boolean) => {
-    if (entry.kind === 'group') {
-      for (const variant of entry.variants) await setModPriorityFolder(variant.id, priority);
-    } else {
-      await setModPriorityFolder(entry.mod.id, priority);
-    }
-  });
   const fixUnknownEntry = useStableCallback((mod: Mod) => openUnknownModFix(mod, 'single'));
-  // commitLoadPosition is declared later (it reads the compact order built
-  // below); bridge it through the same synchronous-ref
-  // pattern as selectAllVisibleRef so a stable callback can live up here.
+  // Bridge the later load-order handler through a stable callback.
   const commitLoadPositionRef = useRef<(modId: string, newPosition: number) => Promise<void>>(
     () => Promise.resolve()
   );
@@ -3409,7 +3389,6 @@ export default function Installed() {
     onAddVariant: openAddVariant,
     onViewImprint: viewEntryImprint,
     onSetTags: setEntryTags,
-    onSetPriority: setEntryPriority,
     onFixUnknown: fixUnknownEntry,
     onCommitPriority: listsView || isEntryOrderLocked(entry) ? undefined : commitEntryPriority,
     onUnmerge: unmergeEntry,

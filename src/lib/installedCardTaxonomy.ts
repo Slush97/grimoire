@@ -203,7 +203,7 @@ export function installedBaseTagOptions(context: InstalledTaxonomyContext, curre
   }
   const destinations = new Set(labels.map(baseTagGlobalType));
   for (const [type, label] of Object.entries(GLOBAL_MOD_TYPE_LABELS)) {
-    if (!destinations.has(type as GlobalModType)) labels.push(label);
+    if (baseTagGlobalType(label) && !destinations.has(type as GlobalModType)) labels.push(label);
   }
   return uniqueLabels(labels).sort((a, b) => a.localeCompare(b));
 }

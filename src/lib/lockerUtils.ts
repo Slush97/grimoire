@@ -488,16 +488,7 @@ export function globalModTypeLabel(type: GlobalModType, t: (key: string) => stri
 
 /** Carousel/section order for the global types. */
 export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
-  'soul-container',
-  'spirit-urn',
-  'hideout',
-  'icons',
-  'hud',
-  'effects',
-  'animations',
-  'maps',
-  'announcer',
-  'killstreak-music',
+  'soul-container', 'spirit-urn', 'hideout', 'hud', 'animations', 'maps', 'killstreak-music',
 ];
 
 /**

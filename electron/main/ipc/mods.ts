@@ -22,11 +22,9 @@ import {
     deleteModsUnlocked,
     setModPriority,
     reorderMods,
-    reorderPriorityMods,
     swapModPriority,
     setModsEnabledBatch,
     swapEnabledMods,
-    setModPriorityFolder,
     installEnabledVpk,
     runExclusiveModMutation,
     type Mod,
@@ -930,27 +928,6 @@ ipcMain.handle(
     }
 );
 
-// set-mod-priority: mark a mod Global (or clear it). Global mods move to the
-// priority root citadel/grimoire, which gameinfo.gi lists ahead of
-// citadel/addons, so they win every file collision without any load-order
-// bookkeeping and the launch shuffle leaves them alone. Moving a mod is a
-// folder mutation, so setModPriorityFolder takes the mutation lock.
-ipcMain.handle(
-    'set-mod-priority-folder',
-    async (_, modId: string, priority: boolean): Promise<Mod> => {
-        const deadlockPath = getActiveDeadlockPath();
-        if (!deadlockPath) {
-            throw new Error('No Deadlock path configured');
-        }
-        // enrichMod, like every sibling handler: the service returns a raw
-        // scanned Mod, and the renderer's copy must carry the projected
-        // sidecar fields (priorityMod included) or the card would drop its
-        // Global chip until the next full reload.
-        const mod = await setModPriorityFolder(deadlockPath, modId, priority);
-        return enrichMod(mod);
-    }
-);
-
 // backfill-gamebanana-file-id — heal legacy 1-click installs that were saved
 // before we recovered the file id from the archive URL. The renderer matches
 // a local variant to a GameBanana file row (by sourceFileName/fileName or by
@@ -1024,13 +1001,7 @@ ipcMain.handle(
     }
 );
 
-ipcMain.handle('reorder-priority-mods', async (_, orderedIds: string[]): Promise<Mod[]> => {
-    const deadlockPath = getActiveDeadlockPath();
-    if (!deadlockPath) throw new Error('No Deadlock path configured');
-    await migrateIgnoredConflictKeysBeforeRenames(deadlockPath);
-    await reorderPriorityMods(deadlockPath, orderedIds);
-    return enrichMods(await scanMods(deadlockPath));
-});
+
 
 // apply-mod-toggle-batch: disable a set then enable a set as one atomic
 // mutation, returning the fresh mod list AND the per-mod failures. Backs the

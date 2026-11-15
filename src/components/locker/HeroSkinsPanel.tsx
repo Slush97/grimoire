@@ -28,7 +28,7 @@ import ModThumbnail from '../ModThumbnail';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import DownloadableSkinsSection from './DownloadableSkinsSection';
 import { LockerModImagePicker } from './LockerModImagePicker';
-import { ShuffleAlwaysOnBadge, ShuffleIncludeButton } from './ShuffleControls';
+import { ShuffleIncludeButton } from './ShuffleControls';
 import { Select } from '../common/forms';
 import { RevealImage } from '../common/RevealImage';
 
@@ -396,7 +396,6 @@ function SkinGroupCard({
   onPickImage,
   isIncluded,
   onToggleIncluded,
-  shufflePinned,
   shuffleVariantChoice,
   onSetShuffleVariant,
   shuffleArmed,
@@ -420,9 +419,6 @@ function SkinGroupCard({
   isIncluded?: boolean;
   /** Toggle this skin's launch-shuffle membership. When omitted, no toggle is shown. */
   onToggleIncluded?: () => void;
-  /** This skin lives in the priority root: always on, never re-rolled. Shows a
-   *  locked marker in place of the opt-in toggle. */
-  shufflePinned?: boolean;
   shuffleVariantChoice?: VariantChoice;
   onSetShuffleVariant?: (choice: VariantChoice | null) => void;
   /** Keep the toggle visible (not hover-only) while the shuffle switch is armed. */
@@ -433,9 +429,7 @@ function SkinGroupCard({
   const groupActive = group.variants.some((v) => v.enabled);
   const enabledCount = group.variants.filter((v) => v.enabled).length;
   const primary = group.primary;
-  // A Global (priority root) skin shows the locked marker where the opt-in
-  // toggle would go, so the corner is occupied either way.
-  const hasShuffleControl = shufflePinned || !!onToggleIncluded;
+  const hasShuffleControl = !!onToggleIncluded;
   // The user's chosen image wins over the uploader's thumbnail (issue #208).
   const displaySrc = overrideSrc ?? primary.thumbnailUrl;
   const cardRef = useRef<HTMLDivElement>(null);
@@ -618,24 +612,15 @@ function SkinGroupCard({
       {/* Add to shuffle: opt this skin into the launch-shuffle pool. Anchors the
           top-right corner because it's the only always-visible control here (lit
           when included, shown on every card while the shuffle switch is armed) -
-          the hover-only image/delete buttons extend leftward from it. A Global
-          skin gets the locked marker instead: the planner never re-rolls it. */}
-      {shufflePinned ? (
-        <ShuffleAlwaysOnBadge
+          the hover-only image/delete buttons extend leftward from it. */}
+      {onToggleIncluded && (
+        <ShuffleIncludeButton
           name={primary.name}
+          included={!!isIncluded}
+          onToggle={onToggleIncluded}
           armed={shuffleArmed}
           className="absolute right-1.5 top-1.5 z-20 group-hover/card:opacity-100"
         />
-      ) : (
-        onToggleIncluded && (
-          <ShuffleIncludeButton
-            name={primary.name}
-            included={!!isIncluded}
-            onToggle={onToggleIncluded}
-            armed={shuffleArmed}
-            className="absolute right-1.5 top-1.5 z-20 group-hover/card:opacity-100"
-          />
-        )
       )}
 
       {/* Sound preview. All variants of one GameBanana submission share the
@@ -743,7 +728,6 @@ function SkinGroupRow({
   onPickImage,
   isIncluded,
   onToggleIncluded,
-  shufflePinned,
   shuffleVariantChoice,
   onSetShuffleVariant,
   shuffleArmed,
@@ -764,9 +748,6 @@ function SkinGroupRow({
   isIncluded?: boolean;
   /** Toggle this skin's launch-shuffle membership. When omitted, no toggle is shown. */
   onToggleIncluded?: () => void;
-  /** This skin lives in the priority root: always on, never re-rolled. Shows a
-   *  locked marker in place of the opt-in toggle. */
-  shufflePinned?: boolean;
   shuffleVariantChoice?: VariantChoice;
   onSetShuffleVariant?: (choice: VariantChoice | null) => void;
   /** Keep the toggle visible (not hover-only) while the shuffle switch is armed. */
@@ -777,9 +758,7 @@ function SkinGroupRow({
   const groupActive = group.variants.some((v) => v.enabled);
   const enabledCount = group.variants.filter((v) => v.enabled).length;
   const primary = group.primary;
-  // A Global (priority root) skin shows the locked marker where the opt-in
-  // toggle would go, so the corner is occupied either way.
-  const hasShuffleControl = shufflePinned || !!onToggleIncluded;
+  const hasShuffleControl = !!onToggleIncluded;
   // The user's chosen image wins over the uploader's thumbnail (issue #208).
   const displaySrc = overrideSrc ?? primary.thumbnailUrl;
   const rowRef = useRef<HTMLDivElement>(null);
@@ -831,23 +810,15 @@ function SkinGroupRow({
       )}
       {/* Add to shuffle (see SkinGroupCard). Anchors the top-right corner; the
           hover-only image/delete buttons extend leftward from it. */}
-      {shufflePinned ? (
-        <ShuffleAlwaysOnBadge
+      {onToggleIncluded && (
+        <ShuffleIncludeButton
           name={primary.name}
+          included={!!isIncluded}
+          onToggle={onToggleIncluded}
           armed={shuffleArmed}
           className="absolute right-2 top-2 z-10 group-hover/row:opacity-100"
+          restingClassName="bg-black/55 text-white/90"
         />
-      ) : (
-        onToggleIncluded && (
-          <ShuffleIncludeButton
-            name={primary.name}
-            included={!!isIncluded}
-            onToggle={onToggleIncluded}
-            armed={shuffleArmed}
-            className="absolute right-2 top-2 z-10 group-hover/row:opacity-100"
-            restingClassName="bg-black/55 text-white/90"
-          />
-        )
       )}
       <button
         type="button"
@@ -1041,10 +1012,8 @@ export default function HeroSkinsPanel({
   };
 
   /**
-   * Everything the shuffle affordance needs for one skin group. A Global
-   * (priority root) skin is pinned by construction, so it gets the locked
-   * marker and no opt-in handler at all: writing it into the pool would persist
-   * a choice the planner is required to ignore.
+   * Everything the shuffle affordance needs for one skin group. Legacy
+   * priority-root skins get no opt-in handler because the planner skips them.
    */
   const shufflePropsFor = (group: SkinGroup) => {
     const key = shuffleSkinKey(group.primary);
@@ -1054,7 +1023,6 @@ export default function HeroSkinsPanel({
       isIncluded: pinned || excluded ? false : includedSkinKeys?.has(key),
       onToggleIncluded:
         onToggleShuffleIncluded && !pinned && !excluded ? () => onToggleShuffleIncluded(key) : undefined,
-      shufflePinned: pinned,
       shuffleVariantChoice: excluded ? undefined : shuffleVariantChoices?.get(key),
       onSetShuffleVariant: onSetShuffleVariant && !excluded
         ? (choice: VariantChoice | null) => onSetShuffleVariant(key, choice)

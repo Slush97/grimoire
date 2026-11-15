@@ -7,11 +7,6 @@ import {
 } from './disabledModPrefs';
 import { readStoredModLists, writeStoredModLists, type ModList } from './modLists';
 import {
-  readStoredLockerCategories,
-  writeStoredLockerCategories,
-  type LockerCategory,
-} from './lockerCategories';
-import {
   readStoredShuffleIncluded,
   readStoredShuffleVariants,
   writeStoredShuffleIncluded,
@@ -264,7 +259,6 @@ export interface StableKeyPreferencesMigratedDetail {
   disabledFavorites: Set<string>;
   disabledOrder: string[];
   modLists: ModList[];
-  lockerCategories: LockerCategory[];
 }
 
 declare global {
@@ -286,7 +280,6 @@ export function migrateStoredStableKeyPreferences(
   const oldFavorites = readStoredDisabledFavorites();
   const oldOrder = readStoredDisabledOrder();
   const oldLists = readStoredModLists();
-  const oldCategories = readStoredLockerCategories();
   const oldIncluded = readStoredShuffleIncluded();
   const oldVariants = readStoredShuffleVariants();
 
@@ -301,7 +294,6 @@ export function migrateStoredStableKeyPreferences(
         disabledFavorites: oldFavorites,
         disabledOrder: [...oldOrder],
         modLists: oldLists,
-        lockerCategories: oldCategories,
       },
       shuffleIncluded: oldIncluded,
       shuffleVariants: oldVariants,
@@ -311,26 +303,22 @@ export function migrateStoredStableKeyPreferences(
   const disabledFavorites = migrateKeySet(oldFavorites, preferencePlan);
   const disabledOrder = migrateKeyOrder(oldOrder, preferencePlan);
   const modLists = migrateMemberships(oldLists, preferencePlan);
-  const lockerCategories = migrateMemberships(oldCategories, preferencePlan) as LockerCategory[];
   const shuffleIncluded = migrateKeySet(oldIncluded, shufflePlan);
   const shuffleVariants = migrateKeyedValues(oldVariants, shufflePlan, {
     exclusiveSource: true,
   }).values;
 
   const listsChanged = JSON.stringify(modLists) !== JSON.stringify(oldLists);
-  const categoriesChanged = JSON.stringify(lockerCategories) !== JSON.stringify(oldCategories);
   const changed =
     !setsEqual(disabledFavorites, oldFavorites) ||
     JSON.stringify(disabledOrder) !== JSON.stringify(oldOrder) ||
     listsChanged ||
-    categoriesChanged ||
     !setsEqual(shuffleIncluded, oldIncluded) ||
     !mapsEqual(shuffleVariants, oldVariants);
 
   if (!setsEqual(disabledFavorites, oldFavorites)) writeStoredDisabledFavorites(disabledFavorites);
   if (JSON.stringify(disabledOrder) !== JSON.stringify(oldOrder)) writeStoredDisabledOrder(disabledOrder);
   if (listsChanged) writeStoredModLists(modLists);
-  if (categoriesChanged) writeStoredLockerCategories(lockerCategories);
   if (!setsEqual(shuffleIncluded, oldIncluded)) writeStoredShuffleIncluded(shuffleIncluded);
   if (!mapsEqual(shuffleVariants, oldVariants)) writeStoredShuffleVariants(shuffleVariants);
 
@@ -338,10 +326,6 @@ export function migrateStoredStableKeyPreferences(
     disabledFavorites,
     disabledOrder,
     modLists,
-    lockerCategories: lockerCategories.map((category) => ({
-      ...category,
-      keys: [...category.keys],
-    })),
   };
   if (changed && typeof window !== 'undefined') {
     window.dispatchEvent(

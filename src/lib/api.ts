@@ -527,13 +527,6 @@ export async function setModIgnoreUpdates(
   return window.electronAPI.setModIgnoreUpdates(modId, ignore);
 }
 
-export async function setModPriorityFolder(
-  modId: string,
-  priority: boolean
-): Promise<Mod> {
-  return withGameRunningWarning(() => window.electronAPI.setModPriorityFolder(modId, priority));
-}
-
 export async function backfillGameBananaFileId(
   modId: string,
   payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
@@ -547,10 +540,6 @@ export async function setModPriority(modId: string, priority: number): Promise<M
 
 export async function reorderMods(orderedIds: string[]): Promise<Mod[]> {
   return withGameRunningWarning(() => window.electronAPI.reorderMods(orderedIds));
-}
-
-export async function reorderPriorityMods(orderedIds: string[]): Promise<Mod[]> {
-  return withGameRunningWarning(() => window.electronAPI.reorderPriorityMods(orderedIds));
 }
 
 export async function applyModToggleBatch(

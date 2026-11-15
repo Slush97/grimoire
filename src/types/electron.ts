@@ -1128,17 +1128,12 @@ export interface ElectronAPI {
     setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
     setModTags: (modId: string, tags: ModTagOverrides | null) => Promise<Mod>;
     setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
-    /** Mark a mod Global (moves it to the citadel/grimoire priority root) or
-     *  clear it. See Mod.priorityMod. Distinct from setModPriority, which sets
-     *  a mod's pakNN slot within citadel/addons. */
-    setModPriorityFolder: (modId: string, priority: boolean) => Promise<Mod>;
     backfillGameBananaFileId: (
       modId: string,
       payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
     ) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
     reorderMods: (orderedIds: string[]) => Promise<Mod[]>;
-    reorderPriorityMods: (orderedIds: string[]) => Promise<Mod[]>;
     applyModToggleBatch: (
         enableIds: string[],
         disableIds: string[]

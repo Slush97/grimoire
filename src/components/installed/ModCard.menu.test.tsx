@@ -84,7 +84,7 @@ describe('installed card menu mounting', () => {
       onOpenDetails: onOpen, onViewAuthor: noop, onOpenPicker: noop, onOpenGroupDetails: noop,
       onToggle: async () => true, onSwap: noop, onSoloLaunch: noop, onDelete: noop,
       onAddVariant: noop, onViewImprint: noop,
-      onSetTags: noop, onSetPriority: noop, onFixUnknown: noop, onUnmerge: noop, onCopyShareCode: noop,
+      onSetTags: noop, onFixUnknown: noop, onUnmerge: noop, onCopyShareCode: noop,
       occurrenceKey: undefined, onSelectToggle: noop, onToggleFavorite: noop, lists: [], listIds: [],
       onToggleList: noop, onCreateList: noop,
     };
