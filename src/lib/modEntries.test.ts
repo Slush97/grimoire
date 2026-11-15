@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Mod } from '../types/mod';
-import { buildEntrySwapTargets, buildModEntries, entryHeroNames, entryTags, entrySize, type ModEntry } from './modEntries';
+import { buildEntrySwapTargets, buildModEntries, entryIsLocal, entrySortPriority, entryHeroNames, entryTags, entrySize, type ModEntry } from './modEntries';
 import { buildCategoryPaths } from './categoryPaths';
 import type { InstalledTaxonomyContext } from './installedCardTaxonomy';
 
@@ -22,6 +22,25 @@ const context: InstalledTaxonomyContext = {
 const group = (variants: Mod[]): ModEntry => ({
   kind: 'group', key: 'group:test', groupKey: 'gb:1', variants,
   primary: variants[0], active: null, enabledVariants: [], totalSize: 1,
+});
+
+it('keeps a mixed group represented by its normal mod when only a local file is enabled', () => {
+  const normal = single({ id: 'normal', name: 'Normal', localGroupId: 'mixed', localImport: false, enabled: false, priority: 9 }).mod;
+  const local = single({ id: 'local', metaKey: 'local.vpk', name: 'Custom', gameBananaId: undefined, localGroupId: 'mixed', localImport: true, enabled: true, priority: 2 }).mod;
+  const entry = buildModEntries([local, normal])[0];
+  expect(entry.kind).toBe('group');
+  if (entry.kind !== 'group') return;
+  expect(entry.primary.id).toBe('normal');
+  expect(entry.gameBananaId).toBe(1);
+  expect(entryIsLocal(entry)).toBe(false);
+  expect(entrySortPriority(entry)).toBe(2);
+});
+
+it('keeps the enabled file as the primary for ordinary GameBanana groups', () => {
+  const disabled = single({ id: 'disabled', enabled: false, priority: 0 }).mod;
+  const enabled = single({ id: 'enabled', enabled: true, priority: 2 }).mod;
+  const entry = buildModEntries([disabled, enabled])[0];
+  expect(entry.kind === 'group' && entry.primary.id).toBe('enabled');
 });
 
 it('keeps a local gallery accessible when only one variant remains', () => {

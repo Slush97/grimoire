@@ -76,6 +76,7 @@ interface ModCardProps {
     sha256?: string;
     skinEdit?: Mod['skinEdit'];
     localGroupId?: string;
+    localImport?: boolean;
     isUnknown?: boolean;
     lockerHero?: string;
     lockerHeroSource?: Mod['lockerHeroSource'];
@@ -1017,7 +1018,7 @@ export function ModCard({
     <>
       {onAddVariant && (
         <MenuItem icon={FilePlus} onSelect={onAddVariant}>
-          {t('installed.card.addVariant')}
+          {canJoinLocalVariantGroup(mod) ? t('installed.card.addVariant') : t('variantPicker.addFiles')}
         </MenuItem>
       )}
       {viewDetails && (

@@ -116,6 +116,25 @@ function deferred() {
 }
 
 describe('local picker artwork', () => {
+    it('attaches local files without inheriting the parent submission or changing its origin', async () => {
+        const directory = await mkdtemp(join(tmpdir(), 'grimoire-gb-attachment-'));
+        try {
+            const file = join(directory, 'custom.vpk'); await writeFile(file, 'fixture');
+            h.metadata.set(source.metaKey, { modName: 'Parent', gameBananaId: 7, gameBananaFileId: 20 });
+            const grouped = await h.handlers.get('set-local-variant-group')!({}, [source.id], { mode: 'mint' }) as { groupId: string };
+            h.safety = true;
+            h.importVpk.mockResolvedValue(file);
+            h.scan.mockImplementation(async () => [source, ...(h.metadata.has('custom.vpk')
+                ? [{ ...replacement, id: 'custom', metaKey: 'custom.vpk', path: file, fileName: 'custom.vpk' }] : [])]);
+            const result = await h.handlers.get('import-custom-mods')!({ sender: { isDestroyed: () => false, send: vi.fn() } }, {
+                items: [{ vpkPath: file, name: 'Parent', localGroupId: grouped.groupId }],
+            }) as { results: { ok: boolean; importedModIds: string[] }[] };
+            expect(result.results).toMatchObject([{ ok: true, importedModIds: ['custom'] }]);
+            expect(h.metadata.get(source.metaKey)).toMatchObject({ gameBananaId: 7, gameBananaFileId: 20, localImport: false });
+            expect(h.metadata.get('custom.vpk')).toMatchObject({ localGroupId: grouped.groupId, localImport: true });
+            expect(h.metadata.get('custom.vpk')?.gameBananaId).toBeUndefined();
+        } finally { await rm(directory, { recursive: true, force: true }); }
+    });
     it('protects shared NSFW images on every sibling before Installed filters run', async () => {
         h.scan.mockResolvedValue([source, replacement]);
         h.metadata.set(source.metaKey, { localGroupId: 'shared', nsfw: true, abilitySounds: null });

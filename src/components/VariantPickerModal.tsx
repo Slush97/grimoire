@@ -178,9 +178,10 @@ export default function VariantPickerModal({
     onClose,
 }: Props) {
     const { t } = useTranslation();
-    const galleryGroupId = variants.find(variant => variant.localGroupId)?.localGroupId;
+    const localMod = variants.length > 0 && variants.every(canJoinLocalVariantGroup);
+    const galleryGroupId = localMod ? variants.find(variant => variant.localGroupId)?.localGroupId : undefined;
     const [gallery, setGallery] = useState<{ groupId?: string; images: string[] } | null>(null);
-    const thumbnailSources = JSON.stringify(galleryGroupId || onGalleryChange
+    const thumbnailSources = JSON.stringify(localMod && (galleryGroupId || onGalleryChange)
         ? [...new Set(variants.map(variant => variant.thumbnailUrl).filter((image): image is string => !!image))] : []);
     const fallbackImages = useMemo<string[]>(() => JSON.parse(thumbnailSources), [thumbnailSources]);
     const galleryWork = useRef(false);
@@ -235,7 +236,6 @@ export default function VariantPickerModal({
     const isOrderLocked = (mod?: Mod) => isModLoadedInGame(mod, loadedGameModIds);
     const titleId = useId();
     const [pending, setPending] = useState<string | null>(null);
-    const localMod = variants.length > 0 && variants.every(canJoinLocalVariantGroup);
     const [titleDraft, setTitleDraft] = useState<string | null>(null);
     const titleEditor = useRef<HTMLSpanElement>(null);
     const titleEditing = titleDraft !== null;
@@ -661,7 +661,7 @@ export default function VariantPickerModal({
                         >
                             <Pencil className="w-4 h-4" />
                         </button>
-                        {onDetachVariant && (
+                        {onDetachVariant && canJoinLocalVariantGroup(v) && (
                             <button
                                 type="button"
                                 onClick={() => handleDetach(v)}

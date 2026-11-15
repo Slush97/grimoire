@@ -680,11 +680,11 @@ export interface Mod {
   variantLabel?: string;
   fileDescription?: string;
   sourceFileName?: string;
-  /** Opaque id linking several locally imported VPKs as variants of one mod.
-   *  The local analogue of gameBananaId for grouping only: no provenance, no
-   *  meaning outside this install. Undefined for GameBanana mods and for
-   *  standalone local imports. See variantGroupKey in src/lib/variantGroups.ts. */
+  /** User-defined variant group, including mixed downloaded and imported files.
+   *  Group membership is independent of GameBanana provenance and import origin. */
   localGroupId?: string;
+  /** Import origin, independent of embedded GameBanana identity. Legacy entries infer it. */
+  localImport?: boolean;
   /** Explicit hero choice, preserved local identity, or a single-hero hint
    *  for existing consumers. The full effective set is in lockerHeroes. */
   lockerHero?: string;

@@ -4,24 +4,30 @@ import { variantGroupKey } from './variantGroups';
 export type LocalVariantSelectionIneligibility =
   | 'minimum'
   | 'merged'
-  | 'gamebanana'
   | 'placement';
 
 export type LocalVariantSelectionEligibility =
   | { eligible: true }
   | { eligible: false; reason: LocalVariantSelectionIneligibility };
 
-/**
- * Whether a mod may become a member of a user-managed local variant group.
- * Merged outputs must remain standalone because their card owns the contents,
- * unmerge, and share-code recovery actions. A standalone GameBanana file has a
- * server-owned grouping identity, but an existing explicit local group remains
- * user-managed if a re-import later discovers GameBanana provenance.
- */
-export function canJoinLocalVariantGroup(mod: Pick<Mod, 'gameBananaId' | 'localGroupId' | 'merged'>): boolean {
-  const hasGameBananaIdentity =
-    typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0;
-  return !mod.merged && (!!mod.localGroupId || !hasGameBananaIdentity);
+/** Import origin is independent of embedded or associated GameBanana identity. */
+export function isLocalMod(mod: Pick<Mod, 'gameBananaId' | 'localGroupId' | 'localImport'>): boolean {
+  return mod.localImport ?? (!!mod.localGroupId || !(typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0));
+}
+
+/** Merged outputs keep their own recovery and source-management controls. */
+export function canGroupMod(mod: Pick<Mod, 'merged'>): boolean {
+  return !mod.merged;
+}
+
+/** Custom attachments are independent files, even if their imprint names the parent. */
+export function isAttachedLocalVariant<T extends Pick<Mod, 'localImport' | 'localGroupId'>>(mod: T, mods: readonly T[]): boolean {
+  return mod.localImport === true && !!mod.localGroupId
+    && mods.some(peer => peer.localGroupId === mod.localGroupId && peer.localImport === false);
+}
+
+export function canJoinLocalVariantGroup(mod: Pick<Mod, 'gameBananaId' | 'localGroupId' | 'localImport' | 'merged'>): boolean {
+  return canGroupMod(mod) && isLocalMod(mod);
 }
 
 /** Pure policy used by the Installed multi-select action and its disabled hint. */
@@ -29,13 +35,8 @@ export function localVariantSelectionEligibility(
   mods: readonly Mod[]
 ): LocalVariantSelectionEligibility {
   if (mods.length < 2) return { eligible: false, reason: 'minimum' };
-  // Report this before provenance so a mixed selection containing a merged
-  // output tells the user how to recover it (unmerge), not merely that it is
-  // outside the local-only set.
+  // Merged outputs keep their own source-management and recovery actions.
   if (mods.some((mod) => !!mod.merged)) return { eligible: false, reason: 'merged' };
-  if (mods.some((mod) => !canJoinLocalVariantGroup(mod))) {
-    return { eligible: false, reason: 'gamebanana' };
-  }
   // Mirror the placement rule resolveLocalVariantGroupProfile enforces in main, so
   // the Group button disables with a hint instead of surfacing a raw IPC error.
   if (mods.some((mod) => !!mod.priorityMod !== !!mods[0].priorityMod)) {

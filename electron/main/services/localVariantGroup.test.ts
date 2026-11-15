@@ -41,11 +41,14 @@ describe('planLocalVariantGroup', () => {
     ]);
   });
 
-  it('rejects a GameBanana mod', () => {
-    const all = [member({ id: 'a' }), member({ id: 'gb', name: 'Store Skin', gameBananaId: 42 })];
-    expect(() => planLocalVariantGroup(all, ['a', 'gb'], { mode: 'mint' }, mint)).toThrow(
-      /Only local mods/
-    );
+  it('groups a normal mod with local files without copying its provenance to them', () => {
+    const all = [member({ id: 'local' }), member({ id: 'gb', name: 'Store Skin', gameBananaId: 42 })];
+    const plan = planLocalVariantGroup(all, ['local', 'gb'], { mode: 'mint' }, mint);
+    expect(plan.writes).toEqual([
+      { id: 'local', metaKey: 'local.vpk', localGroupId: 'minted-uuid', localImport: true, modName: 'Store Skin' },
+      { id: 'gb', metaKey: 'gb.vpk', localGroupId: 'minted-uuid', localImport: false, modName: undefined },
+    ]);
+    expect(all[0].gameBananaId).toBeUndefined();
   });
 
   it('keeps an adopted GameBanana identity editable inside an explicit local group', () => {

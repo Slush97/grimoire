@@ -43,7 +43,7 @@ export async function readReplacementMods(deadlockPath: string): Promise<Mod[]> 
             categoryId: meta?.categoryId,
             fileDescription: meta?.fileDescription,
             sourceFileName: meta?.sourceFileName,
-            localGroupId: meta?.localGroupId,
+            localGroupId: meta?.localGroupId, localImport: meta?.localImport,
             priorityMod: meta?.priorityMod,
             ignoreUpdates: meta?.ignoreUpdates,
             merged: meta?.merged,
@@ -61,7 +61,7 @@ export function toLocalVariantGroupMember(
     const meta = getModMetadata(mod.metaKey);
     const member: LocalVariantGroupMember = {
         id: mod.id, metaKey: mod.metaKey, name: meta?.modName ?? mod.name,
-        gameBananaId: meta?.gameBananaId, localGroupId: meta?.localGroupId,
+        gameBananaId: meta?.gameBananaId, localGroupId: meta?.localGroupId, localImport: meta?.localImport,
         lockerHero: meta?.lockerHero, lockerHeroSource: meta?.lockerHeroSource,
         globalType: meta?.globalType, globalTypeSource: meta?.globalTypeSource,
         priorityMod: meta?.priorityMod, merged: !!meta?.merged,
@@ -113,7 +113,7 @@ export async function restoreLocalVariantGroupReplacementUnlocked(
     return plan.replacementMetaKeys.map((metaKey) => {
         const mod = all.find((candidate) => candidate.metaKey === metaKey);
         if (!mod) throw new Error(`Replacement metadata target disappeared: ${metaKey}`);
-        setModMetadata(metaKey, { localGroupId: plan.groupId, modName: plan.modName });
+        setModMetadata(metaKey, { localGroupId: plan.groupId, modName: plan.modName, localImport: getModMetadata(source!.metaKey)?.localImport });
         return mod;
     });
 }

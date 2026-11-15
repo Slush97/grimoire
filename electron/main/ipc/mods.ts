@@ -1,3 +1,4 @@
+import { isLocalMod } from '../../../src/lib/localVariantEligibility';
 import { ipcMain, shell } from 'electron';
 import { modSafetySnapshot } from '../services/modSafety';
 import { checkOutdatedVdata, outdatedVdataSnapshot, staleModelsSnapshot } from '../services/vdataCheck';
@@ -108,7 +109,7 @@ interface UnknownCacheBulkRequest {
 
 function enrichMod(mod: Mod, categoryPaths = new Map<string, CategoryPaths | undefined>(), sharedNsfw?: ReadonlySet<string>): WireMod {
     const metadata = getModMetadata(mod.metaKey) ?? {};
-    const galleryOwned = !!metadata.localGroupId && hasLocalModGallery(metadata.localGroupId);
+    const galleryOwned = isLocalMod(metadata) && !!metadata.localGroupId && hasLocalModGallery(metadata.localGroupId);
     const nsfw = metadata.nsfw || galleryOwned && (sharedNsfw
         ? sharedNsfw.has(metadata.localGroupId!)
         : Object.values(loadMetadata()).some(peer => peer.localGroupId === metadata.localGroupId && peer.nsfw));
@@ -162,6 +163,7 @@ function enrichMod(mod: Mod, categoryPaths = new Map<string, CategoryPaths | und
         fileDescription: metadata.fileDescription,
         sourceFileName: metadata.sourceFileName,
         localGroupId: metadata.localGroupId,
+        localImport: metadata.localImport,
         lockerHero,
         lockerHeroSource,
         lockerHeroes,
@@ -670,9 +672,7 @@ ipcMain.handle(
             }
             const existing = getModMetadata(target.metaKey) ?? {};
             if (
-                typeof existing.gameBananaId === 'number' &&
-                existing.gameBananaId > 0 &&
-                !existing.localGroupId
+                !isLocalMod(existing)
             ) {
                 throw new Error('Only local mods can be renamed');
             }
@@ -754,10 +754,11 @@ ipcMain.handle(
             const renamedMods: Mod[] = [];
             for (const write of plan.writes) {
                 const previous = getModMetadata(write.metaKey);
-                const detachedThumbnail = !write.localGroupId && previous?.localGroupId && !previous.thumbnailUrl
+                const detachedThumbnail = write.localGroupId !== previous?.localGroupId && previous?.localGroupId && !previous.thumbnailUrl
                     ? localModGalleryThumbnail(previous.localGroupId) : undefined;
                 const data = {
                     localGroupId: write.localGroupId,
+                    ...(write.localImport !== undefined ? { localImport: write.localImport } : {}),
                     ...(detachedThumbnail ? { thumbnailUrl: detachedThumbnail } : {}),
                     ...(write.modName ? { modName: write.modName } : {}),
                 };
@@ -1391,6 +1392,7 @@ async function importCustomModSource(
             await setModMetadataWithHash(destMetaKey, {
                 modName: stampedName,
                 thumbnailUrl: args.galleryImages === undefined ? thumbnailDataUrl : undefined,
+                localImport: true,
                 nsfw: !!nsfw,
                 sourceFileName: localSourceFileStem(sourceVpks[i].fileName),
                 localGroupId,

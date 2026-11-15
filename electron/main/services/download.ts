@@ -9,7 +9,7 @@ import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles, ty
 import { getCursorPacks, installCursorArchive, setActiveCursorPack, type CursorPackSource } from './cursorPacks';
 import { buildVpkIndexBySize } from './vpkVariantIndex';
 import { randomUUID } from 'crypto';
-import { setModMetadataWithHash, getModMetadata, type ModMetadata } from './metadata';
+import { setModMetadataWithHash, getModMetadata, loadMetadata, type ModMetadata } from './metadata';
 import { detectModHeroes, isModHeroDetectionEligible } from './modHeroDetection';
 import { fetchModDetails, readCachedCategoryPaths, type GameBananaModDetails } from './gamebanana';
 import type { CategoryPaths } from '../../../src/lib/categoryPaths';
@@ -23,6 +23,15 @@ import { getActiveDeadlockPath, loadSettings } from './settings';
 import { isCopyingModsToDev } from './devMods';
 import { getGameBananaDownloadProxyAgent } from './gamebananaDownloadProxy';
 import { getVpkLabels } from './vpk';
+/** Preserve user grouping when another original file of a submission is downloaded. */
+function inheritDownloadedGroup(metadata: ModMetadata): ModMetadata {
+    const owner = Object.values(loadMetadata()).find(member => member.localImport === false
+        && member.localGroupId && member.gameBananaId === metadata.gameBananaId
+        && (member.sourceSection ?? 'Mod') === (metadata.sourceSection ?? 'Mod'));
+    return owner ? { ...metadata, localGroupId: owner.localGroupId, localImport: false,
+        modName: owner.modName || metadata.modName } : metadata;
+}
+
 // DownloadModArgs is single-sourced in src/types/electron.ts; re-exported
 // because ipc/gamebanana.ts imports it from this service.
 import type { DownloadModArgs, DownloadQueueItem } from '../../../src/types/electron';
@@ -759,7 +768,7 @@ async function disableSiblingVariants(
         if (installedSet.has(m.fileName)) return false;
         const meta = getModMetadata(m.metaKey);
         return (
-            meta?.gameBananaId === modId &&
+            meta?.localImport !== true && meta?.gameBananaId === modId &&
             (fileId === undefined || meta?.gameBananaFileId !== fileId)
         );
     });
@@ -1096,7 +1105,7 @@ async function executeDownload(
         const vpkIndex = vpkIndexByFile.get(vpkFileName);
         const archiveVpkPath = archivePathByFile.get(vpkFileName);
         const perVpkMetadata = stampVpkHeroDetection({ ...metadata, variantLabel, vpkIndex, archiveVpkPath }, vpkPath, heroCategoryPaths);
-        await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
+        await setModMetadataWithHash(vpkFileName, inheritDownloadedGroup(perVpkMetadata), vpkPath);
     }
 
     // Opt-in self-identifying embed (path B). Imprint each freshly installed VPK in
@@ -1566,7 +1575,7 @@ async function executeOneClickDownload(
         const vpkIndex = vpkIndexByFile.get(vpkFileName);
         const archiveVpkPath = archivePathByFile.get(vpkFileName);
         const perVpkMetadata = stampVpkHeroDetection({ ...metadata, variantLabel, vpkIndex, archiveVpkPath }, vpkPath, heroCategoryPaths);
-        await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
+        await setModMetadataWithHash(vpkFileName, inheritDownloadedGroup(perVpkMetadata), vpkPath);
     }
 
     // Opt-in self-identifying embed (path B). Same as executeDownload: imprint each
@@ -1683,7 +1692,7 @@ export async function installForgeVpk(
             const heroCategoryPaths = readHeroCategoryPaths(metadata);
             for (const name of names) {
                 const vpkPath = join(targetPath, name);
-                await setModMetadataWithHash(name, stampVpkHeroDetection(metadata, vpkPath, heroCategoryPaths), vpkPath);
+                await setModMetadataWithHash(name, stampVpkHeroDetection(inheritDownloadedGroup(metadata), vpkPath, heroCategoryPaths), vpkPath);
             }
             return names;
         });

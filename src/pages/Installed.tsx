@@ -84,6 +84,7 @@ import { HERO_NAMES_SORTED, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel, modLoadOr
 import { gameBananaCategoryLabel } from '../lib/gameBananaCategories';
 import {
   canJoinLocalVariantGroup,
+  canGroupMod,
   localVariantSelectionEligibility,
 } from '../lib/localVariantEligibility';
 import { useStableCallback } from '../lib/useStableCallback';
@@ -445,7 +446,7 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
         }
         // A local mod can adopt variants: the first add mints the group. A
         // merged VPK is excluded, like it is from the GameBanana link flow.
-        onAddVariant={canJoinLocalVariantGroup(mod) ? () => onAddVariant(entry) : undefined}
+        onAddVariant={canGroupMod(mod) ? () => onAddVariant(entry) : undefined}
         onViewImprint={mod.imprinted ? () => onViewImprint(mod) : undefined}
         onSetTags={tags => onSetTags(entry, tags)}
         onSetPriority={(priority) => onSetPriority(entry, priority)}
@@ -486,7 +487,7 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
   // selection metadata and offer the file picker in the card menu. A click
   // opens the picker, or the GameBanana page when the setting is on. A local
   // group's primary can carry GameBanana metadata, so the group key decides.
-  const hasDetailsPage = !entry.groupKey.startsWith('local:') && !!entry.gameBananaId;
+  const hasDetailsPage = !entryIsLocal(entry) && !!entry.gameBananaId;
   const groupOpensPicker = !(groupClickOpensDetails && hasDetailsPage);
   const safetyTarget = entry.variants.find(v => v.safety?.report.verdict === 'blocked' || v.safety?.report.verdict === 'incomplete')
     ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust' && !v.safety.trusted)
@@ -501,6 +502,7 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
       onPinPreview={pinPreview}
       mod={{
         ...entry.primary,
+        priority: (entry.active ?? entry.primary).priority,
         safetyTarget,
         crashModIds: entry.variants.map(variant => variant.id),
         outdatedVdata: outdatedVariant?.outdatedVdata,
@@ -541,7 +543,7 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
         entryIsLocal(entry) ? (newName) => onRenameLocal(entry.primary, newName) : undefined
       }
       onAddVariant={
-        entryIsLocal(entry) && entry.variants.every(canJoinLocalVariantGroup)
+        entry.variants.every(canGroupMod)
           ? () => onAddVariant(entry)
           : undefined
       }
@@ -549,7 +551,7 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
       onSetPriority={(priority) => onSetPriority(entry, priority)}
       loadPosition={loadPosition}
       loadCount={loadCount}
-      onCommitPriority={onCommitPriority ? (p) => onCommitPriority(entry.primary.id, p) : undefined}
+      onCommitPriority={onCommitPriority ? (p) => onCommitPriority((entry.active ?? entry.primary).id, p) : undefined}
       selectMode={selectMode}
       shiftHeld={shiftHeld}
       selected={selected}
@@ -3883,7 +3885,7 @@ export default function Installed() {
             return [variant.id, conflicts];
           })
         );
-        const localGroup = canJoinLocalVariantGroup(primary);
+        const localGroup = entryIsLocal(liveEntry) && canGroupMod(primary);
         const variantsWithUpdate = new Set(
           variants
             .filter(
@@ -3917,9 +3919,7 @@ export default function Installed() {
                   }
                 : undefined
             }
-            // Membership is only editable for local groups: a GameBanana group
-            // is defined by its submission, not by the user. Adding closes the
-            // picker (one modal at a time); the card reopens it.
+            // Keep normal pickers unchanged; their card menu owns file additions.
             onAddVariant={
               localGroup
                 ? (paths) => {
@@ -3930,7 +3930,7 @@ export default function Installed() {
             }
             onGalleryChange={localGroup ? images => useAppStore.getState().setLocalModGallery(primary.id, images) : undefined}
             onNsfwChange={localGroup ? nsfw => useAppStore.getState().setModsNsfw(variants.map(variant => variant.id), nsfw) : undefined}
-            onDetachVariant={localGroup && primary.localGroupId ? (variant) => detachVariant(variant) : undefined}
+            onDetachVariant={primary.localGroupId ? (variant) => detachVariant(variant) : undefined}
             variantsWithUpdate={variantsWithUpdate}
             onUpdateGroup={
               variantsWithUpdate.size > 0
@@ -4288,9 +4288,7 @@ export default function Installed() {
                     ? t('installed.select.groupVariantsMinHint')
                     : groupSelectionEligibility.reason === 'merged'
                       ? t('installed.select.groupVariantsMergedHint')
-                      : groupSelectionEligibility.reason === 'placement'
-                        ? t('installed.select.groupVariantsPlacementHint')
-                        : t('installed.select.groupVariantsLocalHint')
+                      : t('installed.select.groupVariantsPlacementHint')
                 }
               >
                 {t('installed.select.groupVariants')}

@@ -156,6 +156,18 @@ describe('variant hero indicators', () => {
         await act(async () => thumbnail.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 })));
     };
 
+    it('keeps a mixed picker normal and shows the local file action only on the imported row', async () => {
+        props = { ...props, onNsfwChange: vi.fn(async () => {}), onGalleryChange: vi.fn(async () => {}), onDetachVariant: vi.fn() };
+        const original = variant('normal', [], { localGroupId: 'mixed', localImport: false });
+        const imported = variant('custom', [], { localGroupId: 'mixed', localImport: true, thumbnailUrl: 'data:image/png;base64,custom' });
+        await render([original, imported]);
+        expect(document.querySelector('[aria-label="installed.card.moreActions"]')).toBeNull();
+        expect(document.querySelector('[aria-label="installed.batchImport.gallery"]')).toBeNull();
+        expect(row('normal').querySelector('[aria-label="variantPicker.detachVariant"]')).toBeNull();
+        await click(row('custom').querySelector<HTMLButtonElement>('[aria-label="variantPicker.detachVariant"]')!);
+        expect(props.onDetachVariant).toHaveBeenCalledExactlyOnceWith(imported);
+    });
+
     it('keeps a single local file uncluttered and puts file additions in the header menu', async () => {
         props = { ...props, onAddVariant: vi.fn(), onGalleryChange: vi.fn(async () => {}) };
         await render([variant('local', [], { gameBananaId: undefined, thumbnailUrl: 'data:image/png;base64,old' })]);

@@ -274,6 +274,23 @@ explicitly emptied gallery remains user-owned, so a delayed catalogue thumbnail
 fetch cannot restore removed artwork. Artwork does not prevent missing Sound
 previews from being fetched through the existing recognition flow.
 
+## Mixed variant groups
+
+The card menu can add VPK files or archives to normal GameBanana mods through
+that same stripped import dialog. Multiselect Group accepts normal and local
+mods together; merged outputs and incompatible Global placements remain blocked.
+The existing `localGroupId` stores membership. One optional metadata field,
+`localImport`, records file origin independently of embedded GameBanana identity.
+Older metadata keeps its existing interpretation without a migration.
+
+A mixed group uses a downloaded member for its title, artwork, and mod-page link,
+while its first enabled file determines load position. Its picker keeps the normal
+GameBanana UI, with local detach controls only on imported rows. Local gallery,
+rename, and NSFW header controls remain exclusive to fully local groups. Each
+file retains its own provenance, categories, and heroes. Downloads of additional
+original files and replacements retain mixed-group membership. Custom attachments
+are preserved during parent updates and sibling auto-disabling.
+
 ## Installed hero detection
 
 Mod-section skin ownership comes from its category ancestry. Skins assigned directly to Skins without a hero category use the textual steps below, skipping VPK asset inspection. This runs when downloading or updating them and during installed classification, using each file's own original metadata. Explicit hero categories and manual assignments take precedence. Installed Sound, Wip, and HUD files use the same local detector, which can return several supported heroes. Recognize HUD descendants through the cached Mod category path, with saved-label fallback offline:

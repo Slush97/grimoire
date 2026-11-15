@@ -1,6 +1,6 @@
 import type { Mod } from '../types/mod';
 import { canonicalHeroName, modLoadOrder } from './lockerUtils';
-import { installedVariantGroupKey } from './localVariantEligibility';
+import { installedVariantGroupKey, isLocalMod } from './localVariantEligibility';
 import { modPreferenceKey } from './disabledModPrefs';
 import { getInstalledCardTaxonomy, installedTaxonomyTags, type InstalledTaxonomyContext } from './installedCardTaxonomy';
 
@@ -91,11 +91,12 @@ export function buildModEntries(mods: Mod[]): ModEntry[] {
     variants.sort((a, b) => a.priority - b.priority);
     const enabledVariants = variants.filter((v) => v.enabled);
     const active = enabledVariants[0] ?? null;
-    const primary = enabledVariants[0] ?? variants[0];
+    const remoteOwner = enabledVariants.find(variant => !isLocalMod(variant))
+      ?? variants.find(variant => !isLocalMod(variant));
+    const primary = remoteOwner ?? enabledVariants[0] ?? variants[0];
     const totalSize = variants.reduce((sum, v) => sum + v.size, 0);
-    // Preserve primary provenance for mod-page affordances. Whether membership
-    // is user-managed comes from the authoritative group key, not this id: an
-    // explicit local group may legitimately contain an adopted GameBanana VPK.
+    // Keep downloaded provenance for mod-page affordances, even when an
+    // imported attachment is the only enabled member.
     const gameBananaId =
       typeof primary.gameBananaId === 'number' && primary.gameBananaId > 0
         ? primary.gameBananaId
@@ -120,11 +121,9 @@ export function isEntryEnabled(entry: ModEntry): boolean {
   return entry.kind === 'single' ? entry.mod.enabled : entry.enabledVariants.length > 0;
 }
 
-/** Sort key for ordering enabled/disabled sections. Uses the primary's
- *  priority for groups so reorder math stays consistent with the existing
- *  per-mod priority system. */
+/** Groups follow their first enabled file even when another file owns the artwork. */
 export function entrySortPriority(entry: ModEntry): number {
-  return modLoadOrder(entry.kind === 'single' ? entry.mod : entry.primary);
+  return modLoadOrder(entry.kind === 'single' ? entry.mod : entry.active ?? entry.primary);
 }
 
 /** Searchable display name for an entry (the visible card title). */
@@ -174,13 +173,9 @@ export function entrySize(entry: ModEntry): number {
   return entry.kind === 'single' ? entry.mod.size : entry.totalSize;
 }
 
-/** Whether membership/name are user-managed. Explicit local identity wins over
- * adopted GameBanana provenance, matching variantGroupKey and the main process. */
+/** A group exposes local-only controls only when every file is locally imported. */
 export function entryIsLocal(entry: ModEntry): boolean {
-  return entry.kind === 'single'
-    ? !!entry.mod.localGroupId ||
-        !(typeof entry.mod.gameBananaId === 'number' && entry.mod.gameBananaId > 0)
-    : entry.groupKey.startsWith('local:');
+  return entry.kind === 'single' ? isLocalMod(entry.mod) : entry.variants.every(isLocalMod);
 }
 
 export function entryHeroNames(entry: ModEntry, context?: InstalledTaxonomyContext): string[] {
@@ -241,7 +236,7 @@ export function flattenEntries(entries: ModEntry[]): Mod[] {
 }
 
 export function entryRepresentativeId(entry: ModEntry): string {
-  return entry.kind === 'single' ? entry.mod.id : entry.primary.id;
+  return entry.kind === 'single' ? entry.mod.id : (entry.active ?? entry.primary).id;
 }
 
 export function entryDisabledPreferenceKey(entry: ModEntry): string {
