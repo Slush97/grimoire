@@ -737,7 +737,8 @@
     "reorderFailed": "Could not change the download order.",
     "serverAutomatic": "Automatic · {{server}}",
     "serverSwitching": "Switching from {{server}}…",
-    "showDetails": "Show download details"
+    "showDetails": "Show download details",
+    "slowDownload": "Downloads are running slowly (under 1 MB/s). This is most likely GameBanana's servers under heavy load or your internet provider."
   },
   "stats": {
     "title": "Deadlock Stats",
