@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
     handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(), sender: {},
-    approve: vi.fn(), enable: vi.fn(), audit: vi.fn(), update: vi.fn(),
+    approve: vi.fn(), enable: vi.fn(), audit: vi.fn(), update: vi.fn(), disallow: vi.fn(),
     snapshot: { report: { fingerprint: 'a'.repeat(64) }, trusted: true },
 }));
 vi.mock('electron', () => ({ ipcMain: { handle: (name: string, handler: (...args: unknown[]) => Promise<unknown>) => h.handlers.set(name, handler) } }));
@@ -14,7 +14,7 @@ vi.mock('../services/modSafety', () => ({
 }));
 vi.mock('../services/modSafetyAudit', () => ({
     auditInstalledSafety: h.audit, installedSafetyStatus: vi.fn(), installedSafetyRunning: vi.fn(), installedSafetyFailed: vi.fn(),
-    updateInstalledSafety: h.update,
+    updateInstalledSafety: h.update, disallowInstalledMod: h.disallow,
 }));
 vi.mock('../services/mods', () => ({
     scanMods: async () => [{ id: 'disabled', path: 'disabled.vpk' }], enableMod: h.enable,
@@ -25,6 +25,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     h.approve.mockResolvedValue(false);
     h.enable.mockResolvedValue({ id: 'enabled', path: 'pak01.vpk', name: 'Test', enabled: true });
+    h.disallow.mockResolvedValue({ id: 'parked', path: 'parked.vpk', name: 'Test', enabled: false });
 });
 describe('inline mod approval', () => {
     it('returns the enabled mod and updates only its status without auditing the library', async () => {
@@ -51,5 +52,18 @@ describe('inline mod approval', () => {
     it('rejects decisions from another renderer', async () => {
         await expect(h.handlers.get('review-mod-safety')!({ sender: {} }, 'disabled', 'a'.repeat(64))).rejects.toThrow('Invalid mod');
         expect(h.approve).not.toHaveBeenCalled();
+    });
+});
+describe('inline mod disallow', () => {
+    it('returns the disabled mod and updates only its status without auditing the library', async () => {
+        const result = await h.handlers.get('disallow-mod-safety')!({ sender: h.sender }, 'enabled');
+        expect(h.disallow).toHaveBeenCalledWith('game', 'enabled');
+        expect(h.update).toHaveBeenCalledWith('enabled', { modId: 'parked', name: 'Test', enabled: false, ...h.snapshot });
+        expect(result).toMatchObject({ id: 'parked', enabled: false, safety: h.snapshot });
+        expect(h.audit).not.toHaveBeenCalled();
+    });
+    it('rejects decisions from another renderer', async () => {
+        await expect(h.handlers.get('disallow-mod-safety')!({ sender: {} }, 'enabled')).rejects.toThrow('Invalid mod');
+        expect(h.disallow).not.toHaveBeenCalled();
     });
 });

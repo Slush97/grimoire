@@ -166,6 +166,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getInstalledModSafety: () => ipcRenderer.invoke('get-installed-mod-safety'),
     rescanModSafety: () => ipcRenderer.invoke('rescan-mod-safety'),
     reviewModSafety: (id: string, fingerprint: string) => ipcRenderer.invoke('review-mod-safety', id, fingerprint),
+    disallowModSafety: (id: string) => ipcRenderer.invoke('disallow-mod-safety', id),
     onModSafetyChanged: (callback: () => void) => {
         const listener = () => callback();
         ipcRenderer.on('mod-safety-changed', listener);

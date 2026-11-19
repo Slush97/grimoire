@@ -6,8 +6,9 @@ import { scanMods, disableModUnlocked, runExclusiveModMutation } from './mods';
 import { findChunkSiblingNames } from './vpk';
 import { isDeadlockRunning } from './launch';
 import { getModMetadata } from './metadata';
-import { inspectVpkSafety, isModSafetyTrusted, announceUnsafeMod, assertVpkSafety, moveSafetySnapshot, notifyModSafetyChanged } from './modSafety';
+import { inspectVpkSafety, isModSafetyTrusted, announceUnsafeMod, assertVpkSafety, moveSafetySnapshot, notifyModSafetyChanged, revokeVpkSafety } from './modSafety';
 import type { InstalledModSafety } from '../../../src/types/modSafety';
+import type { Mod } from '../../../src/types/mod';
 
 let status: InstalledModSafety[] = [];
 let auditing: Promise<InstalledModSafety[]> | null = null;
@@ -18,6 +19,20 @@ export function installedSafetyFailed(): boolean { return failed; }
 export function updateInstalledSafety(previousId: string, updated: InstalledModSafety): void {
     status = status.map(item => item.modId === previousId ? { ...updated, name: item.name } : item);
     notifyModSafetyChanged();
+}
+
+/**
+ * Takes back the user's approval of a library mod and returns it to review.
+ * The mod is disabled first, under the same lock: it is never left active
+ * without approval, and a mod the running game holds refuses before any
+ * consent changes.
+ */
+export function disallowInstalledMod(deadlockPath: string, modId: string): Promise<Mod> {
+    return runExclusiveModMutation(async () => {
+        const mod = await disableModUnlocked(deadlockPath, modId);
+        await revokeVpkSafety(mod.path);
+        return mod;
+    }, { healPath: deadlockPath });
 }
 
 async function candidates(root: string): Promise<string[]> {

@@ -953,6 +953,7 @@ export interface ElectronAPI {
     getInstalledModSafety: () => Promise<{ mods: InstalledModSafety[]; running: boolean; failed: boolean }>;
     rescanModSafety: () => Promise<InstalledModSafety[]>;
     reviewModSafety: (id: string, fingerprint: string) => Promise<Mod>;
+    disallowModSafety: (id: string) => Promise<Mod>;
     onModSafetyChanged: (callback: () => void) => () => void;
     /** Fires when the background check flags a mod's outdated vdata or stale hero models. */
     onModVdataChecked: (callback: () => void) => () => void;
