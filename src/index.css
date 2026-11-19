@@ -13,10 +13,18 @@
    white-only icon). Prefer a token: this is for what a token cannot say. */
 @custom-variant light (&:where([data-theme='light'] *));
 
+.floating-panel {
+  transition: left 120ms ease-out, top 120ms ease-out, width 120ms ease-out, height 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-panel { transition: none; }
+}
+
 /* Z-index scale. New surfaces pick from this ladder instead of inventing
    values (no more z-[9999]):
      z-30  page-level overlays inside the content area (Locker hero/global panels)
-     z-40  sticky chrome (sidebar)
+     z-40  sticky chrome (sidebar) and movable popups
      z-50  modals (Modal component) and full-screen dialogs
      z-60  surfaces that stack above a modal: toasts, ModDetailsModal
      z-80  context menus and popovers (always top) */

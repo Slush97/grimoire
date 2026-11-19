@@ -1876,7 +1876,7 @@
       "extracted": "Extracted {{name}}"
     },
     "select": {
-      "dragHint": "Drag to move",
+      "dragHint": "Drag to move. Hold Shift to snap to edges or center.",
       "noneSelected": "No mods selected",
       "countSelected_one": "{{count}} mod selected",
       "countSelected_other": "{{count}} mods selected",

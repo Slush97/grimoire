@@ -1,9 +1,13 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { isModLoadedInGame, isReorderBlocked } from '../lib/modLocks';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
+import { FloatingPanelArea } from '../components/common/FloatingPanelArea';
+import { AnchoredPopover } from '../components/common/AnchoredPopover';
+import { useFloatingPanel } from '../components/common/useFloatingPanel';
+import { validPanelPosition } from '../lib/floatingPanelGeometry';
 import { installedDoorStuckTarget, installedSkinTarget } from '../lib/installedSkinTarget';
 import { pinInstalledPreview } from '../lib/installedPreviewPin';
 import { installedPropTarget } from '../lib/installedPropPreview';
@@ -625,6 +629,17 @@ function getCardSizeGridStyle(multiplier: number): CSSProperties {
 }
 
 export default function Installed() {
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
+  const [toolbar, setToolbar] = useState<HTMLDivElement | null>(null);
+  return <FloatingPanelArea viewport={viewport} topBoundary={toolbar}>
+    <InstalledPage viewportRef={setViewport} toolbarRef={setToolbar} />
+  </FloatingPanelArea>;
+}
+
+function InstalledPage({ viewportRef, toolbarRef }: {
+  viewportRef: RefCallback<HTMLDivElement>;
+  toolbarRef: RefCallback<HTMLDivElement>;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -917,99 +932,18 @@ export default function Installed() {
     done: number;
     total: number;
   } | null>(null);
-  // Persisted screen position of the floating select bar. `null` means
-  // "use the default top-center anchor"; once the user drags it we store the
-  // top-left corner in px and reuse it next time the bar appears.
-  const [selectBarPos, setSelectBarPos] = useState<{ x: number; y: number } | null>(() => {
-    try {
-      const raw = localStorage.getItem(SELECT_BAR_POS_KEY);
-      if (!raw) return null;
-      const p = JSON.parse(raw);
-      if (typeof p?.x === 'number' && typeof p?.y === 'number') return p;
-    } catch {
-      // ignore malformed/unavailable storage
-    }
-    return null;
+  const selectBar = useFloatingPanel({
+    placement: 'top-center',
+    initial: () => {
+      try {
+        const stored: unknown = JSON.parse(localStorage.getItem(SELECT_BAR_POS_KEY) ?? 'null');
+        return validPanelPosition(stored) ? stored : null;
+      } catch { return null; }
+    },
+    onCommit: ({ x, y }) => {
+      try { localStorage.setItem(SELECT_BAR_POS_KEY, JSON.stringify({ x, y })); } catch { /* storage may be unavailable */ }
+    },
   });
-  const selectBarRef = useRef<HTMLDivElement>(null);
-  // Pointer offset from the bar's top-left captured on drag start, plus the
-  // live move/end listeners so they can detach themselves.
-  const selectBarDragRef = useRef<{ dx: number; dy: number } | null>(null);
-
-  const clampSelectBarPos = useCallback((x: number, y: number) => {
-    const el = selectBarRef.current;
-    const w = el?.offsetWidth ?? 0;
-    const h = el?.offsetHeight ?? 0;
-    const maxX = Math.max(0, window.innerWidth - w);
-    const maxY = Math.max(0, window.innerHeight - h);
-    return {
-      x: Math.min(Math.max(0, x), maxX),
-      y: Math.min(Math.max(0, y), maxY),
-    };
-  }, []);
-
-  const handleSelectBarDragMove = useCallback(
-    (e: PointerEvent) => {
-      const drag = selectBarDragRef.current;
-      if (!drag) return;
-      setSelectBarPos(clampSelectBarPos(e.clientX - drag.dx, e.clientY - drag.dy));
-    },
-    [clampSelectBarPos],
-  );
-
-  const handleSelectBarDragEnd = useCallback(() => {
-    selectBarDragRef.current = null;
-    window.removeEventListener('pointermove', handleSelectBarDragMove);
-    window.removeEventListener('pointerup', handleSelectBarDragEnd);
-    setSelectBarPos((p) => {
-      if (p) {
-        try {
-          localStorage.setItem(SELECT_BAR_POS_KEY, JSON.stringify(p));
-        } catch {
-          // ignore unavailable storage
-        }
-      }
-      return p;
-    });
-  }, [handleSelectBarDragMove]);
-
-  const handleSelectBarDragStart = useCallback(
-    (e: React.PointerEvent) => {
-      const el = selectBarRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      selectBarDragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
-      // Pin the current pixel position so it doesn't jump from the centered
-      // anchor to absolute coords on the first move.
-      setSelectBarPos(clampSelectBarPos(rect.left, rect.top));
-      window.addEventListener('pointermove', handleSelectBarDragMove);
-      window.addEventListener('pointerup', handleSelectBarDragEnd);
-      e.preventDefault();
-    },
-    [clampSelectBarPos, handleSelectBarDragMove, handleSelectBarDragEnd],
-  );
-
-  // Detach drag listeners if the component unmounts mid-drag.
-  useEffect(() => {
-    return () => {
-      window.removeEventListener('pointermove', handleSelectBarDragMove);
-      window.removeEventListener('pointerup', handleSelectBarDragEnd);
-    };
-  }, [handleSelectBarDragMove, handleSelectBarDragEnd]);
-
-  // Keep a saved (dragged) bar position on-screen when the bar appears and on
-  // window resize, so a position saved at a larger window size doesn't strand
-  // the bar off the viewport.
-  useEffect(() => {
-    if (!selectMode || !selectBarPos) return;
-    const reclamp = () => setSelectBarPos((p) => (p ? clampSelectBarPos(p.x, p.y) : p));
-    reclamp();
-    window.addEventListener('resize', reclamp);
-    return () => window.removeEventListener('resize', reclamp);
-    // selectBarPos intentionally omitted: this only re-pins on appear/resize,
-    // not on every drag tick (which would fight the active drag).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectMode, clampSelectBarPos]);
 
   // The batch local-import dialog is mounted by Layout, not here: this page
   // early-returns an empty state when it has no mods, so hosting the dialog
@@ -1272,6 +1206,10 @@ export default function Installed() {
   }, [requirementRevealId]);
   const startUpdates = useModUpdatesStore((state) => state.start);
   const installedScrollRef = useRef<HTMLDivElement | null>(null);
+  const attachViewport = useCallback((element: HTMLDivElement | null) => {
+    installedScrollRef.current = element;
+    viewportRef(element);
+  }, [viewportRef]);
   useInstalledScrollActivity(installedScrollRef);
   useInstalledScrollRestoration(
     installedScrollRef,
@@ -1992,24 +1930,6 @@ export default function Installed() {
   // Pass null to clear the manual tag and fall back to title/category inference.
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
   const tagMenuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!tagMenuOpen) return;
-    const onMouseDown = (e: MouseEvent) => {
-      if (tagMenuRef.current && !tagMenuRef.current.contains(e.target as Node)) {
-        setTagMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setTagMenuOpen(false);
-    };
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [tagMenuOpen]);
-
   const handleBulkTag = async (heroName: string | null) => {
     if (selectedMods.length === 0) return;
     setTagMenuOpen(false);
@@ -3519,9 +3439,10 @@ export default function Installed() {
   }
 
   return (
-    <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6 [scrollbar-gutter:stable]">
+    <div ref={attachViewport} className="h-full overflow-y-auto px-4 pb-5 sm:px-6 [scrollbar-gutter:stable]">
       <InstalledSkinPreview hideNsfw={installedHideNsfwPreviews} />
       <div
+        ref={toolbarRef}
         className={`sticky top-0 z-30 -mx-4 mb-4 border-b border-hl/5 px-4 py-3 sm:-mx-6 sm:px-6 ${
           settings?.sidebarTransparent
             ? 'app-background-fixed'
@@ -4127,20 +4048,15 @@ export default function Installed() {
       )}
 
       {selectMode && createPortal(
-        // Floats at top-center. Portaled to body because the page's outlet
-        // wrapper is its own stacking context, which trapped this bar under the
-        // sidebar when dragged over it. At root, z-40 keeps it above the whole
-        // app shell but below modal overlays (z-50), so an open modal's
-        // backdrop dims it like the rest of the page instead of the bar
-        // painting over the modal (e.g. the variant picker overlapping it in a
-        // short window).
+        // Fixed viewport coordinates escape the page stacking context. The
+        // shared area supplies containment; z-40 keeps the bar below dialogs.
         <div
-          ref={selectBarRef}
-          className={`fixed z-40 w-max max-w-[calc(100vw-2rem)] bg-bg-secondary border border-accent/40 ring-1 ring-accent/15 rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2 ${selectBarPos ? '' : 'top-4 left-1/2 -translate-x-1/2'}`}
-          style={selectBarPos ? { left: selectBarPos.x, top: selectBarPos.y } : undefined}
+          ref={selectBar.ref}
+          className="floating-panel fixed z-40 w-max overflow-y-auto bg-bg-secondary border border-accent/40 ring-1 ring-accent/15 rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2"
+          style={selectBar.style}
         >
           <span
-            onPointerDown={handleSelectBarDragStart}
+            onPointerDown={selectBar.onDragStart}
             className="flex items-center self-stretch -ml-1 px-0.5 text-text-secondary hover:text-text-primary cursor-grab active:cursor-grabbing touch-none select-none"
             title={t('installed.select.dragHint')}
             aria-hidden="true"
@@ -4250,11 +4166,8 @@ export default function Installed() {
                   {t('installed.select.tag')}{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
                 </Button>
                 {tagMenuOpen && selectedMods.length > 0 && (
-                  <div
-                    role="dialog"
-                    aria-label={t('installed.select.tagDialogLabel')}
-                    className="absolute top-full mt-2 right-0 z-[60] w-56 max-h-80 overflow-y-auto bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
-                  >
+                  <AnchoredPopover open onClose={() => setTagMenuOpen(false)} anchorRef={tagMenuRef}
+                    width={224} ariaLabel={t('installed.select.tagDialogLabel')} className="p-1">
                     <button
                       type="button"
                       onClick={() => handleBulkClearTag()}
@@ -4290,7 +4203,7 @@ export default function Installed() {
                         <HeroTagLabel heroName={name} />
                       </button>
                     ))}
-                  </div>
+                  </AnchoredPopover>
                 )}
               </div>
               <Button

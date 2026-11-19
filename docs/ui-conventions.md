@@ -60,6 +60,23 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
   section selector retains its accent tone.
 - **Form controls:** `Input`, `Textarea`, `Select`, `DropdownSelect`, `FormField` from `forms.tsx`. `Select` uses the native option menu; `DropdownSelect` provides the shared custom menu with optional icons and search. `HeroSelect` adds hero icons to it for Browse, Installed, and Locker tagging. `DynamicSelect` sizes a native select to its selected label.
 - **Overlays:** `Modal` + `ModalHeader` for dialogs, `ConfirmModal` for confirmations, the `menu.tsx` family for context menus, `showToast()` for transient feedback.
+- **Movable popups:** wrap the page in `FloatingPanelArea`, supplying its visible viewport element and
+  optional toolbar element as `topBoundary`. The area is calculated from the existing viewport and toolbar,
+  follows layout changes and excludes scrollbars. It has no inner margin by default, so popups reach its edges
+  and corners; consumers can opt into padding with `inset`. Inside it, `useFloatingPanel` supplies the panel
+  ref, initial style, drag/resize handlers and resize-grip direction. Apply the `floating-panel` class and
+  portal the panel to `document.body`. The hook owns containment, Shift-only edge/center snapping with guides,
+  centered size changes and 120ms ease-out for automatic adjustments (disabled for reduced motion). Dragging
+  preserves the original grab offset: after the pointer crosses a wall, the panel stays there until the
+  pointer returns to its grab position. Pointer dragging, Shift snapping and manual resizing follow input
+  immediately with transitions disabled; automatic containment resumes easing after the gesture ends. Omit
+  `size` for content-sized panels; supply `size` and `minSize` to enable manual resizing. Manual resizing
+  defaults to `resizeMode: 'corner'`: the grip switches between bottom-left and bottom-right as the panel
+  crosses the area center, fixing the opposite top corner. The grip stays fixed during each resize gesture.
+  Opt into `resizeMode: 'center'` for symmetric resizing. Both modes cap dimensions at the area size, allow
+  overflow during the gesture and settle inside on release. Persist top-left geometry through `onCommit`;
+  storage remains the consumer's responsibility. Keep drag handles separate from interactive controls and use
+  the existing overlay layers.
 - **Drag previews:** portal `DragOverlay` to `document.body`. Its coordinates are relative to the viewport; blur and transforms on a containing panel would offset or clip it. Keep the overlay mounted, disable its pointer events, and use the z-index ladder.
 - **Status:** `Tag` (HUD-style card markers), `Badge` (pills), `Skeleton` (placeholders).
 
