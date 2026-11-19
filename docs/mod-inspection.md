@@ -104,7 +104,9 @@ why unexpected access deserves scrutiny.
 
 Local imports are staged and inspected, then committed to the disabled library.
 The batch finishes and its dialog closes before navigation to Mod safety. Passive
-and previously approved imports also remain disabled until enabled by the user.
+and previously approved imports also remain disabled until enabled by the user,
+unless "Enable mods after download" is on: then they are enabled once the source
+has imported, and only the files that still need a decision stay disabled.
 Partial failures retain successful disabled imports and leave failed sources
 available to retry in a closable import dialog.
 

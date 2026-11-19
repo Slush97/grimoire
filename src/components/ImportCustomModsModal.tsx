@@ -132,7 +132,9 @@ export default function ImportCustomModsModal({
 }: ImportCustomModsModalProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const safetyReview = useAppStore(s => s.settings?.experimentalModSafety ?? false);
+  // With "Enable mods after download" on, imports that pass the review go live.
+  const importsWaitDisabled = useAppStore(s =>
+    (s.settings?.experimentalModSafety ?? false) && !(s.settings?.autoEnableDownloads ?? false));
   const reviewAfterClose = useRef(false);
   const close = () => {
     onClose();
@@ -497,7 +499,7 @@ export default function ImportCustomModsModal({
         <p className="text-xs leading-5 text-text-secondary">
           {addToGroup
             ? t('installed.batchImport.addVariantsHelp', { name: addToGroup.modName })
-            : safetyReview
+            : importsWaitDisabled
               ? t('installed.batchImport.help')
               : t('installed.batchImport.helpEnabled')}
         </p>
