@@ -248,9 +248,10 @@ describe('persisted preference migration', () => {
     expect(JSON.parse(storage.get(SHUFFLE_VARIANT_KEY) ?? 'null')).toEqual({
       'localgroup:g': 'random',
     });
-    expect(dispatchEvent).toHaveBeenCalledOnce();
-    expect(dispatchEvent.mock.calls[0][0].type).toBe(STABLE_KEY_PREFERENCES_MIGRATED_EVENT);
-    expect(dispatchEvent.mock.calls[0][0].detail.disabledFavorites).toEqual(
+    const migrations = dispatchEvent.mock.calls.map(([event]) => event)
+      .filter(event => event.type === STABLE_KEY_PREFERENCES_MIGRATED_EVENT);
+    expect(migrations).toHaveLength(1);
+    expect(migrations[0].detail.disabledFavorites).toEqual(
       new Set(['localgroup:g'])
     );
   });

@@ -79,6 +79,7 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
   the existing overlay layers.
 - **Drag previews:** portal `DragOverlay` to `document.body`. Its coordinates are relative to the viewport; blur and transforms on a containing panel would offset or clip it. Keep the overlay mounted, disable its pointer events, and use the z-index ladder.
 - **Installed selection:** `InstalledSelectionToolbar` owns the floating selection UI. Reuse `ModTagMenuItems` and `ModListMenuItems` in toolbar and card menus. Mixed membership uses an accent-colored Lucide Minus indicator; clicking it assigns to all selected files. Bulk menus stay open, suppress default-tag pins, and preserve unrelated tags. The right-aligned 24px card selection checkbox replaces the toggle in its existing 48x28px hitbox and excludes utility actions while retaining load-order display.
+- **Mod favorites:** Installed and Locker share `useModFavorites` and `modPreferenceKey`, including grouping migrations and the existing storage key. Locker uses `ModFavoriteButton` between Delete and Shuffle; selected favorite and shuffle icons stay visible without a background when the other controls hide. Display active mods first in their existing order, then inactive favorites, then the rest. Favorites never change enabled state, load order or shuffle membership.
 - **Status:** `Tag` (HUD-style card markers), `Badge` (pills), `Skeleton` (placeholders).
 
 ## Page anatomy

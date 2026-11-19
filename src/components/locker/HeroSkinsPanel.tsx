@@ -19,7 +19,8 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Mod } from '../../types/mod';
-import { getLockerSkinKey, modLoadOrder } from '../../lib/lockerUtils';
+import { getLockerSkinKey, modLoadOrder, sortLockerMods } from '../../lib/lockerUtils';
+import { modPreferenceKey, useModFavorites } from '../../lib/disabledModPrefs';
 import { getManualOnlyShuffleKeys, shuffleExclusionKey, shuffleSkinKey, type VariantChoice } from '../../lib/lockerRandomizer';
 import { shakeElement } from '../../lib/shakeElement';
 import { isModLoadedInGame, isReorderBlocked } from '../../lib/modLocks';
@@ -28,7 +29,7 @@ import ModThumbnail from '../ModThumbnail';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import DownloadableSkinsSection from './DownloadableSkinsSection';
 import { LockerModImagePicker } from './LockerModImagePicker';
-import { ShuffleIncludeButton } from './ShuffleControls';
+import { ModFavoriteButton, ShuffleIncludeButton } from './ShuffleControls';
 import { Select } from '../common/forms';
 import { RevealImage } from '../common/RevealImage';
 
@@ -399,6 +400,8 @@ function SkinGroupCard({
   shuffleVariantChoice,
   onSetShuffleVariant,
   shuffleArmed,
+  favorite,
+  onToggleFavorite,
 }: {
   group: SkinGroup;
   onSelect: HeroSkinsPanelProps['onSelect'];
@@ -423,13 +426,14 @@ function SkinGroupCard({
   onSetShuffleVariant?: (choice: VariantChoice | null) => void;
   /** Keep the toggle visible (not hover-only) while the shuffle switch is armed. */
   shuffleArmed?: boolean;
+  favorite: boolean;
+  onToggleFavorite: () => void;
 }) {
   const { t } = useTranslation();
   const isMulti = group.variants.length > 1;
   const groupActive = group.variants.some((v) => v.enabled);
   const enabledCount = group.variants.filter((v) => v.enabled).length;
   const primary = group.primary;
-  const hasShuffleControl = !!onToggleIncluded;
   // The user's chosen image wins over the uploader's thumbnail (issue #208).
   const displaySrc = overrideSrc ?? primary.thumbnailUrl;
   const cardRef = useRef<HTMLDivElement>(null);
@@ -568,60 +572,56 @@ function SkinGroupCard({
         className="absolute inset-0 z-10 cursor-pointer rounded-[10px]"
       />
 
-      {/* Set Locker image (issue #208): pick this skin's view from its gallery
-          or a custom upload. Hover-revealed; z-20 keeps it above the toggle. */}
-      {onPickImage && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onPickImage();
-          }}
-          aria-label={t('locker.modImage.set', { name: primary.name })}
-          title={t('locker.modImage.set', { name: primary.name })}
-          className={`absolute top-1.5 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/card:opacity-100 ${
-            hasShuffleControl && onRequestDelete ? 'right-[4.125rem]' : hasShuffleControl || onRequestDelete ? 'right-9' : 'right-1.5'
-          }`}
-        >
-          <ImagePlus className="h-3.5 w-3.5" />
-        </button>
-      )}
+      <div className="absolute right-1.5 top-1.5 z-20 flex gap-0.5">
+        {/* Set Locker image (issue #208): pick this skin's view from its gallery
+            or a custom upload. Hover-revealed; z-20 keeps it above the toggle. */}
+        {onPickImage && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPickImage();
+            }}
+            aria-label={t('locker.modImage.set', { name: primary.name })}
+            title={t('locker.modImage.set', { name: primary.name })}
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/card:opacity-100"
+          >
+            <ImagePlus className="h-3.5 w-3.5" />
+          </button>
+        )}
 
-      {/* Delete: removes the whole group (every variant VPK). Hover-revealed so
-          it stays out of the way; z-20 keeps it above the full-card toggle. */}
-      {onRequestDelete && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRequestDelete(
-              group.variants.map((v) => v.id),
-              primary.name
-            );
-          }}
-          aria-label={t('locker.skins.deleteSkin', { name: primary.name })}
-          title={t('locker.skins.deleteSkin', { name: primary.name })}
-          className={`absolute top-1.5 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-white focus-visible:opacity-100 group-hover/card:opacity-100 ${
-            hasShuffleControl ? 'right-9' : 'right-1.5'
-          }`}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      )}
+        {/* Delete: removes the whole group (every variant VPK). Hover-revealed so
+            it stays out of the way; z-20 keeps it above the full-card toggle. */}
+        {onRequestDelete && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRequestDelete(
+                group.variants.map((v) => v.id),
+                primary.name
+              );
+            }}
+            aria-label={t('locker.skins.deleteSkin', { name: primary.name })}
+            title={t('locker.skins.deleteSkin', { name: primary.name })}
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-white focus-visible:opacity-100 group-hover/card:opacity-100"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
 
-      {/* Add to shuffle: opt this skin into the launch-shuffle pool. Anchors the
-          top-right corner because it's the only always-visible control here (lit
-          when included, shown on every card while the shuffle switch is armed) -
-          the hover-only image/delete buttons extend leftward from it. */}
-      {onToggleIncluded && (
-        <ShuffleIncludeButton
-          name={primary.name}
-          included={!!isIncluded}
-          onToggle={onToggleIncluded}
-          armed={shuffleArmed}
-          className="absolute right-1.5 top-1.5 z-20 group-hover/card:opacity-100"
-        />
-      )}
+        <ModFavoriteButton favorite={favorite} onToggle={onToggleFavorite} className="group-hover/card:opacity-100" />
+        {/* Add to shuffle: stays visible when included or shuffle is armed. */}
+        {onToggleIncluded && (
+          <ShuffleIncludeButton
+            name={primary.name}
+            included={!!isIncluded}
+            onToggle={onToggleIncluded}
+            armed={shuffleArmed}
+            className="group-hover/card:opacity-100"
+          />
+        )}
+      </div>
 
       {/* Sound preview. All variants of one GameBanana submission share the
           same preview clip, so the group's primary audioUrl is the
@@ -731,6 +731,8 @@ function SkinGroupRow({
   shuffleVariantChoice,
   onSetShuffleVariant,
   shuffleArmed,
+  favorite,
+  onToggleFavorite,
 }: {
   group: SkinGroup;
   onSelect: HeroSkinsPanelProps['onSelect'];
@@ -752,13 +754,14 @@ function SkinGroupRow({
   onSetShuffleVariant?: (choice: VariantChoice | null) => void;
   /** Keep the toggle visible (not hover-only) while the shuffle switch is armed. */
   shuffleArmed?: boolean;
+  favorite: boolean;
+  onToggleFavorite: () => void;
 }) {
   const { t } = useTranslation();
   const isMulti = group.variants.length > 1;
   const groupActive = group.variants.some((v) => v.enabled);
   const enabledCount = group.variants.filter((v) => v.enabled).length;
   const primary = group.primary;
-  const hasShuffleControl = !!onToggleIncluded;
   // The user's chosen image wins over the uploader's thumbnail (issue #208).
   const displaySrc = overrideSrc ?? primary.thumbnailUrl;
   const rowRef = useRef<HTMLDivElement>(null);
@@ -773,53 +776,51 @@ function SkinGroupRow({
           : 'border-border bg-bg-secondary/70 hover:border-accent/60 hover:bg-bg-secondary/85'
       } ${isIncluded ? 'ring-2 ring-accent/45' : ''}`}
     >
-      {onPickImage && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onPickImage();
-          }}
-          aria-label={t('locker.modImage.set', { name: primary.name })}
-          title={t('locker.modImage.set', { name: primary.name })}
-          className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/row:opacity-100 ${
-            hasShuffleControl && onRequestDelete ? 'right-[4.5rem]' : hasShuffleControl || onRequestDelete ? 'right-10' : 'right-2'
-          }`}
-        >
-          <ImagePlus className="h-3.5 w-3.5" />
-        </button>
-      )}
-      {onRequestDelete && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRequestDelete(
-              group.variants.map((v) => v.id),
-              primary.name
-            );
-          }}
-          aria-label={t('locker.skins.deleteSkin', { name: primary.name })}
-          title={t('locker.skins.deleteSkin', { name: primary.name })}
-          className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-white focus-visible:opacity-100 group-hover/row:opacity-100 ${
-            hasShuffleControl ? 'right-10' : 'right-2'
-          }`}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      )}
-      {/* Add to shuffle (see SkinGroupCard). Anchors the top-right corner; the
-          hover-only image/delete buttons extend leftward from it. */}
-      {onToggleIncluded && (
-        <ShuffleIncludeButton
-          name={primary.name}
-          included={!!isIncluded}
-          onToggle={onToggleIncluded}
-          armed={shuffleArmed}
-          className="absolute right-2 top-2 z-10 group-hover/row:opacity-100"
-          restingClassName="bg-black/55 text-white/90"
-        />
-      )}
+      <div className="absolute right-2 top-2 z-10 flex gap-1">
+        {onPickImage && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPickImage();
+            }}
+            aria-label={t('locker.modImage.set', { name: primary.name })}
+            title={t('locker.modImage.set', { name: primary.name })}
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
+          >
+            <ImagePlus className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {onRequestDelete && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRequestDelete(
+                group.variants.map((v) => v.id),
+                primary.name
+              );
+            }}
+            aria-label={t('locker.skins.deleteSkin', { name: primary.name })}
+            title={t('locker.skins.deleteSkin', { name: primary.name })}
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-white focus-visible:opacity-100 group-hover/row:opacity-100"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <ModFavoriteButton favorite={favorite} onToggle={onToggleFavorite} className="group-hover/row:opacity-100" />
+        {/* Add to shuffle (see SkinGroupCard). */}
+        {onToggleIncluded && (
+          <ShuffleIncludeButton
+            name={primary.name}
+            included={!!isIncluded}
+            onToggle={onToggleIncluded}
+            armed={shuffleArmed}
+            className="group-hover/row:opacity-100"
+            restingClassName="bg-black/55 text-white/90"
+          />
+        )}
+      </div>
       <button
         type="button"
         onClick={() => {
@@ -965,7 +966,12 @@ export default function HeroSkinsPanel({
   const lockerModImages = useAppStore((s) => s.lockerModImages);
   // The "Locker image" (grid-thumbnail surface) the picker mirrors from.
   const lockerModThumbnails = useAppStore((s) => s.lockerModThumbnails);
-  const groups = useMemo(() => groupVariants(mods), [mods]);
+  const { favorites, toggleFavorite } = useModFavorites();
+  const groups = useMemo(() => sortLockerMods(groupVariants(mods), {
+    favorites,
+    keyOf: group => modPreferenceKey(group.primary),
+    isActive: group => group.variants.some(variant => variant.enabled),
+  }), [mods, favorites]);
   const { t } = useTranslation();
   // Issue #208: which skin's image picker is open (null = none). Skins only;
   // sound mods keep the hero-portrait thumbnail and get no picker.
@@ -1041,6 +1047,8 @@ export default function HeroSkinsPanel({
                 <SkinGroupCard
                   key={group.key}
                   group={group}
+                  favorite={favorites.has(modPreferenceKey(group.primary))}
+                  onToggleFavorite={() => toggleFavorite(modPreferenceKey(group.primary))}
                   loadOrderPosition={loadOrderByKey.get(group.key)}
                   overrideSrc={lockerModImages[group.key]}
                   onPickImage={pickImageFor(group)}
@@ -1054,6 +1062,8 @@ export default function HeroSkinsPanel({
               <SkinGroupRow
                 key={group.key}
                 group={group}
+                favorite={favorites.has(modPreferenceKey(group.primary))}
+                onToggleFavorite={() => toggleFavorite(modPreferenceKey(group.primary))}
                 overrideSrc={lockerModImages[group.key]}
                 onPickImage={pickImageFor(group)}
                 {...shufflePropsFor(group)}

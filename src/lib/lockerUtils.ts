@@ -594,3 +594,17 @@ export function groupModsByCategory(mods: Mod[], heroList?: readonly HeroCategor
 
   return { map, unassigned };
 }
+
+/** Display order only: active mods keep their order, then favorites, then the rest. */
+export function sortLockerMods<T>(items: readonly T[], options: {
+  favorites: ReadonlySet<string>;
+  keyOf: (item: T) => string;
+  isActive: (item: T) => boolean;
+}): T[] {
+  const { favorites, keyOf, isActive } = options;
+  return [...items].sort((left, right) => {
+    const leftActive = isActive(left), rightActive = isActive(right);
+    if (leftActive || rightActive) return Number(rightActive) - Number(leftActive);
+    return Number(favorites.has(keyOf(right))) - Number(favorites.has(keyOf(left)));
+  });
+}

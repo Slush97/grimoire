@@ -20,7 +20,8 @@ import { shakeElement } from '../lib/shakeElement';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import { UnassignedModTagSelect } from '../components/locker/UnassignedModTagSelect';
 import CursorPackPane, { CursorImportButton } from '../components/locker/CursorPackPane';
-import { ShuffleIncludeButton } from '../components/locker/ShuffleControls';
+import { ModFavoriteButton, ShuffleIncludeButton } from '../components/locker/ShuffleControls';
+import { modPreferenceKey, useModFavorites } from '../lib/disabledModPrefs';
 import { LockerHeroView } from './LockerHero';
 import { LockerViewerPanel } from '../components/locker/LockerViewerHost';
 import { getLockerHeroNeighbors } from '../lib/lockerHeroNavigation';
@@ -65,6 +66,7 @@ import {
   isPropContainerType,
   modLoadOrder,
   readStoredFavorites,
+  sortLockerMods,
   type GlobalModGroups,
   type HeroCategory,
 } from '../lib/lockerUtils';
@@ -1694,6 +1696,7 @@ interface LockerGlobalViewProps {
  */
 function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn, shuffleArmed, includedShuffleKeys, excludedShuffleKeys, onToggleShuffleIncluded, heroList }: LockerGlobalViewProps) {
   const { t } = useTranslation();
+  const { favorites, toggleFavorite } = useModFavorites();
   const soundVolume = useAppStore((s) => s.soundVolume);
   const revealNsfwOnHover = useAppStore((s) => s.settings?.revealNsfwOnHover ?? false);
   // Every tab is selectable, empty or not. We still default the landing tab to
@@ -1746,8 +1749,10 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // `?? []` on every render would recompute them for nothing.
   const activeMods: Mod[] = useMemo(() => {
     if (activeType === CURSOR_TAB) return [];
-    return groups[activeType] ?? [];
-  }, [activeType, groups]);
+    return sortLockerMods(groups[activeType] ?? [], {
+      favorites, keyOf: modPreferenceKey, isActive: mod => mod.enabled,
+    });
+  }, [activeType, groups, favorites]);
   // Track the active row's box so the highlight can glide to it. Measured in a
   // layout effect (pre-paint) to avoid a one-frame jump on first mount. Also
   // re-measured when a tab fills up or empties out and changes the row order.
@@ -2115,7 +2120,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             disabled ones. */}
                         {isPropContainer
                           ? mod.enabled && (
-                              <div className="pointer-events-none absolute left-2 top-2 z-10 flex h-5 items-start animate-fade-in">
+                              <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex h-5 items-start animate-fade-in">
                                 <Tag
                                   tone="accent"
                                   variant="overlay"
@@ -2127,7 +2132,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                               </div>
                             )
                           : !mod.enabled && (
-                              <div className="pointer-events-none absolute left-2 top-2 z-10 flex h-5 items-start">
+                              <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex h-5 items-start">
                                 <Tag
                                   tone="neutral"
                                   variant="overlay"
@@ -2138,72 +2143,73 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                                 </Tag>
                               </div>
                             )}
-                        {/* Retag control: sits above the full-card toggle overlay
-                            (z-20 > z-10) and stops propagation so opening it never
-                            also toggles the mod. Hidden for Killstreak Music: that
-                            type is derived from the GameBanana category, not a
-                            manual assignment, and the sound belongs to no hero, so
-                            there's nowhere meaningful to retag it. */}
-                        {activeType !== 'killstreak-music' && (
+                        <div className="absolute right-2 top-2 z-20 flex gap-2">
+                          {/* Retag control: sits above the full-card toggle overlay
+                              (z-20 > z-10) and stops propagation so opening it never
+                              also toggles the mod. Hidden for Killstreak Music: that
+                              type is derived from the GameBanana category, not a
+                              manual assignment, and the sound belongs to no hero, so
+                              there's nowhere meaningful to retag it. */}
+                          {activeType !== 'killstreak-music' && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const r = e.currentTarget.getBoundingClientRect();
+                                const MENU_W = 208;
+                                const MENU_H = 260;
+                                const x = Math.max(
+                                  8,
+                                  Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)
+                                );
+                                const y =
+                                  r.bottom + MENU_H > window.innerHeight
+                                    ? Math.max(8, r.top - MENU_H - 4)
+                                    : r.bottom + 4;
+                                setRetagMenu({ id: mod.id, x, y });
+                              }}
+                              aria-label={t('locker.page.changeCategoryForNamed', { name: mod.name })}
+                              title={t('locker.page.changeCategory')}
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-hl/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </button>
+                          )}
+                          {/* Delete: removes this global mod's VPK. Sits above the
+                              full-card toggle (z-20 > z-10), to the right of the
+                              retag kebab; red on hover. */}
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              const r = e.currentTarget.getBoundingClientRect();
-                              const MENU_W = 208;
-                              const MENU_H = 260;
-                              const x = Math.max(
-                                8,
-                                Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)
-                              );
-                              const y =
-                                r.bottom + MENU_H > window.innerHeight
-                                  ? Math.max(8, r.top - MENU_H - 4)
-                                  : r.bottom + 4;
-                              setRetagMenu({ id: mod.id, x, y });
+                              onRequestDelete([mod.id], mod.name);
                             }}
-                            aria-label={t('locker.page.changeCategoryForNamed', { name: mod.name })}
-                            title={t('locker.page.changeCategory')}
-                            className="absolute right-20 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-hl/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
+                            aria-label={t('locker.global.deleteMod', { name: mod.name })}
+                            title={t('locker.global.deleteMod', { name: mod.name })}
+                            className="flex h-7 w-7 items-center justify-center rounded-md border border-hl/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] hover:bg-red-500/80 hover:text-white focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
                           >
-                            <MoreVertical className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" />
                           </button>
-                        )}
-                        {/* Delete: removes this global mod's VPK. Sits above the
-                            full-card toggle (z-20 > z-10), to the right of the
-                            retag kebab; red on hover. */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onRequestDelete([mod.id], mod.name);
-                          }}
-                          aria-label={t('locker.global.deleteMod', { name: mod.name })}
-                          title={t('locker.global.deleteMod', { name: mod.name })}
-                          className="absolute right-11 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-hl/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] hover:bg-red-500/80 hover:text-white focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                        {/* Launch-shuffle opt-in, same affordance as the hero
-                            skin cards: this bucket re-rolls one of its pooled
-                            mods per launch. Anchors the corner because it is the
-                            one control that stays visible while the switch is
-                            armed; the hover-only kebab/delete extend leftward. */}
-                        {/* Shown on a custom tab too: the key it writes is the
-                            same shufflePoolKey (axis-qualified for bucket
-                            mods), and the planner still re-rolls the mod in
-                            its HOME group (its hero, or its classification
-                            bucket). A category is never a shuffle group of
-                            its own. */}
-                        {shuffleOptIn ? (
-                          <ShuffleIncludeButton
-                            name={mod.name}
-                            included={inShufflePool}
-                            onToggle={() => onToggleShuffleIncluded(shuffleKey)}
-                            armed={shuffleArmed}
-                            className="absolute right-2 top-2 z-20 group-hover/card:opacity-100"
-                          />
-                        ) : null}
+                          <ModFavoriteButton favorite={favorites.has(modPreferenceKey(mod))}
+                            onToggle={() => toggleFavorite(modPreferenceKey(mod))}
+                            className="group-hover/card:opacity-100" />
+                          {/* Launch-shuffle opt-in, matching the hero skin cards. */}
+                          {/* Shown on a custom tab too: the key it writes is the
+                              same shufflePoolKey (axis-qualified for bucket
+                              mods), and the planner still re-rolls the mod in
+                              its HOME group (its hero, or its classification
+                              bucket). A category is never a shuffle group of
+                              its own. */}
+                          {shuffleOptIn ? (
+                            <ShuffleIncludeButton
+                              name={mod.name}
+                              included={inShufflePool}
+                              onToggle={() => onToggleShuffleIncluded(shuffleKey)}
+                              armed={shuffleArmed}
+                              className="group-hover/card:opacity-100"
+                            />
+                          ) : null}
+                        </div>
                       </div>
 
                       {/* Title only — the whole card is the enable/disable control. */}

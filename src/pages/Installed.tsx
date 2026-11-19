@@ -106,10 +106,8 @@ import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModD
 import {
   createDisabledEntryComparator,
   modPreferenceKey,
-  readStoredDisabledFavorites,
   readStoredDisabledOrder,
-  toggleFavoriteKey,
-  writeStoredDisabledFavorites,
+  useModFavorites,
   writeStoredDisabledOrder,
 } from '../lib/disabledModPrefs';
 import {
@@ -687,7 +685,7 @@ function InstalledPage({ viewportRef, toolbarRef }: {
   const customTags = useInstalledTagsStore(state => tagScope ? state.byScope[tagScope] ?? EMPTY_CUSTOM_TAGS : EMPTY_CUSTOM_TAGS);
   const savedTagOrder = useInstalledTagsStore(state => tagScope ? state.orderByScope[tagScope] ?? EMPTY_TAG_ORDER : EMPTY_TAG_ORDER);
   useEffect(() => { if (tagScope) useInstalledTagsStore.getState().load(tagScope); }, [tagScope]);
-  const [disabledFavorites, setDisabledFavorites] = useState(readStoredDisabledFavorites);
+  const { favorites: disabledFavorites, toggleFavorite } = useModFavorites();
   const [disabledOrder, setDisabledOrder] = useState(readStoredDisabledOrder);
   // User-authored lists (see lib/modLists.ts). Membership never changes what
   // is enabled; only the explicit "Enable all" / "Disable all" actions do.
@@ -700,7 +698,6 @@ function InstalledPage({ viewportRef, toolbarRef }: {
     const handleMigration = (
       event: CustomEvent<StableKeyPreferencesMigratedDetail>
     ) => {
-      setDisabledFavorites(new Set(event.detail.disabledFavorites));
       setDisabledOrder([...event.detail.disabledOrder]);
       setModLists(event.detail.modLists.map((list) => ({ ...list, keys: [...list.keys] })));
     };
@@ -2477,12 +2474,8 @@ function InstalledPage({ viewportRef, toolbarRef }: {
   const toggleEntry = useStableCallback((entry: ModEntry) => {
     return entry.kind === 'group' ? handleGroupToggle(entry) : toggleMod(entry.mod.id);
   });
-  // Persist outside the setState updater: StrictMode double-invokes an updater,
-  // and a write is a side effect even when it happens to be idempotent.
   const toggleEntryFavorite = useStableCallback((entry: ModEntry) => {
-    const next = toggleFavoriteKey(disabledFavorites, entryDisabledPreferenceKey(entry));
-    writeStoredDisabledFavorites(next);
-    setDisabledFavorites(next);
+    toggleFavorite(entryDisabledPreferenceKey(entry));
   });
 
   // List mutations follow the same persist-outside-the-updater rule as the

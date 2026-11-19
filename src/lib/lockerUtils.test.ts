@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle, isLockerManagedMod, isLockerManagedSound } from './lockerUtils';
+import { sortLockerMods, getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle, isLockerManagedMod, isLockerManagedSound } from './lockerUtils';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 
 const skinCategories: GameBananaCategoryNode[] = [{
@@ -253,5 +253,30 @@ describe('Maps in General', () => {
     expect(getEffectiveGlobalType({ ...map, sourceSection: 'Sound' })).toBeUndefined();
     expect(getEffectiveGlobalType({ ...map, categoryName: 'Minimaps' })).toBeUndefined();
     expect(getEffectiveGlobalType({ ...map, categoryName: undefined, globalType: 'maps' })).toBe('maps');
+  });
+});
+
+describe('Locker mod display order', () => {
+  const options = {
+    favorites: new Set(['favorite', 'active-favorite']),
+    keyOf: (item: { id: string }) => item.id,
+    isActive: (item: { active: boolean }) => item.active,
+  };
+
+  it('keeps active mods ahead of favorites without changing their relative order', () => {
+    const items = [
+      { id: 'plain', active: false }, { id: 'active', active: true },
+      { id: 'favorite', active: false }, { id: 'active-favorite', active: true },
+      { id: 'other', active: false },
+    ];
+    expect(sortLockerMods(items, options).map(item => item.id))
+      .toEqual(['active', 'active-favorite', 'favorite', 'plain', 'other']);
+    expect(items.map(item => item.id)).toEqual(['plain', 'active', 'favorite', 'active-favorite', 'other']);
+  });
+
+  it('places favorites first when no mod is active and restores the existing order when cleared', () => {
+    const items = [{ id: 'plain', active: false }, { id: 'favorite', active: false }];
+    expect(sortLockerMods(items, options).map(item => item.id)).toEqual(['favorite', 'plain']);
+    expect(sortLockerMods(items, { ...options, favorites: new Set() })).toEqual(items);
   });
 });
