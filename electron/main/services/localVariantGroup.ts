@@ -1,4 +1,4 @@
-import { isLocalMod } from '../../../src/lib/localVariantEligibility';
+import { isLocalMod, localVariantOriginIneligibility } from '../../../src/lib/localVariantEligibility';
 import type { LocalVariantGroupTarget } from '../../../src/types/electron';
 import type { GlobalModType, LockerHeroSource } from '../../../src/types/mod';
 
@@ -22,6 +22,7 @@ export interface LocalVariantGroupMember {
     name: string;
     /** Embedded or associated GameBanana identity, independent of file origin. */
     gameBananaId?: number;
+    sourceSection?: string;
     localGroupId?: string;
     localImport?: boolean;
     lockerHero?: string;
@@ -141,6 +142,13 @@ export function planLocalVariantGroup(
           )
         : [];
     const groupedMembers = groupId ? [...existingGroupMembers, ...targets] : [];
+    if (groupId) {
+        const reason = localVariantOriginIneligibility(groupedMembers);
+        if (reason === 'gamebanana') throw new Error('Cannot group different GameBanana submissions as variants');
+        // Add variant seeds the parent group before importing its local files.
+        // Downloaded-only selections are disabled in bulk Group, but this internal
+        // setup step must remain available for variants of one submission.
+    }
     if (groupId) resolveLocalVariantGroupProfile(groupedMembers);
     const remoteOwner = groupedMembers.filter(member => !isLocalMod(member))
         .sort((a, b) => a.gameBananaId! - b.gameBananaId!)[0];

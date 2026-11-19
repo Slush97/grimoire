@@ -20,7 +20,7 @@ export function containPanel(box: PanelBox, area: PanelBox): PanelBox {
   };
 }
 
-export function snapPanel(box: PanelBox, area: PanelBox, enabled: boolean, threshold = 12): {
+export function snapPanel(box: PanelBox, area: PanelBox, enabled: boolean, threshold = 24): {
   box: PanelBox; guides: PanelGuides;
 } {
   const contained = containPanel(box, area);

@@ -4,6 +4,8 @@ import { variantGroupKey } from './variantGroups';
 export type LocalVariantSelectionIneligibility =
   | 'minimum'
   | 'merged'
+  | 'gamebanana'
+  | 'local-required'
   | 'placement';
 
 export type LocalVariantSelectionEligibility =
@@ -30,6 +32,17 @@ export function canJoinLocalVariantGroup(mod: Pick<Mod, 'gameBananaId' | 'localG
   return canGroupMod(mod) && isLocalMod(mod);
 }
 
+type VariantOrigin = Pick<Mod, 'gameBananaId' | 'localGroupId' | 'localImport' | 'sourceSection'>;
+
+/** A downloaded submission can own local attachments, never another downloaded submission. */
+export function localVariantOriginIneligibility(mods: readonly VariantOrigin[]): 'gamebanana' | 'local-required' | null {
+  const downloaded = mods.filter(mod => !isLocalMod(mod));
+  const submissions = new Set(downloaded.map(mod => `${mod.sourceSection ?? 'Mod'}:${mod.gameBananaId}`));
+  if (submissions.size > 1) return 'gamebanana';
+  if (downloaded.length > 0 && downloaded.length === mods.length) return 'local-required';
+  return null;
+}
+
 /** Pure policy used by the Installed multi-select action and its disabled hint. */
 export function localVariantSelectionEligibility(
   mods: readonly Mod[]
@@ -42,6 +55,8 @@ export function localVariantSelectionEligibility(
   if (mods.some((mod) => !!mod.priorityMod !== !!mods[0].priorityMod)) {
     return { eligible: false, reason: 'placement' };
   }
+  const originReason = localVariantOriginIneligibility(mods);
+  if (originReason) return { eligible: false, reason: originReason };
   return { eligible: true };
 }
 

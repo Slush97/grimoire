@@ -5,9 +5,6 @@ import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
 import { FloatingPanelArea } from '../components/common/FloatingPanelArea';
-import { AnchoredPopover } from '../components/common/AnchoredPopover';
-import { useFloatingPanel } from '../components/common/useFloatingPanel';
-import { validPanelPosition } from '../lib/floatingPanelGeometry';
 import { installedDoorStuckTarget, installedSkinTarget } from '../lib/installedSkinTarget';
 import { pinInstalledPreview } from '../lib/installedPreviewPin';
 import { installedPropTarget } from '../lib/installedPropPreview';
@@ -36,20 +33,15 @@ import {
   Package,
   Loader2,
   Settings,
-  Trash2,
   AlertTriangle,
   FolderOpen,
   FilePlus,
-  Files,
   X,
   Search,
   Download,
   CheckSquare,
-  Layers,
   Beaker,
-  Tag as TagIcon,
   ArrowDownAZ,
-  GripVertical,
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { showToast } from '../stores/toastStore';
@@ -64,7 +56,7 @@ import { isImprintPending } from '../lib/imprintPending';
 import { getConflicts, openModsFolder, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
-import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs } from '../types/mod';
+import type { Mod, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs } from '../types/mod';
 import type { GameBananaModDetails, GameBananaItemRef, GameBananaFile } from '../types/gamebanana';
 import {
   mergeSourceModIds,
@@ -83,7 +75,7 @@ import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import { deriveModNameFromPath } from '../lib/customModImport';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
-import { HERO_NAMES_SORTED, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel, modLoadOrder } from '../lib/lockerUtils';
+import { modLoadOrder } from '../lib/lockerUtils';
 import { gameBananaCategoryLabel } from '../lib/gameBananaCategories';
 import {
   canJoinLocalVariantGroup,
@@ -140,18 +132,17 @@ import {
 import { CreateModListModal } from '../components/installed/ModListMenu';
 import { ManageModListsModal } from '../components/installed/ManageModListsModal';
 import { InstalledProfilesMenu } from '../components/installed/InstalledProfilesMenu';
-import { Button, IconButton } from '../components/common/ui';
+import { Button } from '../components/common/ui';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import type { InstalledWindowView as ViewMode } from '../components/installed/installedWindowing';
 import { EmptyState, ConfirmModal } from '../components/common/PageComponents';
 import { InstalledSection } from '../components/installed/InstalledSection';
 import { InstalledListGroups } from '../components/installed/InstalledListGroups';
-import { InstalledListSelectionMenu } from '../components/installed/InstalledListControls';
+import { InstalledSelectionToolbar } from '../components/installed/InstalledSelectionToolbar';
 import { buildInstalledListGroups, listSelectionEntries, visibleListOccurrences, readInstalledListPreferences, writeInstalledListPreferences, UNLISTED_GROUP_ID, type InstalledListView } from '../lib/installedListGroups';
 import { useInstalledSelection } from '../components/installed/useInstalledSelection';
 import { entrySelectionIds, visibleSelectionEntries } from '../components/installed/selection';
 import { useShiftKey } from '../components/installed/useShiftKey';
-import { HeroTagLabel } from '../components/installed/chips';
 import { InstalledFilterMenu } from '../components/installed/InstalledFilterMenu';
 import { sortInstalledEntries, type InstalledSortMode } from '../lib/installedSort';
 import { EMPTY_CUSTOM_TAGS, EMPTY_TAG_ORDER, customTagsForMods, useInstalledTagsStore } from '../stores/installedTagsStore';
@@ -602,8 +593,6 @@ const CARD_SIZE_MULTIPLIER_STEP = 0.1;
 // responsive multiplier.
 const CARD_SIZE_COMPACT_MULTIPLIER = 0.95;
 const INSTALLED_CARD_SIZE_MULTIPLIER_KEY = 'installedCardSizeMultiplier';
-// localStorage key for the user-dragged position of the floating select bar.
-const SELECT_BAR_POS_KEY = 'installedSelectBarPos';
 
 function clampCardSizeMultiplier(value: number): number {
   return Math.min(CARD_SIZE_MULTIPLIER_MAX, Math.max(CARD_SIZE_MULTIPLIER_MIN, value));
@@ -662,8 +651,6 @@ function InstalledPage({ viewportRef, toolbarRef }: {
     reorderMods,
     editLocalMod,
     setLocalVariantGroup,
-    setModLockerHero,
-    setModGlobalType,
     setVariantLabel,
     importCustomMods,
     soundVolume,
@@ -919,6 +906,7 @@ function InstalledPage({ viewportRef, toolbarRef }: {
   // selected group expand to every variant id) so bulk handlers can iterate
   // directly without re-deriving from entries.
   const [selectMode, setSelectMode] = useState(false);
+  const [selectionBusy, setSelectionBusy] = useState(false);
   const shiftHeld = useShiftKey();
   const [enabledCollapsed, setEnabledCollapsed] = useState(false);
   const [disabledCollapsed, setDisabledCollapsed] = useState(false);
@@ -932,19 +920,6 @@ function InstalledPage({ viewportRef, toolbarRef }: {
     done: number;
     total: number;
   } | null>(null);
-  const selectBar = useFloatingPanel({
-    placement: 'top-center',
-    initial: () => {
-      try {
-        const stored: unknown = JSON.parse(localStorage.getItem(SELECT_BAR_POS_KEY) ?? 'null');
-        return validPanelPosition(stored) ? stored : null;
-      } catch { return null; }
-    },
-    onCommit: ({ x, y }) => {
-      try { localStorage.setItem(SELECT_BAR_POS_KEY, JSON.stringify({ x, y })); } catch { /* storage may be unavailable */ }
-    },
-  });
-
   // The batch local-import dialog is mounted by Layout, not here: this page
   // early-returns an empty state when it has no mods, so hosting the dialog
   // would unmount it mid-batch on a first-ever import. Only the open flag lives
@@ -1117,7 +1092,6 @@ function InstalledPage({ viewportRef, toolbarRef }: {
     () => ({ heroByCategoryId, heroNames, pathsByModel }),
     [heroByCategoryId, heroNames, pathsByModel],
   );
-  const lockerHeroNames = heroNames.length ? heroNames : HERO_NAMES_SORTED;
   const categoryModelStamp = useMemo(() => [...new Set([
     'ModCategory', ...visibleMods.map(mod => categoryModelForSection(mod.sourceSection)),
   ])].sort().join(','), [visibleMods]);
@@ -1849,14 +1823,15 @@ function InstalledPage({ viewportRef, toolbarRef }: {
   useEffect(() => {
     if (!selectMode) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !bulkProgress && !modToDelete) {
+      if (e.defaultPrevented || (e.target instanceof Element && e.target.closest('[role="menu"]'))) return;
+      if (e.key === 'Escape' && !bulkProgress && !selectionBusy && !modToDelete) {
         setSelectMode(false);
         setSelectedIds(new Set());
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectMode, bulkProgress, modToDelete, setSelectedIds]);
+  }, [selectMode, bulkProgress, selectionBusy, modToDelete, setSelectedIds]);
 
   const handleDeleted = (target: DeleteModsTarget) => {
     setModToDelete(null);
@@ -1871,8 +1846,6 @@ function InstalledPage({ viewportRef, toolbarRef }: {
   // Recomputed each render — cheap, and ensures action-bar counts/labels
   // track the live `mods` state after each bulk toggle.
   const selectedMods = mods.filter((m) => selectedIds.has(m.id));
-  const selectedEnabledCount = selectedMods.filter((m) => m.enabled).length;
-  const selectedDisabledCount = selectedMods.length - selectedEnabledCount;
   // Grouping as variants is local-only. Merged outputs also stay standalone:
   // their card is the only route to contents, unmerge, and share-code recovery.
   const groupSelectionEligibility = localVariantSelectionEligibility(selectedMods);
@@ -1923,71 +1896,6 @@ function InstalledPage({ viewportRef, toolbarRef }: {
     const targets = selectedMods.filter((m) => m.enabled);
     if (targets.length > 0) await runBulkToggle(targets, 'Disabling');
     exitSelectMode();
-  };
-
-  // Bulk lockerHero retag. Writes the manual tag for every selected mod and
-  // refreshes — Locker grouping picks the change up on its next mods read.
-  // Pass null to clear the manual tag and fall back to title/category inference.
-  const [tagMenuOpen, setTagMenuOpen] = useState(false);
-  const tagMenuRef = useRef<HTMLDivElement>(null);
-  const handleBulkTag = async (heroName: string | null) => {
-    if (selectedMods.length === 0) return;
-    setTagMenuOpen(false);
-    const targets = [...selectedMods];
-    setBulkProgress({ verb: 'Tagging', done: 0, total: targets.length });
-    try {
-      for (let i = 0; i < targets.length; i++) {
-        await setModLockerHero(targets[i].id, heroName);
-        setBulkProgress({ verb: 'Tagging', done: i + 1, total: targets.length });
-      }
-    } catch (err) {
-      console.error('[Installed] Bulk tag failed:', err);
-    } finally {
-      setBulkProgress(null);
-      exitSelectMode();
-    }
-  };
-
-  const handleBulkClearTag = async () => {
-    if (selectedMods.length === 0) return;
-    setTagMenuOpen(false);
-    const targets = [...selectedMods];
-    setBulkProgress({ verb: 'Tagging', done: 0, total: targets.length });
-    try {
-      for (let i = 0; i < targets.length; i++) {
-        await setModLockerHero(targets[i].id, null);
-        await setModGlobalType(targets[i].id, null);
-        setBulkProgress({ verb: 'Tagging', done: i + 1, total: targets.length });
-      }
-      await loadMods();
-    } catch (err) {
-      console.error('[Installed] Bulk tag clear failed:', err);
-    } finally {
-      setBulkProgress(null);
-      exitSelectMode();
-    }
-  };
-
-  // Bulk-assign a Global (non-hero) cosmetic type to the selection, used when
-  // the VPK-path classifier missed a mod or filed it wrong. Mirrors handleBulkTag
-  // but writes the globalType axis; the main-process handler clears any hero tag.
-  const handleBulkTagGlobal = async (globalType: GlobalModType) => {
-    if (selectedMods.length === 0) return;
-    setTagMenuOpen(false);
-    const targets = [...selectedMods];
-    setBulkProgress({ verb: 'Tagging', done: 0, total: targets.length });
-    try {
-      for (let i = 0; i < targets.length; i++) {
-        await setModGlobalType(targets[i].id, globalType);
-        setBulkProgress({ verb: 'Tagging', done: i + 1, total: targets.length });
-      }
-      await loadMods();
-    } catch (err) {
-      console.error('[Installed] Bulk global tag failed:', err);
-    } finally {
-      setBulkProgress(null);
-      exitSelectMode();
-    }
   };
 
   // Open the imprint modal and run the no-network preflight dry-run. Classifies
@@ -2370,12 +2278,13 @@ function InstalledPage({ viewportRef, toolbarRef }: {
         return;
       }
       e.preventDefault();
+      if (selectionBusy || bulkProgress) return;
       if (!selectModeRef.current) setSelectMode(true);
       selectAllVisibleRef.current();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [selectionBusy, bulkProgress]);
 
   // Refresh the mod list whenever any download completes — covers 1-Click
   // protocol installs (no UI navigation triggers loadMods) and the regular
@@ -2811,6 +2720,7 @@ function InstalledPage({ viewportRef, toolbarRef }: {
   const unmergeEntry = useStableCallback((mod: Mod) => setUnmergeTarget(mod));
   const copyEntryShareCode = useStableCallback((mod: Mod) => void handleCopyShareCode(mod));
   const selectToggleEntry = useStableCallback((entry: ModEntry, shiftKey: boolean, occurrenceKey: string = entry.key) => {
+    if (selectionBusy || bulkProgress) return;
     setSelectMode(true);
     toggleSelection({ key: occurrenceKey, ids: entrySelectionIds(entry) }, shiftKey);
   });
@@ -3483,7 +3393,7 @@ function InstalledPage({ viewportRef, toolbarRef }: {
               <FolderOpen className="h-4 w-4" aria-hidden />
             </button>
             <Button type="button" variant={selectMode ? 'primary' : 'toolbar'} icon={CheckSquare}
-              disabled={!!bulkProgress} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+              disabled={!!bulkProgress || selectionBusy} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
               aria-pressed={selectMode} className="h-[38px]! w-[38px]! shrink-0 rounded-lg! p-0!"
               aria-label={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultiple')}
               title={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultipleHint')} />
@@ -4047,187 +3957,17 @@ function InstalledPage({ viewportRef, toolbarRef }: {
         />
       )}
 
-      {selectMode && createPortal(
-        // Fixed viewport coordinates escape the page stacking context. The
-        // shared area supplies containment; z-40 keeps the bar below dialogs.
-        <div
-          ref={selectBar.ref}
-          className="floating-panel fixed z-40 w-max overflow-y-auto bg-bg-secondary border border-accent/40 ring-1 ring-accent/15 rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2"
-          style={selectBar.style}
-        >
-          <span
-            onPointerDown={selectBar.onDragStart}
-            className="flex items-center self-stretch -ml-1 px-0.5 text-text-secondary hover:text-text-primary cursor-grab active:cursor-grabbing touch-none select-none"
-            title={t('installed.select.dragHint')}
-            aria-hidden="true"
-          >
-            <GripVertical className="w-4 h-4" />
-          </span>
-          {bulkProgress ? (
-            <span className="text-sm text-text-primary tabular-nums px-2 flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-accent" />
-              {bulkProgress.verb === 'Enabling'
-                ? t('installed.status.bulkEnabling', { done: bulkProgress.done, total: bulkProgress.total })
-                : bulkProgress.verb === 'Disabling'
-                  ? t('installed.status.bulkDisabling', { done: bulkProgress.done, total: bulkProgress.total })
-                  : t('installed.status.bulkTagging', { done: bulkProgress.done, total: bulkProgress.total })}
-            </span>
-          ) : (
-            <>
-              <span className="text-sm text-text-primary tabular-nums px-2">
-                {selectedMods.length === 0
-                  ? t('installed.select.noneSelected')
-                  : t('installed.select.countSelected', { count: selectedMods.length })}
-              </span>
-              <span className="h-5 w-px bg-border" />
-              <Button variant="ghost" size="sm" onClick={selectAllVisible}>
-                {t('installed.select.selectAll')}
-              </Button>
-              {selectedMods.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
-                  {t('common.actions.clear')}
-                </Button>
-              )}
-              <span className="h-5 w-px bg-border" />
-              <InstalledListSelectionMenu
-                lists={modLists}
-                disabled={selectedMods.length === 0}
-                onAdd={(id) => fileSelection(id, true)}
-                onRemove={(id) => fileSelection(id, false)}
-                onCreate={() => setCreatingList({ keys: selectedListKeys })}
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={selectedDisabledCount === 0}
-                onClick={handleBulkEnable}
-                title={selectedDisabledCount === 0 ? t('installed.select.noDisabledSelected') : t('installed.select.enableCount', { count: selectedDisabledCount })}
-              >
-                {t('installed.select.enable')}{selectedDisabledCount > 0 ? ` (${selectedDisabledCount})` : ''}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={selectedEnabledCount === 0}
-                onClick={handleBulkDisable}
-                title={selectedEnabledCount === 0 ? t('installed.select.noEnabledSelected') : t('installed.select.disableCount', { count: selectedEnabledCount })}
-              >
-                {t('common.actions.disable')}{selectedEnabledCount > 0 ? ` (${selectedEnabledCount})` : ''}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={selectedMods.length < 2}
-                icon={Layers}
-                onClick={openBulkMerge}
-                title={
-                  selectedMods.length < 2
-                    ? t('installed.select.mergeMinHint')
-                    : t('installed.select.mergeCombineHint', { count: selectedMods.length })
-                }
-              >
-                {t('installed.select.merge')}{selectedMods.length >= 2 ? ` (${selectedMods.length})` : ''}
-              </Button>
-              {/* Group as variants: one card, N interchangeable files. Unlike
-                  Merge, nothing is rebuilt or combined; the files stay separate
-                  and independently toggleable. */}
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={!canGroupSelectionAsVariants}
-                icon={Files}
-                onClick={handleBulkGroupVariants}
-                title={
-                  groupSelectionEligibility.eligible
-                    ? t('installed.select.groupVariantsHint', { count: selectedMods.length })
-                    : groupSelectionEligibility.reason === 'minimum'
-                    ? t('installed.select.groupVariantsMinHint')
-                    : groupSelectionEligibility.reason === 'merged'
-                      ? t('installed.select.groupVariantsMergedHint')
-                      : t('installed.select.groupVariantsPlacementHint')
-                }
-              >
-                {t('installed.select.groupVariants')}
-                {canGroupSelectionAsVariants ? ` (${selectedMods.length})` : ''}
-              </Button>
-              <div className="relative" ref={tagMenuRef}>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={selectedMods.length === 0}
-                  icon={TagIcon}
-                  onClick={() => setTagMenuOpen((v) => !v)}
-                  title={
-                    selectedMods.length === 0
-                      ? t('installed.select.tagEmptyHint')
-                      : t('installed.select.tagCountHint', { count: selectedMods.length })
-                  }
-                >
-                  {t('installed.select.tag')}{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
-                </Button>
-                {tagMenuOpen && selectedMods.length > 0 && (
-                  <AnchoredPopover open onClose={() => setTagMenuOpen(false)} anchorRef={tagMenuRef}
-                    width={224} ariaLabel={t('installed.select.tagDialogLabel')} className="p-1">
-                    <button
-                      type="button"
-                      onClick={() => handleBulkClearTag()}
-                      className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary cursor-pointer"
-                    >
-                      {t('installed.tag.clearLockerTag')}
-                    </button>
-                    <div className="my-1 h-px bg-border" />
-                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                      {t('installed.tag.global')}
-                    </div>
-                    {GLOBAL_MOD_TYPE_ORDER.map((type) => (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => handleBulkTagGlobal(type)}
-                        className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-primary cursor-pointer"
-                      >
-                        {globalModTypeLabel(type, t)}
-                      </button>
-                    ))}
-                    <div className="my-1 h-px bg-border" />
-                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                      {t('installed.tag.hero')}
-                    </div>
-                    {lockerHeroNames.map((name) => (
-                      <button
-                        key={name}
-                        type="button"
-                        onClick={() => handleBulkTag(name)}
-                        className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary cursor-pointer"
-                      >
-                        <HeroTagLabel heroName={name} />
-                      </button>
-                    ))}
-                  </AnchoredPopover>
-                )}
-              </div>
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={selectedMods.length === 0}
-                icon={Trash2}
-                onClick={openBulkDeleteConfirm}
-              >
-                {t('common.actions.delete')}{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
-              </Button>
-              <span className="h-5 w-px bg-border" />
-              <IconButton
-                icon={X}
-                label={t('installed.actions.exitSelectionMode')}
-                size="sm"
-                onClick={exitSelectMode}
-              />
-            </>
-          )}
-        </div>,
-        document.body
-      )}
+      {selectMode && <InstalledSelectionToolbar selectedMods={selectedMods} lists={modLists} canGroup={canGroupSelectionAsVariants} progress={bulkProgress} onBusyChange={setSelectionBusy}
+        groupHint={groupSelectionEligibility.eligible ? undefined
+          : groupSelectionEligibility.reason === 'gamebanana' ? t('installed.select.groupVariantsGameBananaHint')
+          : groupSelectionEligibility.reason === 'local-required' ? t('installed.select.groupVariantsLocalHint')
+          : groupSelectionEligibility.reason === 'merged' ? t('installed.select.groupVariantsMergedHint')
+          : groupSelectionEligibility.reason === 'placement' ? t('installed.select.groupVariantsPlacementHint')
+          : t('installed.select.groupVariantsMinHint')}
+        onSelectAll={selectAllVisible} onClear={() => setSelectedIds(new Set())} onExit={exitSelectMode}
+        onEnable={() => void handleBulkEnable()} onDisable={() => void handleBulkDisable()} onMerge={openBulkMerge}
+        onGroup={() => void handleBulkGroupVariants()} onDelete={openBulkDeleteConfirm}
+        onSetList={fileSelection} onCreateList={() => setCreatingList({ keys: selectedListKeys })} />}
     </div>
   );
 }
-

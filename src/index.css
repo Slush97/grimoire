@@ -2087,3 +2087,15 @@ body {
     animation: none;
   }
 }
+
+/* Installed cards blur their own artwork in a clipped layer. Filtering the
+   backdrop too can leave clipped control glows in Chromium's card texture. */
+.installed-card.premium-glass-card {
+  backdrop-filter: none;
+}
+
+/* Selected borders retain the conflict border weight, using the user's accent. */
+:root .installed-card[data-selected='true'],
+:root .installed-card[data-selected='true']:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+}

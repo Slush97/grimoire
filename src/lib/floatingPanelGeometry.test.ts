@@ -19,10 +19,14 @@ describe('floating panel geometry', () => {
     const near = { ...panel, x: 208, y: 529 };
     expect(snapPanel(near, area, false)).toEqual({ box: near, guides: {} });
     expect(snapPanel(near, area, true)).toEqual({ box: { ...near, x: 200, y: 540 }, guides: { x: 200, y: 700 } });
-    expect(snapPanel({ ...near, x: 213 }, area, true).guides).toEqual({ y: 700 });
+    expect(snapPanel({ ...near, x: 225 }, area, true).guides).toEqual({ y: 700 });
   });
 
   it('aligns center with center, and chooses the nearest target', () => {
+    expect(snapPanel({ ...panel, x: 524, y: 344 }, area, true)).toEqual({
+      box: { ...panel, x: 500, y: 320 }, guides: { x: 600, y: 400 },
+    });
+    expect(snapPanel({ ...panel, x: 525, y: 345 }, area, true).guides).toEqual({});
     expect(snapPanel({ ...panel, x: 510, y: 311 }, area, true)).toEqual({
       box: { ...panel, x: 500, y: 320 }, guides: { x: 600, y: 400 },
     });

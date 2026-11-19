@@ -68,9 +68,9 @@ export function FloatingPanelArea({ viewport, topBoundary, inset = 0, children }
     {children}
     {liveBounds && active && createPortal(<div aria-hidden className="pointer-events-none fixed z-40"
       style={{ left: liveBounds.x, top: liveBounds.y, width: liveBounds.width, height: liveBounds.height }}>
-      {active.guides.x !== undefined && <div data-floating-panel-guide="x" className="absolute inset-y-0 w-px bg-accent/60"
+      {active.guides.x === liveBounds.x + liveBounds.width / 2 && <div data-floating-panel-guide="x" className="absolute inset-y-0 border-l border-dashed border-accent/60"
         style={{ left: active.guides.x - liveBounds.x }} />}
-      {active.guides.y !== undefined && <div data-floating-panel-guide="y" className="absolute inset-x-0 h-px bg-accent/60"
+      {active.guides.y === liveBounds.y + liveBounds.height / 2 && <div data-floating-panel-guide="y" className="absolute inset-x-0 border-t border-dashed border-accent/60"
         style={{ top: active.guides.y - liveBounds.y }} />}
     </div>, document.body)}
   </FloatingPanelContext.Provider>;

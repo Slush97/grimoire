@@ -3,9 +3,9 @@ import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMou
 import { useTranslation } from 'react-i18next';
 import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import { RequirementWarning } from '../requirements/RequirementWarning';
-import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ImageDown, Link, ArrowLeftRight, Rotate3d } from 'lucide-react';
+import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ImageDown, Link, ArrowLeftRight, Rotate3d } from 'lucide-react';
 import type { EntrySwapTarget } from '../../lib/modEntries';
-import { MenuCheckboxItem, MenuContent, MenuItem, MenuLabel, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
+import { MenuContent, MenuItem, MenuLabel, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
 import { useRequirementsStore } from '../../stores/requirementsStore';
@@ -25,19 +25,18 @@ import ModThumbnail from '../ModThumbnail';
 import { RevealImage } from '../common/RevealImage';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import PriorityEditor from '../PriorityEditor';
-import { getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED } from '../../lib/lockerUtils';
-import { getInstalledDefaultTaxonomy, getInstalledGroupTaxonomy, installedBaseTagOptions, sortInstalledTags } from '../../lib/installedCardTaxonomy';
-import { baseTagHasLockerDestination } from '../../lib/categoryPaths';
-import { Pin, Vault } from 'lucide-react';
+import { getHeroRenderPath, getHeroFacePosition } from '../../lib/lockerUtils';
+import { getInstalledGroupTaxonomy, sortInstalledTags } from '../../lib/installedCardTaxonomy';
+import { ModTagMenuItems } from './ModTagMenu';
 import { formatAbsoluteDate } from '../../lib/dates';
 import { formatBytes } from '../../lib/formatBytes';
 import { shakeElement } from '../../lib/shakeElement';
 import { canOpenImageSource, copyImageToClipboard, resolveImageSource } from '../../lib/imageActions';
 import type { ModList } from '../../lib/modLists';
 import { ModListSubmenu } from './ModListMenu';
-import { Tag } from '../common/ui';
+import { Tag, CheckboxMark } from '../common/ui';
 import type { InstalledWindowView as ViewMode } from './installedWindowing';
-import { HeroTagLabel, HeroIconStack, RepairIssueIcons, FittingTagList, MOD_TAG_CHIP_CLASS, MOD_TAG_SURFACE_CLASS } from './chips';
+import { HeroIconStack, RepairIssueIcons, FittingTagList, MOD_TAG_CHIP_CLASS, MOD_TAG_SURFACE_CLASS } from './chips';
 import { EMPTY_LIST_IDS } from './emptyIds';
 import { ModSafetyBadge } from '../ModSafety';
 import { CrashAdvisoryBadge } from '../CrashAdvisories';
@@ -469,7 +468,6 @@ export function ModCard({
     ...baseTaxonomy.tags.map(label => ({ key: `tag:${label.toLowerCase()}`, label })),
   ], tagOrder);
   const cardTaxonomy = { ...baseTaxonomy, tags: [...new Set(cardTags.map(tag => tag.label))] };
-  const tagHeroNames = heroNames.length ? heroNames : HERO_NAMES_SORTED;
   const restoreBackup = async (backupId: string) => {
     if (backupBusy) return;
     setBackupBusy(true);
@@ -604,7 +602,7 @@ export function ModCard({
   // Keyboard focus reveals actions without leaving mouse-clicked buttons visible.
   // Invisible buttons cannot receive pointer clicks, but remain reachable with Tab.
   const hoverRevealClasses = 'installed-card-hover-action opacity-0 pointer-events-none group-installed-hover/card:opacity-90 group-installed-hover/card:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto';
-  const hoverActionVisibilityClasses = selectMode ? 'hidden' : hoverRevealClasses;
+  const hoverActionVisibilityClasses = hoverRevealClasses;
   const toggleHitboxClasses = 'inline-flex h-7 w-12 items-center justify-center rounded-md cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary';
   const toggleTrackClasses = `relative h-6 w-11 rounded-full transition-colors duration-200 ${
     mod.enabled ? 'bg-accent shadow-[0_0_0_1px_rgba(255,122,47,0.25)]' : 'bg-bg-tertiary border border-border group-hover/toggle:border-hl/20'
@@ -721,45 +719,7 @@ export function ModCard({
         <MenuSubTrigger icon={TagIcon}>{t('installed.tag.setTags')}</MenuSubTrigger>
         <MenuSubContent className="max-h-72 max-w-72 overflow-y-auto">
           <DeferredMenuItems>{() => {
-            const defaults = getInstalledDefaultTaxonomy(mod, group?.variants ?? [mod], taxonomyContext);
-            const heroOptions = [...new Set([...tagHeroNames, ...defaults.heroNames, ...baseTaxonomy.heroNames])].sort((a, b) => a.localeCompare(b));
-            const baseOptions = sortInstalledTags(installedBaseTagOptions(taxonomyContext, [...defaults.tags, ...baseTaxonomy.tags])
-              .map(label => ({ key: `tag:${label.toLowerCase()}`, label })), tagOrder);
-            return <>
-              <div className="grid grid-cols-2 gap-1">
-                <MenuItem align="center" disabled={menuBusy} onSelect={() => void applyTags({ base: [], heroes: [] }, true)}>{t('common.actions.clear')}</MenuItem>
-                <MenuItem align="center" disabled={menuBusy} onSelect={() => void applyTags(null)}>{t('common.actions.reset')}</MenuItem>
-              </div>
-              <MenuSeparator />
-              {customTags.length > 0 && <>
-                <MenuLabel>{t('installed.tag.custom')}</MenuLabel>
-                {customTags.map(tag => <MenuCheckboxItem key={tag.id} indicatorPlacement="end" disabled={menuBusy}
-                  checked={assignedCustomTags.some(assigned => assigned.id === tag.id)}
-                  onCheckedChange={() => {
-                    if (!tagScope) return;
-                    const assigned = assignedCustomTags.some(item => item.id === tag.id);
-                    useInstalledTagsStore.getState().setForMods(tagScope, tag.id, group?.variants ?? [mod], !assigned);
-                  }}>{tag.name}</MenuCheckboxItem>)}
-                <MenuSeparator />
-              </>}
-              <MenuLabel>{t('installed.tag.base')}</MenuLabel>
-              {baseOptions.map(({ key, label }) => <MenuCheckboxItem key={key} indicatorPlacement="end" disabled={menuBusy}
-                checked={baseTaxonomy.tags.includes(label)}
-                endAdornment={<>
-                  {baseTagHasLockerDestination(label) && <Vault aria-hidden className="h-3.5 w-3.5 shrink-0" />}
-                  {defaults.tags.includes(label) && <span className="shrink-0" title={t('installed.tag.defaultTag')}><Pin aria-hidden className="h-3.5 w-3.5" /></span>}
-                </>}
-                onCheckedChange={checked => void applyTags({ base: checked ? [...baseTaxonomy.tags, label] : baseTaxonomy.tags.filter(tag => tag !== label) })}>
-                {gameBananaCategoryLabel(label, t)}
-              </MenuCheckboxItem>)}
-              <MenuSeparator />
-              <MenuLabel>{t('installed.tag.hero')}</MenuLabel>
-              {heroOptions.map(heroName => <MenuCheckboxItem key={heroName} indicatorPlacement="end" disabled={menuBusy}
-                endAdornment={defaults.heroNames.includes(heroName) && <span className="shrink-0" title={t('installed.tag.defaultTag')}><Pin aria-hidden className="h-3.5 w-3.5" /></span>}
-                checked={baseTaxonomy.heroNames.includes(heroName)} onCheckedChange={checked => void applyTags({
-                  heroes: checked ? [...baseTaxonomy.heroNames, heroName] : baseTaxonomy.heroNames.filter(name => name !== heroName),
-                })}><HeroTagLabel heroName={heroName} /></MenuCheckboxItem>)}
-            </>;
+            return <ModTagMenuItems mod={mod} variants={group?.variants ?? [mod]} disabled={menuBusy} onApply={applyTags} />;
           }}</DeferredMenuItems>
         </MenuSubContent>
       </MenuSub>}
@@ -847,7 +807,9 @@ export function ModCard({
     {swapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
   </button>;
 
-  const actions = (
+  const actions = (selectMode || selectionPreview) ? (
+    <div className={`${toggleHitboxClasses} justify-end!`}><CheckboxMark checked={!!selected} className="h-6! w-6! [&>svg]:h-4 [&>svg]:w-4 [&>svg]:text-accent-foreground" /></div>
+  ) : (
     <div className="ml-auto flex items-center gap-1">
       {/* Small cards keep Delete in the menu so taxonomy chips have room. */}
       {!mod.merged && !isCompact && (
@@ -865,7 +827,7 @@ export function ModCard({
           <Trash2 className="w-4 h-4" />
         </button>
       )}
-      <div className="relative" data-card-action="true">
+      <div className="relative flex" data-card-action="true">
         <MenuRoot kind="dropdown" onOpenChange={(open) => { if (open) setPointerImageSrc(null); }}>
           <MenuTrigger asChild disabled={selectMode}>
             <button
@@ -927,6 +889,7 @@ export function ModCard({
     <div
       ref={cardRef}
       data-mod-entry-key={entryKey}
+      data-selected={selected || undefined}
       data-mod-preview-key={previewMetaKey ?? mod.metaKey}
       data-mod-preview-variants={previewKeys && previewKeys.length > 1 ? JSON.stringify(previewKeys) : undefined}
       data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
@@ -948,7 +911,7 @@ export function ModCard({
         }
       }}
       onContextMenu={captureContextImage}
-      className={`installed-card @container/installed-card group/card relative isolate rounded-xl border ${glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
+      className={`installed-card @container/installed-card group/card relative isolate rounded-xl border ${glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses}`}
     >
       <div>
         {(selectMode || selectionPreview) && (
@@ -963,15 +926,7 @@ export function ModCard({
             aria-label={selected ? t('installed.card.deselectNamed', { name: mod.name }) : t('installed.card.selectNamed', { name: mod.name })}
             aria-pressed={!!selected}
           />
-          {/* Visible checkbox indicator. pointer-events-none so the overlay
-              button below it still receives the click. */}
-          <div
-            className={`absolute top-2 left-2 z-40 w-6 h-6 rounded-md border-2 transition-colors pointer-events-none flex items-center justify-center shadow-md ${
-              selected ? 'bg-accent border-accent' : 'bg-bg-primary/85 border-hl/40'
-            }`}
-          >
-            {selected && <Check className="w-4 h-4 text-accent-foreground" strokeWidth={3} />}
-          </div>
+
         </>
         )}
 
@@ -993,18 +948,18 @@ export function ModCard({
         {(() => {
         const overlayBadges = (
           <div className="always-dark pointer-events-none absolute inset-x-2 top-2 z-10 flex items-start justify-between gap-2">
-            {mod.enabled && !mod.priorityMod && !selectMode && !selectionPreview && (
+            {mod.enabled && !mod.priorityMod && (
               <div className="pointer-events-auto flex h-5 shrink-0 items-start" data-card-action="true">
                 <PriorityEditor
                   modName={mod.name}
                   value={loadPosition ?? mod.priority}
                   max={loadCount ?? 99}
                   variant="overlay"
-                  onCommit={onCommitPriority}
+                  onCommit={selectMode || selectionPreview ? undefined : onCommitPriority}
                 />
               </div>
             )}
-            {!mod.enabled && !selectMode && !selectionPreview && (
+            {!mod.enabled && (
               <div className="pointer-events-auto flex shrink-0 flex-col items-start gap-1">
                 <Tag tone="neutral" variant="overlay" icon={PowerOff} title={t('locker.global.disabledBadgeTitle')}>
                   {t('locker.global.disabledBadge')}

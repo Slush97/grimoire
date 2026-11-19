@@ -31,7 +31,7 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
 
 ## Themes
 
-`src/lib/theme.ts` names the themes and `applyTheme()` puts `data-theme` on the root; each theme is a block of token values in `src/index.css`. Build against the tokens and a surface works in all three.
+`src/lib/theme.ts` names the themes. `applyTheme()` leaves `data-theme` absent for default dark and sets it on the root for OLED and light. Each theme is a block of token values in `src/index.css`. Shared state selectors must also match a root without `data-theme`. Build against the tokens and a surface works in all three.
 
 - **Over imagery, stay dark.** Art and thumbnails sit under a dark scrim with white text in every theme, so literal `black/N` and `text-white` are right there and nowhere else. If such a region also holds token-colored children (a tag, a button, secondary text), put `always-dark` on it: in the light theme it restores the dark tokens for that subtree. The Locker hero and Global views, hero cards, 3D viewports, the crosshair stage and overlay tags do this.
 - **Check both.** Look at new UI in dark and in light before calling it done. A color that only works on near-black is the usual miss.
@@ -65,7 +65,7 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
   follows layout changes and excludes scrollbars. It has no inner margin by default, so popups reach its edges
   and corners; consumers can opt into padding with `inset`. Inside it, `useFloatingPanel` supplies the panel
   ref, initial style, drag/resize handlers and resize-grip direction. Apply the `floating-panel` class and
-  portal the panel to `document.body`. The hook owns containment, Shift-only edge/center snapping with guides,
+  portal the panel to `document.body`. The hook owns containment, Shift-only edge/center snapping within 24px, with dashed guides only at the area center lines,
   centered size changes and 120ms ease-out for automatic adjustments (disabled for reduced motion). Dragging
   preserves the original grab offset: after the pointer crosses a wall, the panel stays there until the
   pointer returns to its grab position. Pointer dragging, Shift snapping and manual resizing follow input
@@ -78,6 +78,7 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
   storage remains the consumer's responsibility. Keep drag handles separate from interactive controls and use
   the existing overlay layers.
 - **Drag previews:** portal `DragOverlay` to `document.body`. Its coordinates are relative to the viewport; blur and transforms on a containing panel would offset or clip it. Keep the overlay mounted, disable its pointer events, and use the z-index ladder.
+- **Installed selection:** `InstalledSelectionToolbar` owns the floating selection UI. Reuse `ModTagMenuItems` and `ModListMenuItems` in toolbar and card menus. Mixed membership uses an accent-colored Lucide Minus indicator; clicking it assigns to all selected files. Bulk menus stay open, suppress default-tag pins, and preserve unrelated tags. The right-aligned 24px card selection checkbox replaces the toggle in its existing 48x28px hitbox and excludes utility actions while retaining load-order display.
 - **Status:** `Tag` (HUD-style card markers), `Badge` (pills), `Skeleton` (placeholders).
 
 ## Page anatomy

@@ -62,6 +62,7 @@ export function toLocalVariantGroupMember(
     const member: LocalVariantGroupMember = {
         id: mod.id, metaKey: mod.metaKey, name: meta?.modName ?? mod.name,
         gameBananaId: meta?.gameBananaId, localGroupId: meta?.localGroupId, localImport: meta?.localImport,
+        sourceSection: meta?.sourceSection,
         lockerHero: meta?.lockerHero, lockerHeroSource: meta?.lockerHeroSource,
         globalType: meta?.globalType, globalTypeSource: meta?.globalTypeSource,
         priorityMod: meta?.priorityMod, merged: !!meta?.merged,

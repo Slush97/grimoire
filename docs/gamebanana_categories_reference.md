@@ -277,8 +277,14 @@ previews from being fetched through the existing recognition flow.
 ## Mixed variant groups
 
 The card menu can add VPK files or archives to normal GameBanana mods through
-that same stripped import dialog. Multiselect Group accepts normal and local
-mods together; merged outputs and incompatible Global placements remain blocked.
+that same stripped import dialog. Multiselect Group accepts two or more local files, or local files alongside one GameBanana
+submission (identified by section and submission ID). Files from different downloaded
+submissions cannot be grouped. Locally imported files retain their local origin even
+when embedded metadata names a GameBanana submission. Downloaded-only selections, merged
+outputs and incompatible Global placements remain blocked. The main-process planner
+checks the complete destination group, including existing members, for conflicting
+downloaded submissions before any writes. Add variant may seed one downloaded
+submission as a temporary group before importing its local attachments.
 The existing `localGroupId` stores membership. One optional metadata field,
 `localImport`, records file origin independently of embedded GameBanana identity.
 Older metadata keeps its existing interpretation without a migration.

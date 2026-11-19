@@ -37,6 +37,7 @@ it('measures below a wrapping toolbar, clips to ancestors, and excludes scrollba
       <button onClick={() => showGuides(Symbol.for('panel'), { x: bounds!.x + bounds!.width / 2 })}>Snap</button>
       <button onClick={() => clearGuides(Symbol.for('other'))}>Other</button>
       <button onClick={() => clearGuides(Symbol.for('panel'))}>Clear</button>
+      <button onClick={() => showGuides(Symbol.for('panel'), { x: bounds!.x, y: bounds!.y })}>Edge</button>
     </>;
   }
   try {
@@ -51,6 +52,10 @@ it('measures below a wrapping toolbar, clips to ancestors, and excludes scrollba
     expect(bounds().width).toBe(785); // Client width, not the 800px border rectangle.
     act(() => host.querySelectorAll('button')[0].click());
     expect(document.querySelector('[data-floating-panel-guide="x"]')).not.toBeNull();
+    expect(document.querySelector('[data-floating-panel-guide="x"]')?.classList.contains('border-dashed')).toBe(true);
+    act(() => host.querySelectorAll('button')[3].click());
+    expect(document.querySelector('[data-floating-panel-guide]')).toBeNull();
+    act(() => host.querySelectorAll('button')[0].click());
     act(() => host.querySelectorAll('button')[1].click());
     expect(document.querySelector('[data-floating-panel-guide="x"]')).not.toBeNull();
     act(() => host.querySelectorAll('button')[2].click());

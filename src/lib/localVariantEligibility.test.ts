@@ -58,6 +58,19 @@ describe('canJoinLocalVariantGroup', () => {
 });
 
 describe('localVariantSelectionEligibility', () => {
+  it('allows at most one downloaded submission and requires local attachments', () => {
+    const gb = mod({ id: 'gb', gameBananaId: 42, localImport: false });
+    const other = mod({ id: 'other', gameBananaId: 43, localImport: false });
+    const local = mod({ id: 'local', localImport: true, gameBananaId: 99 });
+    expect(localVariantSelectionEligibility([gb, other])).toEqual({ eligible: false, reason: 'gamebanana' });
+    expect(localVariantSelectionEligibility([gb, other, local])).toEqual({ eligible: false, reason: 'gamebanana' });
+    expect(localVariantSelectionEligibility([gb, { ...gb, id: 'sound', sourceSection: 'Sound' }, local]))
+      .toEqual({ eligible: false, reason: 'gamebanana' });
+    expect(localVariantSelectionEligibility([gb, { ...gb, id: 'variant' }]))
+      .toEqual({ eligible: false, reason: 'local-required' });
+    expect(localVariantSelectionEligibility([gb, { ...gb, id: 'variant' }, local])).toEqual({ eligible: true });
+    expect(localVariantSelectionEligibility([local, { ...local, id: 'local2', gameBananaId: 100 }])).toEqual({ eligible: true });
+  });
   it('requires at least two selected mods', () => {
     expect(localVariantSelectionEligibility([])).toEqual({
       eligible: false,

@@ -1,7 +1,7 @@
 import { createContext, useContext, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import * as RadixContextMenu from '@radix-ui/react-context-menu';
 import * as RadixDropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronRight, type LucideIcon } from 'lucide-react';
+import { Check, Minus, ChevronRight, type LucideIcon } from 'lucide-react';
 
 // Shared menu primitives (styled wrappers over Radix). One source for the menu
 // surface and item styling that was previously copy-pasted between
@@ -230,7 +230,7 @@ export function MenuSubContent({ children, className = '' }: { children: ReactNo
 
 interface MenuCheckboxItemProps {
   children: ReactNode;
-  checked: boolean;
+  checked: boolean | 'indeterminate';
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
   indicatorPlacement?: 'start' | 'end';
@@ -261,7 +261,7 @@ export function MenuCheckboxItem({
         event.stopPropagation();
       }}
       onCheckedChange={onCheckedChange}
-      className={`${ITEM_GEOMETRY_CLASS} ${DEFAULT_TONE_CLASS} ${indicatorPlacement === 'end' ? 'data-[state=checked]:text-accent' : ''}`}
+      className={`${ITEM_GEOMETRY_CLASS} ${DEFAULT_TONE_CLASS} ${indicatorPlacement === 'end' ? 'data-[state=checked]:text-accent data-[state=indeterminate]:text-accent' : ''}`}
     >
       {indicatorPlacement === 'start' && <span
         className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-sm border ${
@@ -269,12 +269,12 @@ export function MenuCheckboxItem({
         }`}
       >
         <ItemIndicator>
-          <Check className="h-3 w-3" />
+          <>{checked === 'indeterminate' ? <Minus className="h-3 w-3" /> : <Check className="h-3 w-3" />}</>
         </ItemIndicator>
       </span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {endAdornment}
-      {indicatorPlacement === 'end' && <ItemIndicator className="shrink-0"><Check className="h-3.5 w-3.5" /></ItemIndicator>}
+      {indicatorPlacement === 'end' && <ItemIndicator className="shrink-0">{checked === 'indeterminate' ? <Minus className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}</ItemIndicator>}
     </CheckboxItem>
   );
 }
