@@ -77,22 +77,28 @@ function settlePrompts(fingerprint: string, accepted: boolean): boolean {
     return waiting;
 }
 
-async function saveApproval(report: ModSafetyReport): Promise<boolean> {
-    if (!decidable(report)) throw new Error('MOD_SAFETY_BLOCKED');
+/** Stores or removes the user's decision for this report and moves every badge of those bytes with it. */
+async function writeApproval(report: ModSafetyReport, allowed: boolean): Promise<void> {
     const write = trustWrite.then(async () => {
         const trusted = await approvals();
-        trusted.add(approvalKey(report));
+        if (allowed) trusted.add(approvalKey(report));
+        else if (!trusted.delete(approvalKey(report))) return;
         const file = join(app.getPath('userData'), 'mod-safety-trust.json');
         const temp = `${file}.${randomUUID()}.tmp`;
         await fs.writeFile(temp, JSON.stringify([...trusted]), { mode: 0o600 });
         await fs.rename(temp, file);
         for (const value of snapshots.values()) {
-            if (value.report.fingerprint === report.fingerprint && value.report.verdict === report.verdict) value.trusted = true;
+            if (value.report.fingerprint === report.fingerprint && value.report.verdict === report.verdict) value.trusted = allowed;
         }
         notifyModSafetyChanged();
     });
     trustWrite = write.catch(() => {});
     await write;
+}
+
+async function saveApproval(report: ModSafetyReport): Promise<boolean> {
+    if (!decidable(report)) throw new Error('MOD_SAFETY_BLOCKED');
+    await writeApproval(report, true);
     await fs.rm(join(quarantineRoot(), report.fingerprint), { recursive: true, force: true }).catch(() => {});
     return settlePrompts(report.fingerprint, true);
 }
@@ -106,6 +112,17 @@ export async function approveVpkSafety(path: string, fingerprint: string): Promi
     const current = await inspectVpkSafety(path);
     if (current.fingerprint !== fingerprint) throw new Error('MOD_SAFETY_CHANGED');
     return saveApproval(current);
+}
+
+/**
+ * Takes back the approval of the bytes now at `path`, so every gate asks about
+ * them again. No reviewed fingerprint is needed: withdrawing consent from bytes
+ * the user has not seen can only make the gates stricter. An approval a merge
+ * or imprint inherited belongs to that archive's own bytes and stays.
+ */
+export async function revokeVpkSafety(path: string): Promise<void> {
+    const current = await inspectVpkSafety(path);
+    if (decidable(current)) await writeApproval(current, false);
 }
 
 const GRIMOIRE_METADATA_ENTRIES = new Set(['addoninfo.txt', 'modinfo.json', 'grimoire_meta.json']);

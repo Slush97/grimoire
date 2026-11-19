@@ -10,6 +10,8 @@ import { Button, Card, IconButton, Tag } from './common/ui';
 import { useModSafetyStore } from '../stores/modSafetyStore';
 import { invalidateModsReads, useAppStore } from '../stores/appStore';
 import type { ModSafetyReport, ModSafetySnapshot } from '../types/modSafety';
+import type { Mod } from '../types/mod';
+import { isGameRunningModLockError } from '../lib/modLocks';
 import { hasNewSafetyReview, pendingSafetyKeys, safetyReviewRows, scriptOnlySafetyRows, type SafetyReviewRow as ReviewRow } from '../lib/modSafetyReview';
 
 export function ModSafetyBadge({ id, name, snapshot, variant = 'inline' }: {
@@ -101,9 +103,9 @@ export function ModSafetyBanner() {
     </div>;
 }
 
-function ReviewCard({ row, expanded, busy, error, onExpand, onAllow, onKeepDisabled }: {
+function ReviewCard({ row, expanded, busy, error, onExpand, onAllow, onKeepDisabled, onDisallow }: {
     row: ReviewRow; expanded: boolean; busy: boolean; error?: string;
-    onExpand: () => void; onAllow: () => void; onKeepDisabled: () => void;
+    onExpand: () => void; onAllow: () => void; onKeepDisabled: () => void; onDisallow: () => void;
 }) {
     const { t } = useTranslation();
     const settings = useAppStore(s => s.settings);
@@ -163,6 +165,7 @@ function ReviewCard({ row, expanded, busy, error, onExpand, onAllow, onKeepDisab
             {error && <p role="alert" className="text-sm text-state-danger">{error}</p>}
             <div className="flex flex-wrap justify-end gap-2">
                 {!row.trusted && <Button variant="secondary" disabled={locked} onClick={onKeepDisabled}>{t('modSafety.cancel')}</Button>}
+                {row.trusted && row.mod && <Button variant="secondary" isLoading={locked} onClick={onDisallow}>{t('modSafety.disallow')}</Button>}
                 {canAllow && <Button variant={unreadable ? 'warning' : 'primary'} isLoading={locked} onClick={onAllow}>
                     {t(unreadable ? 'modSafety.enableAnyway' : 'modSafety.trustVersion')}</Button>}
             </div>
@@ -245,7 +248,8 @@ export function ModSafetySection() {
         setBusy(new Set(operations.current)); setError(null);
         try { await action(); }
         catch (err) {
-            setError({ key, text: t(String(err).includes('MOD_SAFETY_CHANGED') ? 'modSafety.changed' : 'modSafety.failed') });
+            setError({ key, text: t(String(err).includes('MOD_SAFETY_CHANGED') ? 'modSafety.changed'
+                : isGameRunningModLockError(err) ? 'common.gameRunningWarning' : 'modSafety.failed') });
         } finally {
             operations.current.delete(key);
             setBusy(new Set(operations.current));
@@ -255,13 +259,14 @@ export function ModSafetySection() {
     // The prompting operation holds the mod lock and applies the decision itself.
     const answer = (row: ReviewRow, id: string, accepted: boolean) => window.electronAPI.respondModSafety(id, accepted)
         .catch(() => setError({ key: row.key, text: t('modSafety.failed') }));
-    const review = async (row: ReviewRow, id: string) => {
-        const updated = await window.electronAPI.reviewModSafety(id, row.report.fingerprint);
+    // Enabling and disabling move the file, so the row follows the mod to its new id.
+    const moved = (id: string, updated: Mod) => {
         invalidateModsReads();
         useAppStore.setState(state => ({ mods: state.mods.map(m => m.id === id
             ? { ...m, id: updated.id, path: updated.path, fileName: updated.fileName,
                 metaKey: updated.metaKey, enabled: updated.enabled, priority: updated.priority, safety: updated.safety } : m) }));
     };
+    const review = async (row: ReviewRow, id: string) => moved(id, await window.electronAPI.reviewModSafety(id, row.report.fingerprint));
     const allow = (row: ReviewRow) => {
         setExpanded(row.key); useModSafetyStore.setState({ detail: null });
         const mod = row.mod;
@@ -283,6 +288,12 @@ export function ModSafetySection() {
             setExpanded('');
         });
     };
+    const disallow = (row: ReviewRow) => {
+        const mod = row.mod;
+        if (!mod) return;
+        setExpanded(row.key); useModSafetyStore.setState({ detail: null });
+        void run(row.key, async () => moved(mod.id, await window.electronAPI.disallowModSafety(mod.id)));
+    };
     const rescan = () => void run('scan', async () => {
         const results = await window.electronAPI.rescanModSafety();
         useModSafetyStore.setState({ installed: results });
@@ -301,7 +312,7 @@ export function ModSafetySection() {
         <div className="space-y-3">
             <ReviewList rows={rows}>{row => <ReviewCard key={row.key} row={row} expanded={expandedKey === row.key}
                 busy={busy.has(row.key) || busy.has('allow-scripts')} error={error?.key === row.key ? error.text : undefined}
-                onExpand={() => expand(row.key)} onAllow={() => allow(row)} onKeepDisabled={() => keepDisabled(row)} />}</ReviewList>
+                onExpand={() => expand(row.key)} onAllow={() => allow(row)} onKeepDisabled={() => keepDisabled(row)} onDisallow={() => disallow(row)} />}</ReviewList>
             {!rows.length && <p className="text-sm text-text-secondary">{scanning
                 ? t('modSafety.scanning') : scanFailed ? t('modSafety.scanFailed') : t('modSafety.noFlaggedMods')}</p>}
             {error && !rows.some(r => r.key === error.key) && <p role="alert" className="text-sm text-state-danger">{error.text}</p>}

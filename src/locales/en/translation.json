@@ -48,6 +48,7 @@
     "movedDisabled": "This mod is disabled.",
     "closeGame": "This mod may still be running. Close Deadlock, then check installed mods again to disable it.",
     "trustVersion": "Allow this version",
+    "disallow": "Disallow",
     "cancel": "Keep disabled",
     "reasons": {
       "localFile": "Local or network file access",
