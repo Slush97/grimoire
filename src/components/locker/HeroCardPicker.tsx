@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Images, Loader2, AlertCircle, Check, Upload, X, Download } from 'lucide-react';
 import {
@@ -41,6 +41,36 @@ interface PortraitFileGroup {
   variants: HeroPortrait[];
 }
 
+/** Keep the filename secondary, and give long names the whole available row. */
+function PortraitSourceLabel({ name, fileName }: { name: string; fileName: string }) {
+  const containerRef = useRef<HTMLSpanElement>(null);
+  const nameRef = useRef<HTMLSpanElement>(null);
+  const fileRef = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const container = containerRef.current, label = nameRef.current, file = fileRef.current;
+    const bar = container?.parentElement;
+    if (!container || !label || !file || !bar) return;
+    let cancelled = false;
+    const update = () => {
+      if (cancelled) return;
+      const style = getComputedStyle(bar);
+      const width = bar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      const hide = name === fileName || label.scrollWidth >= width / 2;
+      file.hidden = hide;
+      label.style.flexShrink = hide ? '1' : '0';
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(bar); observer.observe(label);
+    void document.fonts?.ready.then(update);
+    return () => { cancelled = true; observer.disconnect(); };
+  }, [name, fileName]);
+  return <span ref={containerRef} className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden" data-portrait-source-label>
+    <span ref={nameRef} className="min-w-0 truncate text-sm font-semibold text-text-primary" title={name}>{name}</span>
+    <span ref={fileRef} hidden className="min-w-0 flex-1 truncate text-xs text-text-secondary" title={fileName}>{fileName}</span>
+  </span>;
+}
+
 /**
  * EXPERIMENTAL: surfaces the hero card/portrait art the user's installed mods
  * ship (decoded on demand via `vpkmerge portrait`) and applies the chosen one.
@@ -51,6 +81,8 @@ interface PortraitFileGroup {
 export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
   const { t } = useTranslation();
   const loadMods = useAppStore((s) => s.loadMods);
+  const mods = useAppStore(s => s.mods);
+  const modsByKey = useMemo(() => new Map(mods.map(mod => [mod.metaKey, mod])), [mods]);
   // This component is remounted per hero (the parent LockerHeroView is keyed
   // by hero.id), so initial state stands in for the per-hero reset.
   const [portraits, setPortraits] = useState<HeroPortrait[]>([]);
@@ -258,7 +290,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
       <div className="flex items-center gap-2">
         <Images className="w-4 h-4 text-accent" />
         <h3 className="text-sm font-semibold text-text-primary">{t('locker.cards.heroCard')}</h3>
-        <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+        <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-2xs font-semibold text-accent">
           {t('locker.cards.experimental')}
         </span>
       </div>
@@ -295,6 +327,9 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
       {fileGroups.length > 0 && (
         <div className="space-y-2.5">
           {fileGroups.map((group) => {
+            const sourceMod = modsByKey.get(group.modFileName);
+            const fileName = sourceMod?.fileName ?? group.modFileName.split(/[\\/]/).pop() ?? group.modFileName;
+            const modName = sourceMod?.name ?? fileName;
             const isApplied = activeSource === group.modFileName;
             const isBusy = busySource === group.modFileName;
             return (
@@ -311,22 +346,20 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                 // Cards tab reads as a sibling of Skins: accent border + glow
                 // when applied, dim glass at rest. backdrop-blur on the resting
                 // state too since these sit directly over the hero portrait.
-                className={`group relative block w-full overflow-hidden rounded-[10px] border text-left backdrop-blur-sm transition-[border-color,background-color,box-shadow] duration-200 disabled:cursor-not-allowed ${
+                className={`group relative block w-full overflow-hidden rounded-[10px] border bg-bg-secondary/90 text-left backdrop-blur-sm transition-[border-color,background-color,box-shadow] duration-200 disabled:cursor-not-allowed ${
                   isApplied
-                    ? 'border-accent bg-accent/[0.08] shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)] hover:bg-accent/[0.12]'
-                    : 'border-hl/[0.08] bg-bg-sunken/55 hover:border-hl/[0.16]'
+                    ? 'border-accent shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)]'
+                    : 'border-hl/[0.08] hover:border-hl/[0.16]'
                 } ${busySource !== null && !isBusy ? 'opacity-60' : 'cursor-pointer'}`}
               >
-                <div className="flex items-center justify-between gap-2 border-b border-border/50 px-3 py-2">
-                  <span className="truncate text-xs font-semibold text-text-primary">
-                    {group.modFileName.replace(/_dir\.vpk$/, '')}
-                  </span>
+                <div className="flex min-w-0 items-center justify-between gap-2 border-b border-border/50 bg-bg-secondary/95 px-3 py-2" data-portrait-source-header>
+                  <PortraitSourceLabel name={modName} fileName={fileName} />
                   {isApplied ? (
-                    <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
+                    <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-2xs font-semibold text-accent-foreground">
                       <Check className="h-2.5 w-2.5" /> {t('locker.cards.applied')}
                     </span>
                   ) : (
-                    <span className="flex-shrink-0 text-[10px] uppercase tracking-wide text-text-secondary">
+                    <span className="flex-shrink-0 text-2xs text-text-secondary">
                       {t('locker.cards.portraitCount', { count: group.variants.length })}
                     </span>
                   )}
@@ -335,7 +368,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                     regardless of each variant's native aspect. max-w/h-full
                     contains the art without ever upscaling it, so tiny minimap
                     art stays crisp instead of blurring up to a forced height. */}
-                <div className="grid grid-cols-4 gap-2 p-3">
+                <div className="grid grid-cols-6 gap-2 p-3">
                   {group.variants.map((p, i) => (
                     <figure key={`${p.variant}:${i}`} className="min-w-0">
                       <div className="flex aspect-[3/4] items-center justify-center overflow-hidden rounded-md border border-border/50 bg-bg-primary/40">
@@ -346,7 +379,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                           className="max-h-full max-w-full object-contain"
                         />
                       </div>
-                      <figcaption className="mt-1 break-words text-center text-[9px] uppercase leading-tight tracking-wide text-text-secondary">
+                      <figcaption title={heroCardVariantLabel(p.variant, t)} className="mt-1 truncate text-center text-xs leading-5 text-text-primary">
                         {heroCardVariantLabel(p.variant, t)}
                       </figcaption>
                     </figure>
@@ -365,10 +398,10 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
 
       {!loading && !error && slots.length > 0 && (
         <div
-          className={`space-y-3 rounded-[10px] border p-3 backdrop-blur-sm transition-[border-color,box-shadow] duration-200 ${
+          className={`space-y-3 rounded-[10px] border bg-bg-secondary/90 p-3 backdrop-blur-sm transition-[border-color,box-shadow] duration-200 ${
             customApplied
-              ? 'border-accent bg-accent/[0.08] shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)]'
-              : 'border-hl/[0.08] bg-bg-sunken/55'
+              ? 'border-accent shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)]'
+              : 'border-hl/[0.08]'
           }`}
         >
           <div className="flex items-center justify-between gap-2">
@@ -377,11 +410,11 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
               <span className="text-xs font-semibold text-text-primary">{t('locker.cards.uploadYourOwn')}</span>
             </div>
             {customApplied ? (
-              <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
+              <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-2xs font-semibold text-accent-foreground">
                 <Check className="h-2.5 w-2.5" /> {t('locker.cards.applied')}
               </span>
             ) : (
-              <span className="flex-shrink-0 text-[10px] uppercase tracking-wide text-text-secondary">
+              <span className="flex-shrink-0 text-2xs text-text-secondary">
                 {t('locker.cards.slotCount', { count: slots.length })}
               </span>
             )}
@@ -394,7 +427,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
               default art dimmed with an upload hint; a filled slot shows the
               cropped result with a clear (x) button. Each tile keeps the
               variant's true aspect so the preview matches the in-game shape. */}
-          <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+          <div className="grid grid-cols-6 gap-2.5">
             {slots.map((slot) => {
               const pick = picks[slot.variant];
               return (
@@ -434,10 +467,10 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                     </button>
                   )}
                   <figcaption className="mt-1 text-center">
-                    <span className="block break-words text-[9px] uppercase leading-tight tracking-wide text-text-secondary">
+                    <span title={heroCardVariantLabel(slot.variant, t)} className="block truncate text-xs leading-5 text-text-primary">
                       {heroCardVariantLabel(slot.variant, t)}
                     </span>
-                    <span className="block text-[9px] tabular-nums text-text-secondary/70">
+                    <span className="block truncate text-2xs tabular-nums text-text-secondary">
                       {slot.width} x {slot.height}
                     </span>
                   </figcaption>

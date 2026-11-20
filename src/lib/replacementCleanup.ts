@@ -2,7 +2,7 @@ import type { Mod } from '../types/mod';
 
 type ReplacementIdentity = Pick<
   Mod,
-  'id' | 'gameBananaId' | 'gameBananaFileId' | 'vpkIndex' | 'sha256'
+  'id' | 'gameBananaId' | 'gameBananaFileId' | 'vpkIndex' | 'sha256' | 'localImport'
 >;
 
 const provenanceKey = (mod: ReplacementIdentity) =>
@@ -40,6 +40,7 @@ export function findReplacementTargetIdsAfterInstall(
 
     const candidates = installed.filter(
       (candidate) =>
+        candidate.localImport === target.localImport &&
         candidate.gameBananaId === target.gameBananaId &&
         candidate.gameBananaFileId === target.gameBananaFileId,
     );

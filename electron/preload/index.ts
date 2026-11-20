@@ -240,6 +240,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ) => ipcRenderer.invoke('export-custom-hero-card', heroName, uploads, destPath),
     getAppliedCustomCard: (heroName: string) =>
         ipcRenderer.invoke('get-applied-custom-card', heroName),
+    getSoulPreviewThumbnail: (key) => ipcRenderer.invoke('get-soul-preview-thumbnail', key),
+    saveSoulPreviewThumbnail: (key, capture) => ipcRenderer.invoke('save-soul-preview-thumbnail', key, capture),
     getSoulModelInfo: (key: string) =>
         ipcRenderer.invoke('get-soul-model-info', key),
     exportSoulModel: (metaKey: string, cacheKey: string, entry?: string, options?: { animated?: boolean }) =>
@@ -281,6 +283,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-preview-cache-size'),
     clearPreviewCache: () =>
         ipcRenderer.invoke('clear-preview-cache'),
+    onPreviewCacheCleared: (callback: () => void) => {
+        const listener = () => callback();
+        ipcRenderer.on('preview-cache-cleared', listener);
+        return () => ipcRenderer.removeListener('preview-cache-cleared', listener);
+    },
     getGameBananaFileServerDiagnostics: () =>
         ipcRenderer.invoke('gamebanana-fileservers:getDiagnostics'),
     getGameBananaDownloadProxy: () => ipcRenderer.invoke('gamebanana-download-proxy:get'),
@@ -340,10 +347,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('clear-locker-overrides', scope),
     setModGlobalType: (modId: string, globalType: GlobalModType | null) =>
         ipcRenderer.invoke('set-mod-global-type', modId, globalType),
+    setModTags: (modId, tags) => ipcRenderer.invoke('set-mod-tags', modId, tags),
     setModIgnoreUpdates: (modId: string, ignore: boolean) =>
         ipcRenderer.invoke('set-mod-ignore-updates', modId, ignore),
-    setModPriorityFolder: (modId: string, priority: boolean) =>
-        ipcRenderer.invoke('set-mod-priority-folder', modId, priority),
     backfillGameBananaFileId: (
         modId: string,
         payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
@@ -352,14 +358,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('set-mod-priority', modId, priority),
     reorderMods: (orderedIds: string[]) =>
         ipcRenderer.invoke('reorder-mods', orderedIds),
-    reorderPriorityMods: (orderedIds: string[]) =>
-        ipcRenderer.invoke('reorder-priority-mods', orderedIds),
     applyModToggleBatch: (enableIds: string[], disableIds: string[]) =>
         ipcRenderer.invoke('apply-mod-toggle-batch', enableIds, disableIds),
     swapModPriority: (modIdA: string, modIdB: string) =>
         ipcRenderer.invoke('swap-mod-priority', modIdA, modIdB),
     importCustomMods: (args: ImportCustomModsBatchArgs) =>
         ipcRenderer.invoke('import-custom-mods', args),
+    prepareLocalModImport: (path: string, requestId: string) => ipcRenderer.invoke('prepare-local-mod-import', path, requestId),
+    releaseLocalModImport: (requestId: string) => ipcRenderer.invoke('release-local-mod-import', requestId),
+    getLocalModGallery: (groupId: string) => ipcRenderer.invoke('get-local-mod-gallery', groupId),
+    setLocalModGallery: (groupId: string, images: string[]) => ipcRenderer.invoke('set-local-mod-gallery', groupId, images),
+    setModsNsfw: (modIds: string[], nsfw: boolean) => ipcRenderer.invoke('set-mods-nsfw', modIds, nsfw),
     onImportCustomModsProgress: (callback: (progress: ImportCustomModsProgress) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, progress: ImportCustomModsProgress) =>
             callback(progress);

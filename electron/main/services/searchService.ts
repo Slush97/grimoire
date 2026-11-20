@@ -102,8 +102,8 @@ function applyContentFilters(
  *
  * Heroes are the exception. The list endpoint also returns `_aSubCategory`, whose
  * profile URL carries the id, so `sub_category_id` is real and a hero (a Skins
- * subcategory) matches exactly. Sound and Wip have no hero categories, so there
- * the title is all there is and it is matched as a whole word.
+ * subcategory) matches exactly. Hero names in titles also match, including
+ * Sound and Wip submissions whose categories do not identify a hero.
  */
 export function applyCategoryFilter(
     conditions: string[],
@@ -111,15 +111,19 @@ export function applyCategoryFilter(
     categoryId: SearchOptions['categoryId'],
     categoryName: SearchOptions['categoryName'],
     heroName: SearchOptions['heroName'],
-    heroCategoryIds: SearchOptions['heroCategoryIds']
+    heroCategoryIds: readonly number[] | undefined
 ): void {
     if (heroCategoryIds?.length) {
-        const placeholders = heroCategoryIds.map((id, index) => {
-            const key = `hero_category_${index}`;
+        const placeholders = heroCategoryIds.map(id => {
+            const key = `hero_category_${id}`;
             params[key] = id;
             return `@${key}`;
         });
-        conditions.push(`mods.sub_category_id IN (${placeholders.join(', ')})`);
+        const categoryMatch = `COALESCE(mods.sub_category_id, mods.category_id) IN (${placeholders.join(', ')})`;
+        if (heroName) {
+            params.heroName = heroName;
+            conditions.push(`(${categoryMatch} OR hero_name_match(mods.name, @heroName))`);
+        } else conditions.push(categoryMatch);
         return;
     }
 
@@ -186,14 +190,25 @@ export function applyBrowseScope(
         params.section = options.section;
     }
 
-    if (options.sections && options.sections.length > 1 && options.heroName) {
-        const modConditions: string[] = [];
-        applyCategoryFilter(modConditions, params, undefined, undefined, undefined, options.heroCategoryIds);
-        params.heroName = options.heroName;
-        const modMatch = modConditions[0] ?? 'hero_name_match(mods.name, @heroName)';
-        conditions.push(`((mods.section = 'Mod' AND ${modMatch}) OR (mods.section <> 'Mod' AND hero_name_match(mods.name, @heroName)))`);
+    if (options.heroName || options.heroCategoryIds) {
+        const heroMatches: string[] = [];
+        if (options.heroName) {
+            params.heroName = options.heroName;
+            heroMatches.push(options.extendedHeroMatching
+                ? 'hero_name_match(mods.name, @heroName)'
+                : "(mods.section <> 'Mod' AND hero_name_match(mods.name, @heroName))");
+        }
+        for (const [section, ids] of Object.entries(options.heroCategoryIds ?? {})) {
+            if (!ids.length) continue;
+            const categoryConditions: string[] = [];
+            applyCategoryFilter(categoryConditions, params, undefined, undefined, undefined, ids);
+            const key = `hero_section_${heroMatches.length}`;
+            params[key] = section;
+            heroMatches.push(`(mods.section = @${key} AND ${categoryConditions[0]})`);
+        }
+        if (heroMatches.length) conditions.push(`(${heroMatches.join(' OR ')})`);
     } else {
-        applyCategoryFilter(conditions, params, options.categoryId, options.categoryName, options.heroName, options.heroCategoryIds);
+        applyCategoryFilter(conditions, params, options.categoryId, options.categoryName, undefined, undefined);
     }
 }
 

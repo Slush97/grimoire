@@ -101,7 +101,7 @@ describe('update queue and replacement notices', () => {
     await render(<DownloadQueueIndicator />);
     expect(host.textContent).toContain('installed.updateAll.needsManualReplacement');
     expect(host.textContent).not.toContain('%');
-    await act(async () => host.querySelector<HTMLButtonElement>('[title="downloadQueue.showDetails"]')!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="downloadQueue.showDetails"]')!.click());
     expect(host.querySelectorAll('li')).toHaveLength(1);
     await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="installed.updateAll.chooseReplacement"]')!.click());
     expect(useModUpdatesStore.getState().selectedRequestId).toBe(request.id);
@@ -156,7 +156,7 @@ describe('update queue and replacement notices', () => {
   it('places manual groups after actual queued downloads and supports canceling the group', async () => {
     mocks.activity.queue = [{ modId: 11, fileId: 30, fileName: 'automatic.zip' }];
     await render(<DownloadQueueIndicator />);
-    await act(async () => host.querySelector<HTMLButtonElement>('[title="downloadQueue.showDetails"]')!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="downloadQueue.showDetails"]')!.click());
     const rows = [...host.querySelectorAll('li')];
     expect(rows[0].textContent).toContain('automatic.zip');
     expect(rows[1].textContent).toContain('Manual mod');

@@ -1,9 +1,10 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { isModLoadedInGame, isReorderBlocked } from '../lib/modLocks';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
+import { FloatingPanelArea } from '../components/common/FloatingPanelArea';
 import { installedDoorStuckTarget, installedSkinTarget } from '../lib/installedSkinTarget';
 import { pinInstalledPreview } from '../lib/installedPreviewPin';
 import { installedPropTarget } from '../lib/installedPropPreview';
@@ -26,28 +27,21 @@ import {
   rectSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
-  verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
   Package,
   Loader2,
   Settings,
-  Trash2,
   AlertTriangle,
   FolderOpen,
   FilePlus,
-  Files,
   X,
   Search,
   Download,
   CheckSquare,
-  Wrench,
-  Layers,
   Beaker,
-  Tag as TagIcon,
   ArrowDownAZ,
-  GripVertical,
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { showToast } from '../stores/toastStore';
@@ -56,13 +50,13 @@ import { useModUpdatesStore } from '../stores/modUpdatesStore';
 import { useModUpdateCheckStore } from '../stores/modUpdateCheckStore';
 import { useCategoryStore } from '../stores/categoryStore';
 import { categoryModelForSection } from '../lib/categoryPaths';
-import type { InstalledTaxonomyContext } from '../lib/installedCardTaxonomy';
+import { defaultInstalledTagOrder, installedTagChangesForVariants, type InstalledTaxonomyContext } from '../lib/installedCardTaxonomy';
 import { getActiveDeadlockPath, getInstallationScope, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
 import { getConflicts, openModsFolder, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
-import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs } from '../types/mod';
+import type { Mod, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs } from '../types/mod';
 import type { GameBananaModDetails, GameBananaItemRef, GameBananaFile } from '../types/gamebanana';
 import {
   mergeSourceModIds,
@@ -81,10 +75,11 @@ import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import { deriveModNameFromPath } from '../lib/customModImport';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
-import { HERO_NAMES_SORTED, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel, modLoadOrder } from '../lib/lockerUtils';
+import { modLoadOrder } from '../lib/lockerUtils';
 import { gameBananaCategoryLabel } from '../lib/gameBananaCategories';
 import {
   canJoinLocalVariantGroup,
+  canGroupMod,
   localVariantSelectionEligibility,
 } from '../lib/localVariantEligibility';
 import { useStableCallback } from '../lib/useStableCallback';
@@ -111,10 +106,8 @@ import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModD
 import {
   createDisabledEntryComparator,
   modPreferenceKey,
-  readStoredDisabledFavorites,
   readStoredDisabledOrder,
-  toggleFavoriteKey,
-  writeStoredDisabledFavorites,
+  useModFavorites,
   writeStoredDisabledOrder,
 } from '../lib/disabledModPrefs';
 import {
@@ -137,26 +130,25 @@ import {
 import { CreateModListModal } from '../components/installed/ModListMenu';
 import { ManageModListsModal } from '../components/installed/ManageModListsModal';
 import { InstalledProfilesMenu } from '../components/installed/InstalledProfilesMenu';
-import { Button, IconButton } from '../components/common/ui';
+import { Button } from '../components/common/ui';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
-import { EmptyState, ConfirmModal, type ViewMode } from '../components/common/PageComponents';
+import type { InstalledWindowView as ViewMode } from '../components/installed/installedWindowing';
+import { EmptyState, ConfirmModal } from '../components/common/PageComponents';
 import { InstalledSection } from '../components/installed/InstalledSection';
 import { InstalledListGroups } from '../components/installed/InstalledListGroups';
-import { InstalledListSelectionMenu } from '../components/installed/InstalledListControls';
+import { InstalledSelectionToolbar } from '../components/installed/InstalledSelectionToolbar';
 import { buildInstalledListGroups, listSelectionEntries, visibleListOccurrences, readInstalledListPreferences, writeInstalledListPreferences, UNLISTED_GROUP_ID, type InstalledListView } from '../lib/installedListGroups';
 import { useInstalledSelection } from '../components/installed/useInstalledSelection';
 import { entrySelectionIds, visibleSelectionEntries } from '../components/installed/selection';
 import { useShiftKey } from '../components/installed/useShiftKey';
-import { HeroTagLabel } from '../components/installed/chips';
 import { InstalledFilterMenu } from '../components/installed/InstalledFilterMenu';
 import { sortInstalledEntries, type InstalledSortMode } from '../lib/installedSort';
-import { EMPTY_CUSTOM_TAGS, customTagsForMods, useInstalledTagsStore } from '../stores/installedTagsStore';
+import { EMPTY_CUSTOM_TAGS, EMPTY_TAG_ORDER, customTagsForMods, useInstalledTagsStore } from '../stores/installedTagsStore';
 import { InstalledOptionsMenu } from '../components/installed/InstalledOptionsMenu';
-import { InstalledIssuesModal } from '../components/installed/InstalledIssuesModal';
+import { InstalledIssuesButton, InstalledIssuesModal } from '../components/installed/InstalledIssuesModal';
 import { useInstalledIssuesStore } from '../stores/installedIssuesStore';
 import { ModCard } from '../components/installed/ModCard';
 import { EMPTY_LIST_IDS } from '../components/installed/emptyIds';
-import { EditLocalModModal } from '../components/installed/EditLocalModModal';
 import { DeleteModsModal, type DeleteModsTarget } from '../components/installed/DeleteModsModal';
 import { ModBackupDeletePrompt } from '../components/installed/ModBackupsSubmenu';
 import { MakeCustomModModal } from '../components/installed/MakeCustomModModal';
@@ -237,7 +229,7 @@ const SortableEntryCard = memo(function SortableEntryCard({
     isDragging,
   } = useSortable({ id: cardProps.entry.key, disabled: sortableDisabled });
 
-  const shell = entryCardShell(cardProps.viewMode === 'list');
+  const shell = entryCardShell();
   const style: CSSProperties = {
     ...shell.style,
     ...(!renderContent ? { height: '100%' } : {}),
@@ -268,7 +260,7 @@ const SortableEntryCard = memo(function SortableEntryCard({
 /** Lists-view grid item: the same shell as SortableEntryCard, without dnd-kit. */
 const StaticEntryCard = memo(function StaticEntryCard(cardProps: InstalledEntryCardProps) {
   return (
-    <div data-installed-entry-key={cardProps.entry.key} {...entryCardShell(cardProps.viewMode === 'list')}>
+    <div data-installed-entry-key={cardProps.entry.key} {...entryCardShell()}>
       <InstalledEntryCard {...cardProps} />
     </div>
   );
@@ -306,21 +298,14 @@ interface InstalledEntryCardProps {
   onSwap: (entry: ModEntry, outgoingEntryKey: string) => Promise<void>;
   onSoloLaunch: (entry: ModEntry) => void;
   onDelete: (entry: ModEntry) => void;
-  onEditLocal: (mod: Mod) => void;
-  onRenameLocal: (mod: Mod, newName: string) => Promise<void>;
-  /** Open the add-variants import dialog for a local entry. */
+  /** Open the add-variants import dialog for an entry. */
   onAddVariant: (entry: ModEntry) => void;
-  /** Dissolve a local variant group (every member becomes its own card). */
-  onUngroupVariants: (entry: ModEntry) => Promise<void>;
   /** Open the imprint details modal for a mod whose wire `imprinted` flag is
    *  true. Externally-imprinted files without the local flag simply do not get
    *  the menu entry: the flag is the cheap client hint, and the modal's empty
    *  state covers a stale flag. */
   onViewImprint: (mod: Mod) => void;
-  onTagLocker: (entry: ModEntry, heroName: string | null) => Promise<void>;
-  onTagGlobal: (entry: ModEntry, globalType: GlobalModType | null) => Promise<void>;
-  /** Move an entry into or out of the citadel/grimoire priority root. */
-  onSetPriority: (entry: ModEntry, priority: boolean) => Promise<void>;
+  onSetTags: (entry: ModEntry, tags: Mod['tagOverrides'] | null) => Promise<void>;
   onFixUnknown: (mod: Mod) => void;
   onCommitPriority?: (modId: string, newPosition: number) => Promise<void>;
   onUnmerge: (mod: Mod) => void;
@@ -348,7 +333,7 @@ interface InstalledEntryCardProps {
  * The thin per-card closures ModCard wants are rebuilt here, inside the memo
  * boundary, where they are cheap.
  */
-const InstalledEntryCard = memo(function InstalledEntryCard({
+export const InstalledEntryCard = memo(function InstalledEntryCard({
   entry,
   viewMode,
   hideNsfwPreviews,
@@ -375,14 +360,9 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onSwap,
   onSoloLaunch,
   onDelete,
-  onEditLocal,
-  onRenameLocal,
   onAddVariant,
-  onUngroupVariants,
   onViewImprint,
-  onTagLocker,
-  onTagGlobal,
-  onSetPriority,
+  onSetTags,
   onFixUnknown,
   onCommitPriority,
   onUnmerge,
@@ -408,8 +388,6 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
     .filter(variant => installedMotionTarget(variant) || installedSkinTarget(variant, taxonomyContext) || installedPropTarget(variant))
     .map(variant => variant.metaKey), [entry, taxonomyContext]);
   const previewKey = previewKeys.includes(previewMod.metaKey) ? previewMod.metaKey : previewKeys[0] ?? previewMod.metaKey;
-  const previewHint = previewKeys.length > 1 ? t('installed.card.previewHintVariants')
-    : previewKeys.length ? t('installed.card.previewHint') : undefined;
   const pinPreview = previewKeys.length ? () => pinInstalledPreview(previewKeys, previewKey) : undefined;
   const openDoorStuck = doorStuckEnabled && target ? () => {
     if ('kind' in target && target.kind === 'movement') {
@@ -429,7 +407,6 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         mod={mod}
         onOpenDoorStuck={openDoorStuck}
         previewKeys={previewKeys}
-        previewHint={previewHint}
         onPinPreview={pinPreview}
         viewMode={viewMode}
         hideNsfwPreviews={hideNsfwPreviews}
@@ -439,9 +416,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         staleSourceCount={staleSourceCount}
         updatableSourceCount={updatableSourceCount}
         entryKey={entry.key}
-        onOpenDetails={
-          mod.merged || mod.gameBananaId ? () => onOpenDetails(mod) : undefined
-        }
+        onOpenDetails={() => onOpenDetails(mod)}
+        opensPicker={canJoinLocalVariantGroup(mod)}
         onViewAuthor={mod.gameBananaId ? () => onViewAuthor(mod) : undefined}
         onToggle={() => onToggle(entry)}
         swapTargets={swapTargets}
@@ -449,17 +425,11 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         onSoloLaunch={() => onSoloLaunch(entry)}
         soloBusy={soloBusy}
         onDelete={() => onDelete(entry)}
-        onEditLocal={entryIsLocal(entry) ? () => onEditLocal(mod) : undefined}
-        onRenameLocal={
-          entryIsLocal(entry) ? (newName) => onRenameLocal(mod, newName) : undefined
-        }
         // A local mod can adopt variants: the first add mints the group. A
         // merged VPK is excluded, like it is from the GameBanana link flow.
-        onAddVariant={canJoinLocalVariantGroup(mod) ? () => onAddVariant(entry) : undefined}
+        onAddVariant={canGroupMod(mod) ? () => onAddVariant(entry) : undefined}
         onViewImprint={mod.imprinted ? () => onViewImprint(mod) : undefined}
-        onTagLocker={(heroName) => onTagLocker(entry, heroName)}
-        onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
-        onSetPriority={(priority) => onSetPriority(entry, priority)}
+        onSetTags={tags => onSetTags(entry, tags)}
         onFixUnknown={
           // Any local (unlinked, non-merged) mod can search GameBanana and
           // link, not just ones flagged "unknown": naming a local mod via
@@ -497,7 +467,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   // selection metadata and offer the file picker in the card menu. A click
   // opens the picker, or the GameBanana page when the setting is on. A local
   // group's primary can carry GameBanana metadata, so the group key decides.
-  const hasDetailsPage = !entry.groupKey.startsWith('local:') && !!entry.gameBananaId;
+  const hasDetailsPage = !entryIsLocal(entry) && !!entry.gameBananaId;
   const groupOpensPicker = !(groupClickOpensDetails && hasDetailsPage);
   const safetyTarget = entry.variants.find(v => v.safety?.report.verdict === 'blocked' || v.safety?.report.verdict === 'incomplete')
     ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust' && !v.safety.trusted)
@@ -508,10 +478,10 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       onOpenDoorStuck={openDoorStuck}
       previewMetaKey={previewKey}
       previewKeys={previewKeys}
-      previewHint={previewHint}
       onPinPreview={pinPreview}
       mod={{
         ...entry.primary,
+        priority: (entry.active ?? entry.primary).priority,
         safetyTarget,
         crashModIds: entry.variants.map(variant => variant.id),
         outdatedVdata: outdatedVariant?.outdatedVdata,
@@ -522,6 +492,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         enabled: entry.enabledVariants.length > 0,
         // Card meta shows total size across the grouped files.
         size: entry.totalSize,
+        nsfw: entry.variants.some(variant => variant.hasLocalGallery) ? entry.variants.some(variant => variant.nsfw) : entry.primary.nsfw,
         installedAt: entry.variants.reduce(
           (latest, v) => (v.installedAt > latest ? v.installedAt : latest),
           entry.primary.installedAt
@@ -543,26 +514,15 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       onSoloLaunch={() => onSoloLaunch(entry)}
       soloBusy={soloBusy}
       onDelete={() => onDelete(entry)}
-      // A local group is the user's own construction, so it can be renamed,
-      // extended and dissolved from the card. A GameBanana group can do none of
-      // those: its files and its name come from the submission. Renaming the
-      // primary renames every member (main fans the name out).
-      onEditLocal={entryIsLocal(entry) ? () => onEditLocal(entry.primary) : undefined}
-      onRenameLocal={
-        entryIsLocal(entry) ? (newName) => onRenameLocal(entry.primary, newName) : undefined
-      }
       onAddVariant={
-        entryIsLocal(entry) && entry.variants.every(canJoinLocalVariantGroup)
+        entry.variants.every(canGroupMod)
           ? () => onAddVariant(entry)
           : undefined
       }
-      onUngroupVariants={entryIsLocal(entry) ? () => void onUngroupVariants(entry) : undefined}
-      onTagLocker={(heroName) => onTagLocker(entry, heroName)}
-      onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
-      onSetPriority={(priority) => onSetPriority(entry, priority)}
+      onSetTags={tags => onSetTags(entry, tags)}
       loadPosition={loadPosition}
       loadCount={loadCount}
-      onCommitPriority={onCommitPriority ? (p) => onCommitPriority(entry.primary.id, p) : undefined}
+      onCommitPriority={onCommitPriority ? (p) => onCommitPriority((entry.active ?? entry.primary).id, p) : undefined}
       selectMode={selectMode}
       shiftHeld={shiftHeld}
       selected={selected}
@@ -631,8 +591,6 @@ const CARD_SIZE_MULTIPLIER_STEP = 0.1;
 // responsive multiplier.
 const CARD_SIZE_COMPACT_MULTIPLIER = 0.95;
 const INSTALLED_CARD_SIZE_MULTIPLIER_KEY = 'installedCardSizeMultiplier';
-// localStorage key for the user-dragged position of the floating select bar.
-const SELECT_BAR_POS_KEY = 'installedSelectBarPos';
 
 function clampCardSizeMultiplier(value: number): number {
   return Math.min(CARD_SIZE_MULTIPLIER_MAX, Math.max(CARD_SIZE_MULTIPLIER_MIN, value));
@@ -658,6 +616,17 @@ function getCardSizeGridStyle(multiplier: number): CSSProperties {
 }
 
 export default function Installed() {
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
+  const [toolbar, setToolbar] = useState<HTMLDivElement | null>(null);
+  return <FloatingPanelArea viewport={viewport} topBoundary={toolbar}>
+    <InstalledPage viewportRef={setViewport} toolbarRef={setToolbar} />
+  </FloatingPanelArea>;
+}
+
+function InstalledPage({ viewportRef, toolbarRef }: {
+  viewportRef: RefCallback<HTMLDivElement>;
+  toolbarRef: RefCallback<HTMLDivElement>;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -680,9 +649,6 @@ export default function Installed() {
     reorderMods,
     editLocalMod,
     setLocalVariantGroup,
-    setModLockerHero,
-    setModGlobalType,
-    setModPriorityFolder,
     setVariantLabel,
     importCustomMods,
     soundVolume,
@@ -708,7 +674,6 @@ export default function Installed() {
     setLocalVariantGroup: state.setLocalVariantGroup,
     setModLockerHero: state.setModLockerHero,
     setModGlobalType: state.setModGlobalType,
-    setModPriorityFolder: state.setModPriorityFolder,
     setVariantLabel: state.setVariantLabel,
     importCustomMods: state.importCustomMods,
     soundVolume: state.soundVolume,
@@ -718,8 +683,9 @@ export default function Installed() {
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const tagScope = getInstallationScope(settings);
   const customTags = useInstalledTagsStore(state => tagScope ? state.byScope[tagScope] ?? EMPTY_CUSTOM_TAGS : EMPTY_CUSTOM_TAGS);
+  const savedTagOrder = useInstalledTagsStore(state => tagScope ? state.orderByScope[tagScope] ?? EMPTY_TAG_ORDER : EMPTY_TAG_ORDER);
   useEffect(() => { if (tagScope) useInstalledTagsStore.getState().load(tagScope); }, [tagScope]);
-  const [disabledFavorites, setDisabledFavorites] = useState(readStoredDisabledFavorites);
+  const { favorites: disabledFavorites, toggleFavorite } = useModFavorites();
   const [disabledOrder, setDisabledOrder] = useState(readStoredDisabledOrder);
   // User-authored lists (see lib/modLists.ts). Membership never changes what
   // is enabled; only the explicit "Enable all" / "Disable all" actions do.
@@ -732,7 +698,6 @@ export default function Installed() {
     const handleMigration = (
       event: CustomEvent<StableKeyPreferencesMigratedDetail>
     ) => {
-      setDisabledFavorites(new Set(event.detail.disabledFavorites));
       setDisabledOrder([...event.detail.disabledOrder]);
       setModLists(event.detail.modLists.map((list) => ({ ...list, keys: [...list.keys] })));
     };
@@ -771,9 +736,6 @@ export default function Installed() {
   const unknownMods = useMemo(() => mods.filter(mod => mod.isUnknown).sort((a, b) => a.priority - b.priority), [mods]);
   useInstalledRequirements(visibleMods);
   const issuesOpen = useInstalledIssuesStore(state => state.open);
-  const issuesUnread = useInstalledIssuesStore(state => state.hasUnread);
-  const issuesUnreadOutdated = useInstalledIssuesStore(state => state.hasUnreadOutdated);
-  const issuesBusy = useInstalledIssuesStore(state => state.busy);
   const setIssuesOpen = useInstalledIssuesStore(state => state.setOpen);
   // Mods the bulk imprint could plausibly act on: visible (locker artifacts and
   // absorbed sources already excluded above) that are not yet imprinted OR
@@ -788,17 +750,7 @@ export default function Installed() {
     () => visibleMods.filter(isImprintPending).length,
     [visibleMods]
   );
-  // Layout = the user's structural choice (cards grid vs horizontal list).
-  const [layout, setLayout] = useState<'grid' | 'list'>(() => {
-    const stored = localStorage.getItem('installedLayout');
-    if (stored === 'grid' || stored === 'list') return stored;
-    // Migrate from the old three-mode key: only 'list' carried structure.
-    return localStorage.getItem('installedViewMode') === 'list' ? 'list' : 'grid';
-  });
   const [cardSizeMultiplier, setCardSizeMultiplierState] = useState(readInstalledCardSizeMultiplier);
-  useEffect(() => {
-    localStorage.setItem('installedLayout', layout);
-  }, [layout]);
   const setCardSizeMultiplier = useCallback((nextMultiplier: number) => {
     const clampedMultiplier = clampCardSizeMultiplier(nextMultiplier);
     setCardSizeMultiplierState(clampedMultiplier);
@@ -808,12 +760,7 @@ export default function Installed() {
     () => getCardSizeGridStyle(cardSizeMultiplier),
     [cardSizeMultiplier]
   );
-  const viewMode: ViewMode =
-    layout === 'list'
-      ? 'list'
-      : cardSizeMultiplier < CARD_SIZE_COMPACT_MULTIPLIER
-        ? 'compact'
-        : 'grid';
+  const viewMode: ViewMode = cardSizeMultiplier < CARD_SIZE_COMPACT_MULTIPLIER ? 'compact' : 'grid';
   // Locker overrides (hero cards + ability sounds) live off the mod list in
   // citadel/grimoire. The toolbar icon opens the manage popup; the badge shows
   // how many are applied. Count is fetched on mount (covers changes made over
@@ -923,7 +870,6 @@ export default function Installed() {
   // peers, that math produces fractional or wrong totals.
   const [conflictPairCount, setConflictPairCount] = useState(0);
   const [modToDelete, setModToDelete] = useState<DeleteModsTarget | null>(null);
-  const [localEditMod, setLocalEditMod] = useState<Mod | null>(null);
   const [customUnknownMod, setCustomUnknownMod] = useState<Mod | null>(null);
   // Sources for the in-progress merge. Non-null means the modal is open.
   const [mergeSources, setMergeSources] = useState<Mod[] | null>(null);
@@ -957,6 +903,7 @@ export default function Installed() {
   // selected group expand to every variant id) so bulk handlers can iterate
   // directly without re-deriving from entries.
   const [selectMode, setSelectMode] = useState(false);
+  const [selectionBusy, setSelectionBusy] = useState(false);
   const shiftHeld = useShiftKey();
   const [enabledCollapsed, setEnabledCollapsed] = useState(false);
   const [disabledCollapsed, setDisabledCollapsed] = useState(false);
@@ -970,100 +917,6 @@ export default function Installed() {
     done: number;
     total: number;
   } | null>(null);
-  // Persisted screen position of the floating select bar. `null` means
-  // "use the default top-center anchor"; once the user drags it we store the
-  // top-left corner in px and reuse it next time the bar appears.
-  const [selectBarPos, setSelectBarPos] = useState<{ x: number; y: number } | null>(() => {
-    try {
-      const raw = localStorage.getItem(SELECT_BAR_POS_KEY);
-      if (!raw) return null;
-      const p = JSON.parse(raw);
-      if (typeof p?.x === 'number' && typeof p?.y === 'number') return p;
-    } catch {
-      // ignore malformed/unavailable storage
-    }
-    return null;
-  });
-  const selectBarRef = useRef<HTMLDivElement>(null);
-  // Pointer offset from the bar's top-left captured on drag start, plus the
-  // live move/end listeners so they can detach themselves.
-  const selectBarDragRef = useRef<{ dx: number; dy: number } | null>(null);
-
-  const clampSelectBarPos = useCallback((x: number, y: number) => {
-    const el = selectBarRef.current;
-    const w = el?.offsetWidth ?? 0;
-    const h = el?.offsetHeight ?? 0;
-    const maxX = Math.max(0, window.innerWidth - w);
-    const maxY = Math.max(0, window.innerHeight - h);
-    return {
-      x: Math.min(Math.max(0, x), maxX),
-      y: Math.min(Math.max(0, y), maxY),
-    };
-  }, []);
-
-  const handleSelectBarDragMove = useCallback(
-    (e: PointerEvent) => {
-      const drag = selectBarDragRef.current;
-      if (!drag) return;
-      setSelectBarPos(clampSelectBarPos(e.clientX - drag.dx, e.clientY - drag.dy));
-    },
-    [clampSelectBarPos],
-  );
-
-  const handleSelectBarDragEnd = useCallback(() => {
-    selectBarDragRef.current = null;
-    window.removeEventListener('pointermove', handleSelectBarDragMove);
-    window.removeEventListener('pointerup', handleSelectBarDragEnd);
-    setSelectBarPos((p) => {
-      if (p) {
-        try {
-          localStorage.setItem(SELECT_BAR_POS_KEY, JSON.stringify(p));
-        } catch {
-          // ignore unavailable storage
-        }
-      }
-      return p;
-    });
-  }, [handleSelectBarDragMove]);
-
-  const handleSelectBarDragStart = useCallback(
-    (e: React.PointerEvent) => {
-      const el = selectBarRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      selectBarDragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
-      // Pin the current pixel position so it doesn't jump from the centered
-      // anchor to absolute coords on the first move.
-      setSelectBarPos(clampSelectBarPos(rect.left, rect.top));
-      window.addEventListener('pointermove', handleSelectBarDragMove);
-      window.addEventListener('pointerup', handleSelectBarDragEnd);
-      e.preventDefault();
-    },
-    [clampSelectBarPos, handleSelectBarDragMove, handleSelectBarDragEnd],
-  );
-
-  // Detach drag listeners if the component unmounts mid-drag.
-  useEffect(() => {
-    return () => {
-      window.removeEventListener('pointermove', handleSelectBarDragMove);
-      window.removeEventListener('pointerup', handleSelectBarDragEnd);
-    };
-  }, [handleSelectBarDragMove, handleSelectBarDragEnd]);
-
-  // Keep a saved (dragged) bar position on-screen when the bar appears and on
-  // window resize, so a position saved at a larger window size doesn't strand
-  // the bar off the viewport.
-  useEffect(() => {
-    if (!selectMode || !selectBarPos) return;
-    const reclamp = () => setSelectBarPos((p) => (p ? clampSelectBarPos(p.x, p.y) : p));
-    reclamp();
-    window.addEventListener('resize', reclamp);
-    return () => window.removeEventListener('resize', reclamp);
-    // selectBarPos intentionally omitted: this only re-pins on appear/resize,
-    // not on every drag tick (which would fight the active drag).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectMode, clampSelectBarPos]);
-
   // The batch local-import dialog is mounted by Layout, not here: this page
   // early-returns an empty state when it has no mods, so hosting the dialog
   // would unmount it mid-batch on a first-ever import. Only the open flag lives
@@ -1077,6 +930,8 @@ export default function Installed() {
     modIds: string[];
     groupId: string | null;
     modName: string;
+    pendingPaths?: string[];
+    nsfw?: boolean;
     /** Set once this dialog minted the group, so a retry after a partial
      *  failure joins the same group instead of minting another, and closing
      *  without a single file landing can undo the mint. */
@@ -1234,7 +1089,6 @@ export default function Installed() {
     () => ({ heroByCategoryId, heroNames, pathsByModel }),
     [heroByCategoryId, heroNames, pathsByModel],
   );
-  const lockerHeroNames = heroNames.length ? heroNames : HERO_NAMES_SORTED;
   const categoryModelStamp = useMemo(() => [...new Set([
     'ModCategory', ...visibleMods.map(mod => categoryModelForSection(mod.sourceSection)),
   ])].sort().join(','), [visibleMods]);
@@ -1323,6 +1177,10 @@ export default function Installed() {
   }, [requirementRevealId]);
   const startUpdates = useModUpdatesStore((state) => state.start);
   const installedScrollRef = useRef<HTMLDivElement | null>(null);
+  const attachViewport = useCallback((element: HTMLDivElement | null) => {
+    installedScrollRef.current = element;
+    viewportRef(element);
+  }, [viewportRef]);
   useInstalledScrollActivity(installedScrollRef);
   useInstalledScrollRestoration(
     installedScrollRef,
@@ -1962,14 +1820,15 @@ export default function Installed() {
   useEffect(() => {
     if (!selectMode) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !bulkProgress && !modToDelete) {
+      if (e.defaultPrevented || (e.target instanceof Element && e.target.closest('[role="menu"]'))) return;
+      if (e.key === 'Escape' && !bulkProgress && !selectionBusy && !modToDelete) {
         setSelectMode(false);
         setSelectedIds(new Set());
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectMode, bulkProgress, modToDelete, setSelectedIds]);
+  }, [selectMode, bulkProgress, selectionBusy, modToDelete, setSelectedIds]);
 
   const handleDeleted = (target: DeleteModsTarget) => {
     setModToDelete(null);
@@ -1984,8 +1843,6 @@ export default function Installed() {
   // Recomputed each render — cheap, and ensures action-bar counts/labels
   // track the live `mods` state after each bulk toggle.
   const selectedMods = mods.filter((m) => selectedIds.has(m.id));
-  const selectedEnabledCount = selectedMods.filter((m) => m.enabled).length;
-  const selectedDisabledCount = selectedMods.length - selectedEnabledCount;
   // Grouping as variants is local-only. Merged outputs also stay standalone:
   // their card is the only route to contents, unmerge, and share-code recovery.
   const groupSelectionEligibility = localVariantSelectionEligibility(selectedMods);
@@ -2036,89 +1893,6 @@ export default function Installed() {
     const targets = selectedMods.filter((m) => m.enabled);
     if (targets.length > 0) await runBulkToggle(targets, 'Disabling');
     exitSelectMode();
-  };
-
-  // Bulk lockerHero retag. Writes the manual tag for every selected mod and
-  // refreshes — Locker grouping picks the change up on its next mods read.
-  // Pass null to clear the manual tag and fall back to title/category inference.
-  const [tagMenuOpen, setTagMenuOpen] = useState(false);
-  const tagMenuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!tagMenuOpen) return;
-    const onMouseDown = (e: MouseEvent) => {
-      if (tagMenuRef.current && !tagMenuRef.current.contains(e.target as Node)) {
-        setTagMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setTagMenuOpen(false);
-    };
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [tagMenuOpen]);
-
-  const handleBulkTag = async (heroName: string | null) => {
-    if (selectedMods.length === 0) return;
-    setTagMenuOpen(false);
-    const targets = [...selectedMods];
-    setBulkProgress({ verb: 'Tagging', done: 0, total: targets.length });
-    try {
-      for (let i = 0; i < targets.length; i++) {
-        await setModLockerHero(targets[i].id, heroName);
-        setBulkProgress({ verb: 'Tagging', done: i + 1, total: targets.length });
-      }
-    } catch (err) {
-      console.error('[Installed] Bulk tag failed:', err);
-    } finally {
-      setBulkProgress(null);
-      exitSelectMode();
-    }
-  };
-
-  const handleBulkClearTag = async () => {
-    if (selectedMods.length === 0) return;
-    setTagMenuOpen(false);
-    const targets = [...selectedMods];
-    setBulkProgress({ verb: 'Tagging', done: 0, total: targets.length });
-    try {
-      for (let i = 0; i < targets.length; i++) {
-        await setModLockerHero(targets[i].id, null);
-        await setModGlobalType(targets[i].id, null);
-        setBulkProgress({ verb: 'Tagging', done: i + 1, total: targets.length });
-      }
-      await loadMods();
-    } catch (err) {
-      console.error('[Installed] Bulk tag clear failed:', err);
-    } finally {
-      setBulkProgress(null);
-      exitSelectMode();
-    }
-  };
-
-  // Bulk-assign a Global (non-hero) cosmetic type to the selection, used when
-  // the VPK-path classifier missed a mod or filed it wrong. Mirrors handleBulkTag
-  // but writes the globalType axis; the main-process handler clears any hero tag.
-  const handleBulkTagGlobal = async (globalType: GlobalModType) => {
-    if (selectedMods.length === 0) return;
-    setTagMenuOpen(false);
-    const targets = [...selectedMods];
-    setBulkProgress({ verb: 'Tagging', done: 0, total: targets.length });
-    try {
-      for (let i = 0; i < targets.length; i++) {
-        await setModGlobalType(targets[i].id, globalType);
-        setBulkProgress({ verb: 'Tagging', done: i + 1, total: targets.length });
-      }
-      await loadMods();
-    } catch (err) {
-      console.error('[Installed] Bulk global tag failed:', err);
-    } finally {
-      setBulkProgress(null);
-      exitSelectMode();
-    }
   };
 
   // Open the imprint modal and run the no-network preflight dry-run. Classifies
@@ -2501,12 +2275,13 @@ export default function Installed() {
         return;
       }
       e.preventDefault();
+      if (selectionBusy || bulkProgress) return;
       if (!selectModeRef.current) setSelectMode(true);
       selectAllVisibleRef.current();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [selectionBusy, bulkProgress]);
 
   // Refresh the mod list whenever any download completes — covers 1-Click
   // protocol installs (no UI navigation triggers loadMods) and the regular
@@ -2553,7 +2328,7 @@ export default function Installed() {
   // rebuilding entries every render would re-render every card on each
   // page-level setState.
   const allEntries = useMemo(() => buildModEntries(visibleMods), [visibleMods]);
-  const { pickerGroupId, setPickerGroupId, swapTargets, beginSwap, toggleVariant } = useInstalledModSwap(allEntries, taxonomyContext);
+  const { pickerGroupId, pickerEntry, setPickerGroupId, renamePickerMod, swapTargets, beginSwap, toggleVariant } = useInstalledModSwap(allEntries, taxonomyContext);
   const enabledEntries = useMemo(
     () =>
       allEntries
@@ -2644,6 +2419,10 @@ export default function Installed() {
   // boundary, so none of this re-renders the grid.
   const openEntryDetails = useStableCallback((mod: Mod) => {
     if (mod.merged) setMergedContentsMod(mod);
+    else if (canJoinLocalVariantGroup(mod)) {
+      const entry = allEntries.find(entry => entry.kind === 'single' ? entry.mod.id === mod.id : entry.variants.some(variant => variant.id === mod.id));
+      if (entry) setPickerGroupId(entry.key);
+    }
     else if (mod.gameBananaId) void openModDetails(mod);
   });
   const openEntryPicker = useStableCallback((groupKey: string) => {
@@ -2695,12 +2474,8 @@ export default function Installed() {
   const toggleEntry = useStableCallback((entry: ModEntry) => {
     return entry.kind === 'group' ? handleGroupToggle(entry) : toggleMod(entry.mod.id);
   });
-  // Persist outside the setState updater: StrictMode double-invokes an updater,
-  // and a write is a side effect even when it happens to be idempotent.
   const toggleEntryFavorite = useStableCallback((entry: ModEntry) => {
-    const next = toggleFavoriteKey(disabledFavorites, entryDisabledPreferenceKey(entry));
-    writeStoredDisabledFavorites(next);
-    setDisabledFavorites(next);
+    toggleFavorite(entryDisabledPreferenceKey(entry));
   });
 
   // List mutations follow the same persist-outside-the-updater rule as the
@@ -2826,11 +2601,8 @@ export default function Installed() {
       setModToDelete({ mods: [entry.mod], name: entry.mod.name, isGroup: false });
     }
   });
-  const editLocalEntry = useStableCallback((mod: Mod) => setLocalEditMod(mod));
   const viewEntryImprint = useStableCallback((mod: Mod) => setImprintDetailsMod(mod));
-  // Inline title rename (double-click). Reuses edit-local-mod but carries the
-  // current thumbnail/NSFW flag through so renaming the name alone never wipes
-  // them (the handler overwrites the full local-mod metadata triplet).
+  // Picker title edits preserve the current artwork and NSFW setting.
   const renameLocalMod = useStableCallback(async (mod: Mod, newName: string) => {
     await editLocalInstalledMod(mod, {
       name: newName,
@@ -2844,7 +2616,7 @@ export default function Installed() {
   // Grouping is derived from `localGroupId` (see lib/variantGroups.ts), so the
   // grid regroups on its own once main has written the sidecars: none of these
   // handlers touch entry state.
-  const openAddVariant = useStableCallback((entry: ModEntry) => {
+  const openAddVariant = useStableCallback((entry: ModEntry, pendingPaths?: string[]) => {
     const members = entry.kind === 'group' ? entry.variants : [entry.mod];
     setAddVariantTarget({
       modIds: members.map((m) => m.id),
@@ -2852,6 +2624,8 @@ export default function Installed() {
       // import time, so a dialog the user cancels leaves no stray id behind.
       groupId: members[0]?.localGroupId ?? null,
       modName: entry.kind === 'group' ? entry.primary.name : entry.mod.name,
+      nsfw: members.some(mod => !!mod.nsfw),
+      pendingPaths,
     });
   });
   const importVariantsIntoGroup = useStableCallback(async (items: ImportCustomModArgs[]) => {
@@ -2908,19 +2682,6 @@ export default function Installed() {
       );
     }
   });
-  const ungroupEntry = useStableCallback(async (entry: ModEntry) => {
-    if (entry.kind !== 'group') return;
-    const count = entry.variants.length;
-    try {
-      await setLocalVariantGroup(entry.variants.map((v) => v.id), { mode: 'clear' });
-      showToast(t('installed.variants.ungrouped', { count }), { tone: 'success' });
-    } catch (err) {
-      showToast(
-        t('installed.variants.groupFailed', { error: toastErrorMessage(err) }),
-        { tone: 'error' }
-      );
-    }
-  });
   // Detach ONE file from a group. Main dissolves the group when this would
   // leave a single member behind, so no orphan id lingers.
   const detachVariant = useStableCallback(async (variant: Mod) => {
@@ -2934,35 +2695,15 @@ export default function Installed() {
       );
     }
   });
-  const tagEntryLocker = useStableCallback(async (entry: ModEntry, heroName: string | null) => {
-    if (entry.kind === 'group') {
-      for (const variant of entry.variants) await setModLockerHero(variant.id, heroName);
-    } else {
-      await setModLockerHero(entry.mod.id, heroName);
-    }
-  });
-  const tagEntryGlobal = useStableCallback(async (entry: ModEntry, globalType: GlobalModType | null) => {
-    if (entry.kind === 'group') {
-      for (const variant of entry.variants) await setModGlobalType(variant.id, globalType);
-    } else {
-      await setModGlobalType(entry.mod.id, globalType);
-    }
-  });
-  // Marking a grouped entry Global moves every variant, so a submission whose
-  // files co-require each other (model plus voice lines) doesn't end up half in
-  // the priority root. Sequential, like the other per-variant loops here: each
-  // move renames a VPK under the main-process mutation lock.
-  const setEntryPriority = useStableCallback(async (entry: ModEntry, priority: boolean) => {
-    if (entry.kind === 'group') {
-      for (const variant of entry.variants) await setModPriorityFolder(variant.id, priority);
-    } else {
-      await setModPriorityFolder(entry.mod.id, priority);
+  const setEntryTags = useStableCallback(async (entry: ModEntry, tags: Mod['tagOverrides'] | null) => {
+    const variants = entry.kind === 'group' ? entry.variants : [entry.mod];
+    const primary = entry.kind === 'group' ? entry.primary : entry.mod;
+    for (const change of installedTagChangesForVariants(primary, variants, tags, taxonomyContext)) {
+      await useAppStore.getState().setModTags(change.mod.id, change.tags);
     }
   });
   const fixUnknownEntry = useStableCallback((mod: Mod) => openUnknownModFix(mod, 'single'));
-  // commitLoadPosition is declared later (it reads the compact order built
-  // below); bridge it through the same synchronous-ref
-  // pattern as selectAllVisibleRef so a stable callback can live up here.
+  // Bridge the later load-order handler through a stable callback.
   const commitLoadPositionRef = useRef<(modId: string, newPosition: number) => Promise<void>>(
     () => Promise.resolve()
   );
@@ -2972,6 +2713,7 @@ export default function Installed() {
   const unmergeEntry = useStableCallback((mod: Mod) => setUnmergeTarget(mod));
   const copyEntryShareCode = useStableCallback((mod: Mod) => void handleCopyShareCode(mod));
   const selectToggleEntry = useStableCallback((entry: ModEntry, shiftKey: boolean, occurrenceKey: string = entry.key) => {
+    if (selectionBusy || bulkProgress) return;
     setSelectMode(true);
     toggleSelection({ key: occurrenceKey, ids: entrySelectionIds(entry) }, shiftKey);
   });
@@ -3028,6 +2770,8 @@ export default function Installed() {
   const tagOptions = Array.from(tagOptionMap.entries())
     .map(([key, { label, count, custom }]) => ({ key, label: custom ? label : gameBananaCategoryLabel(label, t), count, custom }))
     .sort((a, b) => a.label.localeCompare(b.label));
+  const defaultTagOrder = defaultInstalledTagOrder(tagOptions, pathsByModel);
+  const tagOrder = [...savedTagOrder, ...defaultTagOrder.filter(key => !savedTagOrder.includes(key))];
   const createCustomTag = (name: string) => {
     if (!tagScope || tagOptions.some(tag => tag.label.toLocaleLowerCase() === name.trim().slice(0, 80).toLocaleLowerCase())) return false;
     return useInstalledTagsStore.getState().create(tagScope, name);
@@ -3465,14 +3209,9 @@ export default function Installed() {
     onSwap: beginSwap,
     onSoloLaunch: soloLaunchEntry,
     onDelete: deleteEntry,
-    onEditLocal: editLocalEntry,
-    onRenameLocal: renameLocalMod,
     onAddVariant: openAddVariant,
-    onUngroupVariants: ungroupEntry,
     onViewImprint: viewEntryImprint,
-    onTagLocker: tagEntryLocker,
-    onTagGlobal: tagEntryGlobal,
-    onSetPriority: setEntryPriority,
+    onSetTags: setEntryTags,
     onFixUnknown: fixUnknownEntry,
     onCommitPriority: listsView || isEntryOrderLocked(entry) ? undefined : commitEntryPriority,
     onUnmerge: unmergeEntry,
@@ -3488,12 +3227,8 @@ export default function Installed() {
 
   const renderEntryCard = (entry: ModEntry) => <InstalledEntryCard {...cardPropsFor(entry)} />;
 
-  const gridClasses =
-    layout === 'list' ? 'space-y-1.5' : viewMode === 'compact' ? 'grid gap-3' : 'grid gap-4';
-  const gridStyle =
-    layout === 'list'
-      ? undefined
-      : cardSizeGridStyle;
+  const gridClasses = viewMode === 'compact' ? 'grid gap-3' : 'grid gap-4';
+  const gridStyle = cardSizeGridStyle;
 
   const renderSortableSection = (section: DragSection) => {
     const entries = previewEntriesForSection(section);
@@ -3516,7 +3251,7 @@ export default function Installed() {
       >
         <SortableContext
           items={section === 'enabled' ? enabledSortableKeys : disabledSortableKeys}
-          strategy={layout === 'list' ? verticalListSortingStrategy : rectSortingStrategy}
+          strategy={rectSortingStrategy}
         >
           <InstalledVirtualGrid
             entries={entries}
@@ -3607,9 +3342,10 @@ export default function Installed() {
   }
 
   return (
-    <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6 [scrollbar-gutter:stable]">
+    <div ref={attachViewport} className="h-full overflow-y-auto px-4 pb-5 sm:px-6 [scrollbar-gutter:stable]">
       <InstalledSkinPreview hideNsfw={installedHideNsfwPreviews} />
       <div
+        ref={toolbarRef}
         className={`sticky top-0 z-30 -mx-4 mb-4 border-b border-hl/5 px-4 py-3 sm:-mx-6 sm:px-6 ${
           settings?.sidebarTransparent
             ? 'app-background-fixed'
@@ -3640,13 +3376,7 @@ export default function Installed() {
             </Button>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" disabled={issuesBusy} onClick={() => setIssuesOpen(true)}
-              className={`inline-flex h-[38px] cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 ${issuesUnreadOutdated
-                ? 'border-state-danger/30 bg-state-danger/10 text-state-danger hover:border-state-danger/50 hover:bg-state-danger/20'
-                : issuesUnread ? 'border-state-warning/30 bg-state-warning/10 text-state-warning hover:border-state-warning/50 hover:bg-state-warning/20'
-                : 'border-border bg-bg-secondary text-text-primary hover:bg-bg-tertiary'}`}>
-              <Wrench className="h-4 w-4" aria-hidden />{t('installed.issues.title')}
-            </button>
+            <InstalledIssuesButton />
             <button type="button" onClick={() => openBatchImport()} className={installedToolbarIconClass}
               aria-label={t('installed.actions.addCustomMod')} title={t('installed.actions.addCustomModHint')}>
               <FilePlus className="h-4 w-4" aria-hidden />
@@ -3656,16 +3386,19 @@ export default function Installed() {
               <FolderOpen className="h-4 w-4" aria-hidden />
             </button>
             <Button type="button" variant={selectMode ? 'primary' : 'toolbar'} icon={CheckSquare}
-              disabled={!!bulkProgress} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+              disabled={!!bulkProgress || selectionBusy} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
               aria-pressed={selectMode} className="h-[38px]! w-[38px]! shrink-0 rounded-lg! p-0!"
               aria-label={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultiple')}
               title={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultipleHint')} />
             <InstalledFilterMenu sortMode={sortMode} onSortModeChange={setSortMode}
+              cycleTagFilters={settings?.cycleTagFilters ?? false}
               view={listPreferences.view} onViewChange={setListView}
               sourceSel={sourceSel} onSourceChange={setSourceSel} sourceCounts={{ gamebanana: gbCount, local: localCount }}
               statusSel={statusSel} onStatusChange={setStatusSel} statusCounts={{ enabled: enabledCount, disabled: disabledCount }}
               heroFilter={heroFilter} onHeroChange={setHeroFilter} heroOptions={heroOptions}
               tagFilter={tagFilter} onTagChange={setTagFilter} excludedTagFilter={excludedTagFilter} onExcludedTagChange={setExcludedTagFilter} tagOptions={tagOptions}
+              tagOrder={tagOrder} onTagOrderChange={keys => { if (tagScope) useInstalledTagsStore.getState().reorder(tagScope, keys); }}
+              onResetTagOrder={() => { if (tagScope) useInstalledTagsStore.getState().setOrder(tagScope, defaultInstalledTagOrder(tagOptions, pathsByModel)); }}
               onCreateTag={createCustomTag} onRenameTag={renameCustomTag} onDeleteTag={deleteCustomTag}
               listFilter={listFilter} onListChange={setListFilter} listOptions={listFilterOptions}
               onManageLists={() => setManagingLists(true)} active={filtersActive || listsView}
@@ -3674,7 +3407,7 @@ export default function Installed() {
                 setSourceSel(['gamebanana', 'local']); setStatusSel(['enabled', 'disabled']);
                 setHeroFilter([]); setTagFilter([]); setExcludedTagFilter([]); setListFilter([]);
               }} />
-            <InstalledOptionsMenu layout={layout} onLayoutChange={setLayout}
+            <InstalledOptionsMenu
               cardSizeMultiplier={cardSizeMultiplier} onCardSizeChange={setCardSizeMultiplier}
               cardSizeRange={{ min: CARD_SIZE_MULTIPLIER_MIN, max: CARD_SIZE_MULTIPLIER_MAX, step: CARD_SIZE_MULTIPLIER_STEP }}
               lockerOverrideCount={lockerOverrideCount} onLockerOverrides={() => setLockerOverridesOpen(true)}
@@ -3853,17 +3586,6 @@ export default function Installed() {
       />
       <ModBackupDeletePrompt />
 
-      {localEditMod && (
-        <EditLocalModModal
-          mod={localEditMod}
-          onClose={() => setLocalEditMod(null)}
-          onSave={async (args) => {
-            await editLocalInstalledMod(localEditMod, args);
-            setLocalEditMod(null);
-          }}
-        />
-      )}
-
       {/* Conditionally rendered so each opening is a fresh mount: draft names
           and armed delete confirmations reset without a sync effect. */}
       {creatingList && (
@@ -3898,7 +3620,9 @@ export default function Installed() {
           as the toolbar's, minus the per-row name: the group owns the name. */}
       {addVariantTarget && (
         <ImportCustomModsModal
-          addToGroup={{ modName: addVariantTarget.modName }}
+          addToGroup={{ modName: addVariantTarget.modName, nsfw: addVariantTarget.nsfw }}
+          pendingPaths={addVariantTarget.pendingPaths}
+          onConsumedPaths={() => setAddVariantTarget(target => target ? { ...target, pendingPaths: undefined } : target)}
           onClose={closeAddVariant}
           onImport={importVariantsIntoGroup}
           onFinished={reportVariantImport}
@@ -3910,17 +3634,17 @@ export default function Installed() {
         // Derive the live entry from current mods so deletes inside the
         // picker reflect immediately. If the group has disappeared (all
         // files deleted or moved), auto-close the picker.
-        const liveEntry = allEntries.find(
-          (e) => e.kind === 'group' && e.groupKey === pickerGroupId
-        ) as Extract<ModEntry, { kind: 'group' }> | undefined;
+        const liveEntry = pickerEntry;
         if (!liveEntry) {
           // Defer close to avoid setState during render warnings.
           queueMicrotask(() => setPickerGroupId(null));
           return null;
         }
-        const liveVariantIds = new Set(liveEntry.variants.map((v) => v.id));
+        const variants = liveEntry.kind === 'group' ? liveEntry.variants : [liveEntry.mod];
+        const primary = liveEntry.kind === 'group' ? liveEntry.primary : liveEntry.mod;
+        const liveVariantIds = new Set(variants.map((v) => v.id));
         const conflictsByVariantId = Object.fromEntries(
-          liveEntry.variants.map((variant) => {
+          variants.map((variant) => {
             const conflicts = (conflictMap.get(variant.id) ?? [])
               .filter((conflict) => {
                 const peerId = conflict.modA === variant.id ? conflict.modB : conflict.modA;
@@ -3933,9 +3657,9 @@ export default function Installed() {
             return [variant.id, conflicts];
           })
         );
-        const localGroup = liveEntry.groupKey.startsWith('local:');
+        const localGroup = entryIsLocal(liveEntry) && canGroupMod(primary);
         const variantsWithUpdate = new Set(
-          liveEntry.variants
+          variants
             .filter(
               (variant) =>
                 typeof variant.gameBananaId === 'number' &&
@@ -3946,18 +3670,19 @@ export default function Installed() {
         );
         return (
           <VariantPickerModal
-            modName={liveEntry.primary.name}
-            variants={liveEntry.variants}
+            modName={primary.name}
+            onRenameMod={localGroup ? name => renamePickerMod(primary, name, () => renameLocalMod(primary, name)) : undefined}
+            variants={variants}
             conflictsByVariantId={conflictsByVariantId}
             onToggle={toggleVariant}
-            onMoveVariant={(target, direction) => moveVariant(liveEntry, target, direction)}
+            onMoveVariant={(target, direction) => liveEntry.kind === 'group' ? moveVariant(liveEntry, target, direction) : undefined}
             onReorderVariantTo={(source, neighbor, position) =>
               reorderVariantTo(source, neighbor, position)
             }
             onDeleteVariant={deleteMod}
             onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
             onOpenModDetails={
-              liveEntry.primary.gameBananaId
+              primary.gameBananaId
                 ? () => {
                     // Stash the picker so the user can return to it after
                     // closing the details modal.
@@ -3966,25 +3691,25 @@ export default function Installed() {
                   }
                 : undefined
             }
-            // Membership is only editable for local groups: a GameBanana group
-            // is defined by its submission, not by the user. Adding closes the
-            // picker (one modal at a time); the card reopens it.
+            // Keep normal pickers unchanged; their card menu owns file additions.
             onAddVariant={
               localGroup
-                ? () => {
+                ? (paths) => {
                     setPickerGroupId(null);
-                    openAddVariant(liveEntry);
+                    openAddVariant(liveEntry, paths);
                   }
                 : undefined
             }
-            onDetachVariant={localGroup ? (variant) => detachVariant(variant) : undefined}
+            onGalleryChange={localGroup ? images => useAppStore.getState().setLocalModGallery(primary.id, images) : undefined}
+            onNsfwChange={localGroup ? nsfw => useAppStore.getState().setModsNsfw(variants.map(variant => variant.id), nsfw) : undefined}
+            onDetachVariant={primary.localGroupId ? (variant) => detachVariant(variant) : undefined}
             variantsWithUpdate={variantsWithUpdate}
             onUpdateGroup={
               variantsWithUpdate.size > 0
-                ? () => handleUpdateGroup(liveEntry.variants.map((variant) => variant.id))
+                ? () => handleUpdateGroup(variants.map((variant) => variant.id))
                 : undefined
             }
-            isUpdating={liveEntry.variants.some(variant => unavailableUpdateIds.has(variant.id))}
+            isUpdating={variants.some(variant => unavailableUpdateIds.has(variant.id))}
             onClose={() => setPickerGroupId(null)}
           />
         );
@@ -4233,197 +3958,17 @@ export default function Installed() {
         />
       )}
 
-      {selectMode && createPortal(
-        // Floats at top-center. Portaled to body because the page's outlet
-        // wrapper is its own stacking context, which trapped this bar under the
-        // sidebar when dragged over it. At root, z-40 keeps it above the whole
-        // app shell but below modal overlays (z-50), so an open modal's
-        // backdrop dims it like the rest of the page instead of the bar
-        // painting over the modal (e.g. the variant picker overlapping it in a
-        // short window).
-        <div
-          ref={selectBarRef}
-          className={`fixed z-40 w-max max-w-[calc(100vw-2rem)] bg-bg-secondary border border-accent/40 ring-1 ring-accent/15 rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2 ${selectBarPos ? '' : 'top-4 left-1/2 -translate-x-1/2'}`}
-          style={selectBarPos ? { left: selectBarPos.x, top: selectBarPos.y } : undefined}
-        >
-          <span
-            onPointerDown={handleSelectBarDragStart}
-            className="flex items-center self-stretch -ml-1 px-0.5 text-text-secondary hover:text-text-primary cursor-grab active:cursor-grabbing touch-none select-none"
-            title={t('installed.select.dragHint')}
-            aria-hidden="true"
-          >
-            <GripVertical className="w-4 h-4" />
-          </span>
-          {bulkProgress ? (
-            <span className="text-sm text-text-primary tabular-nums px-2 flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-accent" />
-              {bulkProgress.verb === 'Enabling'
-                ? t('installed.status.bulkEnabling', { done: bulkProgress.done, total: bulkProgress.total })
-                : bulkProgress.verb === 'Disabling'
-                  ? t('installed.status.bulkDisabling', { done: bulkProgress.done, total: bulkProgress.total })
-                  : t('installed.status.bulkTagging', { done: bulkProgress.done, total: bulkProgress.total })}
-            </span>
-          ) : (
-            <>
-              <span className="text-sm text-text-primary tabular-nums px-2">
-                {selectedMods.length === 0
-                  ? t('installed.select.noneSelected')
-                  : t('installed.select.countSelected', { count: selectedMods.length })}
-              </span>
-              <span className="h-5 w-px bg-border" />
-              <Button variant="ghost" size="sm" onClick={selectAllVisible}>
-                {t('installed.select.selectAll')}
-              </Button>
-              {selectedMods.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
-                  {t('common.actions.clear')}
-                </Button>
-              )}
-              <span className="h-5 w-px bg-border" />
-              <InstalledListSelectionMenu
-                lists={modLists}
-                disabled={selectedMods.length === 0}
-                onAdd={(id) => fileSelection(id, true)}
-                onRemove={(id) => fileSelection(id, false)}
-                onCreate={() => setCreatingList({ keys: selectedListKeys })}
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={selectedDisabledCount === 0}
-                onClick={handleBulkEnable}
-                title={selectedDisabledCount === 0 ? t('installed.select.noDisabledSelected') : t('installed.select.enableCount', { count: selectedDisabledCount })}
-              >
-                {t('installed.select.enable')}{selectedDisabledCount > 0 ? ` (${selectedDisabledCount})` : ''}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={selectedEnabledCount === 0}
-                onClick={handleBulkDisable}
-                title={selectedEnabledCount === 0 ? t('installed.select.noEnabledSelected') : t('installed.select.disableCount', { count: selectedEnabledCount })}
-              >
-                {t('common.actions.disable')}{selectedEnabledCount > 0 ? ` (${selectedEnabledCount})` : ''}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={selectedMods.length < 2}
-                icon={Layers}
-                onClick={openBulkMerge}
-                title={
-                  selectedMods.length < 2
-                    ? t('installed.select.mergeMinHint')
-                    : t('installed.select.mergeCombineHint', { count: selectedMods.length })
-                }
-              >
-                {t('installed.select.merge')}{selectedMods.length >= 2 ? ` (${selectedMods.length})` : ''}
-              </Button>
-              {/* Group as variants: one card, N interchangeable files. Unlike
-                  Merge, nothing is rebuilt or combined; the files stay separate
-                  and independently toggleable. */}
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={!canGroupSelectionAsVariants}
-                icon={Files}
-                onClick={handleBulkGroupVariants}
-                title={
-                  groupSelectionEligibility.eligible
-                    ? t('installed.select.groupVariantsHint', { count: selectedMods.length })
-                    : groupSelectionEligibility.reason === 'minimum'
-                    ? t('installed.select.groupVariantsMinHint')
-                    : groupSelectionEligibility.reason === 'merged'
-                      ? t('installed.select.groupVariantsMergedHint')
-                      : groupSelectionEligibility.reason === 'placement'
-                        ? t('installed.select.groupVariantsPlacementHint')
-                        : t('installed.select.groupVariantsLocalHint')
-                }
-              >
-                {t('installed.select.groupVariants')}
-                {canGroupSelectionAsVariants ? ` (${selectedMods.length})` : ''}
-              </Button>
-              <div className="relative" ref={tagMenuRef}>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={selectedMods.length === 0}
-                  icon={TagIcon}
-                  onClick={() => setTagMenuOpen((v) => !v)}
-                  title={
-                    selectedMods.length === 0
-                      ? t('installed.select.tagEmptyHint')
-                      : t('installed.select.tagCountHint', { count: selectedMods.length })
-                  }
-                >
-                  {t('installed.select.tag')}{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
-                </Button>
-                {tagMenuOpen && selectedMods.length > 0 && (
-                  <div
-                    role="dialog"
-                    aria-label={t('installed.select.tagDialogLabel')}
-                    className="absolute top-full mt-2 right-0 z-[60] w-56 max-h-80 overflow-y-auto bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleBulkClearTag()}
-                      className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary cursor-pointer"
-                    >
-                      {t('installed.tag.clearLockerTag')}
-                    </button>
-                    <div className="my-1 h-px bg-border" />
-                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                      {t('installed.tag.global')}
-                    </div>
-                    {GLOBAL_MOD_TYPE_ORDER.map((type) => (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => handleBulkTagGlobal(type)}
-                        className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-primary cursor-pointer"
-                      >
-                        {globalModTypeLabel(type, t)}
-                      </button>
-                    ))}
-                    <div className="my-1 h-px bg-border" />
-                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                      {t('installed.tag.hero')}
-                    </div>
-                    {lockerHeroNames.map((name) => (
-                      <button
-                        key={name}
-                        type="button"
-                        onClick={() => handleBulkTag(name)}
-                        className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary cursor-pointer"
-                      >
-                        <HeroTagLabel heroName={name} />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={selectedMods.length === 0}
-                icon={Trash2}
-                onClick={openBulkDeleteConfirm}
-              >
-                {t('common.actions.delete')}{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
-              </Button>
-              <span className="h-5 w-px bg-border" />
-              <IconButton
-                icon={X}
-                label={t('installed.actions.exitSelectionMode')}
-                size="sm"
-                onClick={exitSelectMode}
-              />
-            </>
-          )}
-        </div>,
-        document.body
-      )}
+      {selectMode && <InstalledSelectionToolbar selectedMods={selectedMods} lists={modLists} canGroup={canGroupSelectionAsVariants} progress={bulkProgress} onBusyChange={setSelectionBusy}
+        groupHint={groupSelectionEligibility.eligible ? undefined
+          : groupSelectionEligibility.reason === 'gamebanana' ? t('installed.select.groupVariantsGameBananaHint')
+          : groupSelectionEligibility.reason === 'local-required' ? t('installed.select.groupVariantsLocalHint')
+          : groupSelectionEligibility.reason === 'merged' ? t('installed.select.groupVariantsMergedHint')
+          : groupSelectionEligibility.reason === 'placement' ? t('installed.select.groupVariantsPlacementHint')
+          : t('installed.select.groupVariantsMinHint')}
+        onSelectAll={selectAllVisible} onClear={() => setSelectedIds(new Set())} onExit={exitSelectMode}
+        onEnable={() => void handleBulkEnable()} onDisable={() => void handleBulkDisable()} onMerge={openBulkMerge}
+        onGroup={() => void handleBulkGroupVariants()} onDelete={openBulkDeleteConfirm}
+        onSetList={fileSelection} onCreateList={() => setCreatingList({ keys: selectedListKeys })} />}
     </div>
   );
 }
-

@@ -10,6 +10,8 @@ Sound paths first use `heroSoundCodenames.ts`; model, script and panorama paths 
 
 Detection stops at the first level that names any supported heroes: recognized VPK paths, GameBanana per-file description, original archive/VPK filenames, then the mod submission name. Missing descriptions and text without a recognized hero fall through to the next level. Every hero at the selected level is retained; lower levels cannot add contradictory matches. Grimoire's renamed installed `pakNN` filename is never a matching input. A manual hero assignment overrides automatic detection.
 
+Mod submissions assigned directly to Skins without a hero category reuse the description, original filename and submission-name levels. They skip VPK asset inspection and its parse pre-warming. Their text results are cached separately from payload-based detection, so a later category change cannot reuse a result from the wrong detection method. Hero categories and manual choices remain authoritative.
+
 Each installed variant VPK is checked independently, including files from the same archive or submission. Updates detect heroes from the replacement payload rather than carrying forward the predecessor's automatic result. An already-installed successor promoted by an update is checked again as well.
 
 HUD eligibility uses cached category ancestry, including descendants of HUD, with the saved HUD label or breadcrumb as an offline fallback. Explicit and preserved local HUD classifications also qualify. Detected HUD heroes provide icons while the mod stays in Locker's General HUD destination; an explicit manual hero assignment can still reroute it. Automatic HUD matches do not populate the legacy single-hero skin hint.

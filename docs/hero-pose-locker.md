@@ -1,9 +1,36 @@
 # Live 3D hero poses in the Locker
 
 The per-hero Locker view (`src/pages/LockerHero.tsx`) shows a 2D portrait by
-default and a 2D/3D toggle (top-right of the portrait panel, lg+ only). Flipping
+default and a live 3D toggle in the header. Flipping
 to 3D renders a live, orbitable still of the hero in their menu pose, reflecting
 the currently-enabled skin (vanilla if none is enabled).
+
+## Hero layout
+
+Back and the icon-only favorite/backdrop/viewer controls share the top row.
+The larger hero logo sits beneath it between plain, fixed-position arrows, above
+one transparent horizontal section selector with an accent highlight. The overlay follows the app content viewport so
+warning banners cannot cover its controls. Skins,
+Sounds, Cards and Effects retain their icons, counts and disabled states. The
+joined `SegmentedControl` moves a single highlight between tabs, respects reduced
+motion and supports arrow keys plus Home/End. Its keyboard events stay inside the
+control so they cannot trigger previous/next hero navigation.
+
+The content pane sits below the tabs and uses up to 56rem of the available width.
+Skin load order stays above the larger skin-card grid, and card-art previews show
+all six base icon types in one row. Each source header shows the installed mod
+name followed by its filename in secondary text. Both stay on one line with
+ellipses; the filename hides when the name needs at least half the header width.
+Icon captions use readable sentence-case text on a dark surface. Mod-card actions sit inside the thumbnail and
+reuse Locker's round controls and permanent Active/shuffle/Favorite status pill.
+Only the Active checkmark is accent-colored inside the pill; per-card load-order
+badges and multi-VPK variant controls remain available. Effects sub-options reuse
+the compact joined selector, retaining their applied dots and draft values. The
+Single Color hint sits beneath the mode selector so that selector stays in place.
+Plain hero arrows have enlarged hitboxes extending slightly over the logo, while
+their visible positions stay fixed. Switching tabs,
+Effects surfaces and color modes replays the same `animate-slide-in-left` content
+transition used by hero navigation. Reduced-motion preferences disable it.
 
 ## Why `--pose` (not an animated, skinned viewer)
 
@@ -54,6 +81,11 @@ Renderer:
   on unmount. Remounted via a `hero+skin` `key`.
 - `src/pages/LockerHero.tsx`: `view3d` state, active-skin metaKey resolution,
   the toggle button, lazy-loaded `HeroPoseViewer`.
+- `FloatingModelPanel` uses the shared `FloatingPanelArea` and `useFloatingPanel`
+  with the hero overlay as its viewport. It reaches the overlay edges, snaps to
+  edges and center lines while Shift is held, and switches the resize grip based
+  on its side of the area. User gestures have no transitions; automatic bounds
+  corrections ease into place. Existing overlay-relative saved geometry is kept.
 
 ## Requires vpkmerge v0.6.0 (v0.6.1 for the pose/texture/outline fixes)
 

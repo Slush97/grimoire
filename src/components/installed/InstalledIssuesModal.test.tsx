@@ -2,7 +2,7 @@
 import { act, StrictMode, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { InstalledIssuesModal } from './InstalledIssuesModal';
+import { InstalledIssuesButton, InstalledIssuesModal } from './InstalledIssuesModal';
 import { useAppStore } from '../../stores/appStore';
 import { useRequirementsStore } from '../../stores/requirementsStore';
 import { useInstalledIssuesStore } from '../../stores/installedIssuesStore';
@@ -54,7 +54,8 @@ describe('Installed issues dialog', () => {
     useRequirementsStore.setState({ snapshots: {}, targets: [], review: null });
     useInstalledIssuesStore.setState({
       scope: installedIssuesScope(settings), open: true, busy: false,
-      hasUnread: false, hasUnreadOutdated: false, currentIds: new Set(), unreadIds: new Set(), outdatedIds: new Set(), sessions: {},
+      hasUnread: false, hasUnreadOutdated: false, attentionStartedAt: null,
+      currentIds: new Set(), unreadIds: new Set(), outdatedIds: new Set(), sessions: {},
     });
     useToastStore.setState({ toasts: [] });
     vi.mocked(reviewModCompatibility).mockResolvedValue([]);
@@ -397,5 +398,135 @@ describe('Installed issues dialog', () => {
     await act(async () => root.unmount());
     mounted = false;
     expect(useInstalledIssuesStore.getState().open).toBe(false);
+  });
+});
+
+describe('Installed issues button attention', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+  let reducedMotion: boolean;
+  const animations: { cancel: ReturnType<typeof vi.fn>; currentTime: number }[] = [];
+  const animate = vi.fn<(frames: Keyframe[], options: KeyframeAnimationOptions) => { cancel: ReturnType<typeof vi.fn>; currentTime: number }>(() => {
+    const animation = { cancel: vi.fn(), currentTime: 0 };
+    animations.push(animation);
+    return animation;
+  });
+  const originalAnimate = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'animate');
+  const scan = (...mods: Mod[]) => act(() => {
+    useInstalledIssuesStore.getState().receive('normal', collectInstalledIssueGroups(mods));
+  });
+  const render = () => act(() => root.render(<InstalledIssuesButton />));
+
+  beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: reducedMotion })));
+    vi.spyOn(Date, 'now').mockReturnValue(10000);
+    Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, value: animate });
+    reducedMotion = false;
+    animations.length = 0;
+    animate.mockClear();
+    useInstalledIssuesStore.setState({
+      scope: null, open: false, busy: false, hasUnread: false, hasUnreadOutdated: false,
+      attentionStartedAt: null, currentIds: new Set(), unreadIds: new Set(), outdatedIds: new Set(), sessions: {},
+    });
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    if (originalAnimate) Object.defineProperty(HTMLElement.prototype, 'animate', originalAnimate);
+    else Reflect.deleteProperty(HTMLElement.prototype, 'animate');
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('pulses for five seconds on startup and restarts for a new issue at the same count', () => {
+    scan(camera('a'));
+    render();
+    expect(animate).toHaveBeenCalledOnce();
+    const timing = animate.mock.calls[0][1];
+    expect(Number(timing.duration) * Number(timing.iterations)).toBe(5000);
+    expect(host.querySelector('button')?.classList.contains('text-state-warning')).toBe(true);
+    vi.mocked(Date.now).mockReturnValue(11000);
+    scan(camera('a'));
+    expect(animate).toHaveBeenCalledTimes(1);
+    scan(camera('b'));
+    expect(animate).toHaveBeenCalledTimes(2);
+    expect(animations[0].cancel).toHaveBeenCalledOnce();
+    expect(animations[1].currentTime).toBe(0);
+  });
+
+  it('starts when issues arrive after mounting and stops on acknowledgement or resolution', () => {
+    render();
+    expect(animate).not.toHaveBeenCalled();
+    scan(camera('a'));
+    expect(animate).toHaveBeenCalledOnce();
+    act(() => host.querySelector('button')!.click());
+    expect(animations[0].cancel).toHaveBeenCalledOnce();
+    expect(host.querySelector('button')?.classList.contains('text-state-warning')).toBe(false);
+    act(() => useInstalledIssuesStore.getState().setOpen(false));
+    scan(camera('b'));
+    expect(animate).toHaveBeenCalledTimes(2);
+    scan();
+    expect(animations[1].cancel).toHaveBeenCalledOnce();
+    expect(host.querySelector('button')?.classList.contains('text-state-warning')).toBe(false);
+  });
+
+  it('resumes the original window after navigation without replaying an expired pulse', () => {
+    scan(camera('a'));
+    render();
+    act(() => root.render(null));
+    vi.mocked(Date.now).mockReturnValue(12000);
+    render();
+    expect(animations[1].currentTime).toBe(2000);
+    act(() => root.render(null));
+    vi.mocked(Date.now).mockReturnValue(15000);
+    render();
+    expect(animate).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('button')?.classList.contains('text-state-warning')).toBe(true);
+  });
+
+  it('updates from red to yellow without extending attention when an outdated issue is resolved', () => {
+    scan(data('a'), camera('b'));
+    render();
+    expect(host.querySelector('button')?.classList.contains('text-state-danger')).toBe(true);
+    vi.mocked(Date.now).mockReturnValue(13000);
+    scan(camera('b'));
+    expect(animations[1].currentTime).toBe(3000);
+    expect(host.querySelector('button')?.classList.contains('text-state-warning')).toBe(true);
+  });
+
+  it('keeps the static issue color when reduced motion is requested', () => {
+    reducedMotion = true;
+    scan(data('a'));
+    render();
+    expect(animate).not.toHaveBeenCalled();
+    expect(host.querySelector('button')?.classList.contains('text-state-danger')).toBe(true);
+  });
+
+  it('stops on hover without acknowledging issues or restarting on mouse leave, refresh, or remount', () => {
+    scan(camera('a'));
+    render();
+    const button = host.querySelector('button')!;
+    act(() => button.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })));
+    expect(animations[0].cancel).toHaveBeenCalledOnce();
+    expect(useInstalledIssuesStore.getState()).toMatchObject({ hasUnread: true, attentionStartedAt: null });
+    act(() => button.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })));
+    scan(camera('a'));
+    act(() => root.render(null));
+    render();
+    expect(animate).toHaveBeenCalledOnce();
+    expect(host.querySelector('button')?.classList.contains('text-state-warning')).toBe(true);
+  });
+
+  it('suppresses new pulses while the mouse is already over the button', () => {
+    render();
+    act(() => host.querySelector('button')!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })));
+    scan(camera('a'));
+    expect(animate).not.toHaveBeenCalled();
+    expect(useInstalledIssuesStore.getState()).toMatchObject({ hasUnread: true, attentionStartedAt: null });
   });
 });

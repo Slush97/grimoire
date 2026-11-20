@@ -26,7 +26,7 @@ describe('Installed options menu', () => {
       location: '/dmm', sections: ['mods'], searched: [] }]);
     vi.mocked(showOpenDialog).mockResolvedValue(null);
     props = {
-      layout: 'grid', onLayoutChange: vi.fn(), cardSizeMultiplier: 1, cardSizeRange: { min: 0.8, max: 2, step: 0.1 },
+      cardSizeMultiplier: 1, cardSizeRange: { min: 0.8, max: 2, step: 0.1 },
       onCardSizeChange: vi.fn(), lockerOverrideCount: 2, onLockerOverrides: vi.fn(), showImprint: true, onImprint: vi.fn(),
       canFixOrder: true, onFixOrder: vi.fn(), canCopyEnabled: true, onCopyEnabled: vi.fn(), onImported: vi.fn(), onExport: vi.fn(),
     };
@@ -35,10 +35,9 @@ describe('Installed options menu', () => {
   afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
   const render = async () => { await act(async () => root.render(<InstalledOptionsMenu {...props} />)); };
 
-  it('keeps view controls open and respects the caller’s card size range and list mode', async () => {
+  it('keeps view controls open and respects the caller’s card size range without a list-layout option', async () => {
     await render(); await open();
-    await act(async () => button('browse.viewOptions.list').click());
-    expect(props.onLayoutChange).toHaveBeenCalledExactlyOnceWith('list');
+    expect(button('browse.viewOptions.list')).toBeUndefined();
     expect(button('installed.options.title').getAttribute('aria-expanded')).toBe('true');
     const slider = document.querySelector<HTMLInputElement>('input[type="range"]')!;
     expect([slider.min, slider.max, slider.step]).toEqual(['0.8', '2', '0.1']);
@@ -48,8 +47,7 @@ describe('Installed options menu', () => {
       slider.dispatchEvent(new Event('input', { bubbles: true }));
     });
     expect(props.onCardSizeChange).toHaveBeenCalledWith(1.4);
-    props = { ...props, layout: 'list' }; await render();
-    expect(slider.disabled).toBe(true);
+    expect(slider.disabled).toBe(false);
   });
 
   it('closes for library actions while preserving disabled and experimental gates', async () => {

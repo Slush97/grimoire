@@ -458,7 +458,16 @@ export interface ApplyTrippySkinResult {
  * destination from GameBanana category ancestry. Explicit manual assignments
  * and previously classified local files retain their chosen destination.
  */
-export type GlobalModType = 'soul-container' | 'spirit-urn' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music' | 'effects' | 'animations' | 'maps';
+export type GlobalModType = 'hidden-king' | 'archmother' | 'patron' | 'sinner' | 'boxes' | 'sounds' | 'soul-container' | 'spirit-urn' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music' | 'effects' | 'animations' | 'maps';
+
+/** Asset-only result, independent of editable tags and category metadata. */
+export interface InstalledPropDetection {
+  version: number;
+  size: number;
+  modifiedAt: string;
+  sha256?: string;
+  types: GlobalModType[];
+}
 export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
 
 /** Cached automatic hero matches for one installed payload. */
@@ -637,6 +646,12 @@ export interface StaleModel {
   attachments: string[];
 }
 
+/** User selections overlay detected tags without replacing category metadata. */
+export interface ModTagOverrides {
+  base?: string[];
+  heroes?: string[];
+}
+
 export interface Mod {
   safety?: import('./modSafety').ModSafetySnapshot;
   outdatedVdata?: OutdatedVdata[];
@@ -656,6 +671,8 @@ export interface Mod {
   description?: string;
   thumbnailUrl?: string;
   audioUrl?: string;
+  /** Runtime marker for a managed gallery, including an explicitly empty one. */
+  hasLocalGallery?: boolean;
   gameBananaId?: number;
   gameBananaFileId?: number;
   vpkIndex?: number;
@@ -672,11 +689,11 @@ export interface Mod {
   variantLabel?: string;
   fileDescription?: string;
   sourceFileName?: string;
-  /** Opaque id linking several locally imported VPKs as variants of one mod.
-   *  The local analogue of gameBananaId for grouping only: no provenance, no
-   *  meaning outside this install. Undefined for GameBanana mods and for
-   *  standalone local imports. See variantGroupKey in src/lib/variantGroups.ts. */
+  /** User-defined variant group, including mixed downloaded and imported files.
+   *  Group membership is independent of GameBanana provenance and import origin. */
   localGroupId?: string;
+  /** Import origin, independent of embedded GameBanana identity. Legacy entries infer it. */
+  localImport?: boolean;
   /** Explicit hero choice, preserved local identity, or a single-hero hint
    *  for existing consumers. The full effective set is in lockerHeroes. */
   lockerHero?: string;
@@ -684,9 +701,13 @@ export interface Mod {
   lockerHeroSource?: LockerHeroSource;
   /** Effective hero identities, including multi-hero Sound, WiP, and HUD files. */
   lockerHeroes?: string[];
+  tagOverrides?: ModTagOverrides;
+  /** Runtime defaults before tagOverrides, used for reset indicators. Not persisted. */
+  detectedTags?: { heroes: string[]; globalType?: GlobalModType };
   /** Effective General destination from category ancestry, a manual override,
    *  or a preserved legacy local classification. */
   globalType?: GlobalModType;
+  propTypes?: GlobalModType[];
   /** Explicit user classification, retained independently of automatic tags. */
   globalTypeSource?: 'manual';
   /** Set when this mod was produced by mergeMods. Carries the unroll payload
@@ -1221,6 +1242,8 @@ export interface AppSettings {
   confirmProfileUpdate: boolean;
   /** Show the enable confirmation for optional and recommended requirements too. */
   promptOptionalRequirements: boolean;
+  /** Cycle Installed tag filters through included, excluded, and unselected. */
+  cycleTagFilters: boolean;
   experimentalStats: boolean;
   experimentalCrosshair: boolean;
   /** Grimoire Social: Discover page + publish/account UI. */

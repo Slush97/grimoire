@@ -3,9 +3,12 @@ import { act, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModCard } from './ModCard';
+import { InstalledEntryCard } from '../../pages/Installed';
+import { MemoryRouter } from 'react-router-dom';
 import { HERO_NAMES_SORTED } from '../../lib/lockerUtils';
 import { useCategoryStore } from '../../stores/categoryStore';
 import { buildCategoryPaths } from '../../lib/categoryPaths';
+import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import type { AppSettings, Mod } from '../../types/mod';
 import * as imageActions from '../../lib/imageActions';
 import { useAppStore } from '../../stores/appStore';
@@ -36,7 +39,7 @@ describe('installed card menu mounting', () => {
     useRequirementsStore.getState().finishToggle();
     useRequirementsStore.setState({ snapshots: {} });
     useCategoryStore.setState({ heroByCategoryId: new Map(), heroNames: [], pathsByModel: {} });
-    useInstalledTagsStore.setState({ byScope: {} });
+    useInstalledTagsStore.setState({ byScope: {}, orderByScope: {} });
     host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);
@@ -45,8 +48,8 @@ describe('installed card menu mounting', () => {
         id: 'test', name: 'Test mod', fileName: 'pak01_dir.vpk', enabled: true,
         priority: 1, size: 100, installedAt: '2026-10-10T10:00:00Z',
       },
-      viewMode: 'list', hideNsfwPreviews: true, soundVolume: 0, conflicts: [], entryKey: 'test',
-      onToggle: vi.fn(), onDelete: vi.fn(), onTagLocker: vi.fn(), onTagGlobal: vi.fn(),
+      viewMode: 'grid', hideNsfwPreviews: true, soundVolume: 0, conflicts: [], entryKey: 'test',
+      onToggle: vi.fn(), onDelete: vi.fn(), onSetTags: vi.fn(),
     };
   });
 
@@ -69,9 +72,33 @@ describe('installed card menu mounting', () => {
     }
   }
 
+  it.each(['grid', 'compact'] as const)('opens a single-file local mod from its %s card', async viewMode => {
+    const mod: Mod = { ...input.mod, id: 'local', name: 'Local mod', metaKey: 'local.vpk', path: '/addons/local.vpk' };
+    const onOpen = vi.fn();
+    const noop = vi.fn(async () => {});
+    const props: ComponentProps<typeof InstalledEntryCard> = {
+      entry: { kind: 'single', mod, key: 'local' }, viewMode, hideNsfwPreviews: false,
+      soundVolume: 0, groupClickOpensDetails: true, conflicts: [], updateAvailable: false,
+      staleSourceCount: 0, updatableSourceCount: 0, fixingUnknown: false, loadPosition: undefined,
+      loadCount: 1, selectMode: false, shiftHeld: false, selected: false, soloBusy: false, favorite: false,
+      onOpenDetails: onOpen, onViewAuthor: noop, onOpenPicker: noop, onOpenGroupDetails: noop,
+      onToggle: async () => true, onSwap: noop, onSoloLaunch: noop, onDelete: noop,
+      onAddVariant: noop, onViewImprint: noop,
+      onSetTags: noop, onFixUnknown: noop, onUnmerge: noop, onCopyShareCode: noop,
+      occurrenceKey: undefined, onSelectToggle: noop, onToggleFavorite: noop, lists: [], listIds: [],
+      onToggleList: noop, onCreateList: noop,
+    };
+    await act(async () => root.render(<MemoryRouter><InstalledEntryCard {...props} /></MemoryRouter>));
+    const media = host.querySelector<HTMLElement>('[aria-label="installed.card.chooseFilesFor"]')!;
+    expect(media).not.toBeNull();
+    expect(media.hasAttribute('disabled')).toBe(false);
+    await act(async () => media.click());
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(mod);
+  });
+
   async function openLockerTags() {
     const trigger = [...document.querySelectorAll<HTMLElement>('[role="menuitem"][aria-haspopup="menu"]')]
-      .find((item) => item.textContent?.includes('installed.tag.setLockerTag'))!;
+      .find((item) => item.textContent?.includes('installed.tag.setTags'))!;
     expect(trigger).toBeDefined();
     await act(async () => {
       trigger.focus();
@@ -82,33 +109,33 @@ describe('installed card menu mounting', () => {
   it.each(['context', 'dropdown'] as const)('constructs %s actions and hero choices only when their menu opens', async (kind) => {
     // Spying on roster iteration detects JSX allocation even if React never
     // mounts the resulting nodes under a closed Radix portal.
-    const rosterIteration = vi.spyOn(HERO_NAMES_SORTED, 'map');
+    const rosterIteration = vi.spyOn(HERO_NAMES_SORTED, Symbol.iterator);
     await act(async () => root.render(<ModCard {...input} />));
     expect(rosterIteration).not.toHaveBeenCalled();
-    expect(translate).not.toHaveBeenCalledWith('installed.tag.setLockerTag');
+    expect(translate).not.toHaveBeenCalledWith('installed.tag.setTags');
 
     // Closed menus must pick up current callbacks and tag state when opened.
-    input = { ...input, mod: { ...input.mod, lockerHero: HERO_NAMES_SORTED[0] }, onTagLocker: vi.fn() };
+    input = { ...input, mod: { ...input.mod, lockerHeroes: [HERO_NAMES_SORTED[0]] }, onSetTags: vi.fn() };
     await act(async () => root.render(<ModCard {...input} />));
     expect(rosterIteration).not.toHaveBeenCalled();
 
     await openMenu(kind);
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
-    expect(translate).toHaveBeenCalledWith('installed.tag.setLockerTag');
+    expect(translate).toHaveBeenCalledWith('installed.tag.setTags');
     expect(rosterIteration).not.toHaveBeenCalled();
 
     await openLockerTags();
     expect(rosterIteration).toHaveBeenCalled();
-    const heroChoices = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
+    const heroChoices = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')]
       .filter((item) => item.querySelector('img'));
     expect(heroChoices).toHaveLength(HERO_NAMES_SORTED.length);
     expect(heroChoices[0].getAttribute('aria-checked')).toBe('true');
     await act(async () => heroChoices[1].click());
-    expect(input.onTagLocker).toHaveBeenCalledExactlyOnceWith(HERO_NAMES_SORTED[1]);
-    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(input.onSetTags).toHaveBeenCalledExactlyOnceWith({ heroes: [HERO_NAMES_SORTED[0], HERO_NAMES_SORTED[1]] });
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('shows a dynamic hero once in %s cards', async viewMode => {
+  it.each(['grid', 'compact'] as const)('shows a dynamic hero once in %s cards', async viewMode => {
     useCategoryStore.setState({
       heroByCategoryId: new Map([[2, 'Solomon']]), heroNames: ['Solomon'],
       pathsByModel: { ModCategory: buildCategoryPaths([{
@@ -124,6 +151,14 @@ describe('installed card menu mounting', () => {
     expect(visibleLabels).toHaveLength(0);
   });
 
+  it('shows detected preview tags from another VPK in a grouped mod menu', async () => {
+    const files: Mod[] = [{ ...input.mod, metaKey: 'test.vpk', path: '/test.vpk' }, { ...input.mod, metaKey: 'sibling.vpk', path: '/sibling.vpk', id: 'sibling', propTypes: ['hidden-king', 'sinner'] }];
+    input = { ...input, group: { variants: files, variantCount: 2, enabledCount: 2, enabledLabels: [], onOpenPicker: vi.fn() } };
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu('context'); await openLockerTags();
+    expect(document.querySelectorAll('.lucide-vault')).toHaveLength(2);
+  });
+
   it('assigns a custom tag from the context menu and immediately renders it on the card', async () => {
     const settings = { deadlockPath: '/game', devDeadlockPath: '/dev', devMode: false } as AppSettings;
     useAppStore.setState({ settings });
@@ -133,12 +168,7 @@ describe('installed card menu mounting', () => {
     await act(async () => root.render(<ModCard {...input} />));
     expect(host.textContent).not.toContain('Saved mods');
     await openMenu('context');
-    const trigger = [...document.querySelectorAll<HTMLElement>('[role="menuitem"][aria-haspopup="menu"]')]
-      .find(item => item.textContent === 'installed.tags.title')!;
-    await act(async () => {
-      trigger.focus();
-      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-    });
+    await openLockerTags();
     const checkbox = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')]
       .find(item => item.textContent === 'Saved mods')!;
     expect(checkbox.getAttribute('aria-checked')).toBe('false');
@@ -146,10 +176,93 @@ describe('installed card menu mounting', () => {
     expect(useInstalledTagsStore.getState().byScope[scope][0].keys).toEqual(['Mod:gamebanana:17']);
     expect(host.querySelector('[data-fitting-tags]')?.textContent).toContain('Saved mods');
     expect(input.onToggle).not.toHaveBeenCalled();
-    expect(input.onTagLocker).not.toHaveBeenCalled();
+    expect(input.onSetTags).not.toHaveBeenCalled();
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('places repair icons before hero and category tags in %s cards', async viewMode => {
+  it('combines tag sections above Add to list and checks detected Base and multiple Hero tags', async () => {
+    input = { ...input, lists: [], listIds: [], onToggleList: vi.fn(), onCreateList: vi.fn(),
+      mod: { ...input.mod, sourceSection: 'Sound', categoryName: 'Abilities', lockerHeroes: ['Haze', 'Wraith'] } };
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu('context');
+    const triggers = [...document.querySelectorAll('[role="menuitem"][aria-haspopup="menu"]')].map(item => item.textContent);
+    expect(triggers.indexOf('installed.tag.setTags')).toBeLessThan(triggers.indexOf('installed.lists.menuTrigger'));
+    expect(triggers).not.toContain('installed.tags.title');
+    await openLockerTags();
+    const choices = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')];
+    for (const label of ['Sounds', 'Abilities', 'Haze', 'Wraith']) {
+      expect(choices.find(item => item.textContent === gameBananaCategoryLabel(label, translate))?.getAttribute('aria-checked')).toBe('true');
+    }
+    expect(choices.find(item => item.textContent === 'gamebanana.categories.hud')?.querySelector('.lucide-vault')).toBeNull();
+    expect(choices.find(item => item.textContent === 'gamebanana.categories.abilities')?.querySelector('.lucide-vault')).toBeNull();
+    expect(document.body.textContent).not.toContain('installed.tag.custom');
+    expect(document.body.textContent).toContain('installed.tag.base');
+    await act(async () => choices.find(item => item.textContent === 'gamebanana.categories.abilities')!.click());
+    expect(input.onSetTags).toHaveBeenCalledWith({ base: ['Sounds'] });
+  });
+
+  it('pins detected defaults independently of selected tags and includes default heroes missing from the cached roster', async () => {
+    useCategoryStore.setState({ heroNames: ['Ivy'] });
+    input = { ...input, mod: { ...input.mod, gameBananaId: 17, sourceSection: 'Sound', categoryName: 'Abilities',
+      lockerHeroes: ['Ivy'], globalType: 'hud', tagOverrides: { base: ['HUD'], heroes: ['Ivy'] },
+      detectedTags: { heroes: ['Haze', 'Wraith'] },
+    } };
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu('context'); await openLockerTags();
+    const choices = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')];
+    for (const label of ['Abilities', 'Sounds', 'Haze', 'Wraith']) {
+      const row = choices.find(item => item.textContent === gameBananaCategoryLabel(label, translate))!;
+      expect(row.getAttribute('aria-checked')).toBe('false');
+      expect(row.querySelector('.lucide-pin')).not.toBeNull();
+    }
+    for (const label of ['HUD', 'Ivy']) {
+      const row = choices.find(item => item.textContent === gameBananaCategoryLabel(label, translate))!;
+      expect(row.getAttribute('aria-checked')).toBe('true');
+      expect(row.querySelector('.lucide-pin')).toBeNull();
+    }
+  });
+
+  it('clears assigned tags without forgetting detected categories, then restores them on Reset', async () => {
+    const settings = { deadlockPath: '/game', devMode: false } as AppSettings;
+    useAppStore.setState({ settings });
+    const scope = getInstallationScope(settings)!;
+    useInstalledTagsStore.setState({ byScope: { [scope]: [{ id: 'saved', name: 'Saved mods', keys: ['Mod:gamebanana:17'] }] } });
+    input = { ...input, mod: { ...input.mod, gameBananaId: 17, categoryName: 'Skins > Haze', lockerHeroes: ['Haze'] },
+      onSetTags: vi.fn(async tags => {
+        input = { ...input, mod: { ...input.mod, tagOverrides: tags ?? undefined } };
+        root.render(<ModCard {...input} />);
+      }) };
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu('context'); await openLockerTags();
+    const action = (label: string) => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === label)!;
+    await act(async () => action('common.actions.clear').click());
+    expect(host.querySelector('[data-fitting-tags]')?.textContent ?? '').not.toContain('gamebanana.categories.skins');
+    expect(useInstalledTagsStore.getState().byScope[scope][0].keys).toEqual([]);
+    expect(input.mod.categoryName).toBe('Skins > Haze');
+    await openMenu('context'); await openLockerTags();
+    await act(async () => action('common.actions.reset').click());
+    expect(host.querySelector('[data-fitting-tags]')?.textContent).toContain('gamebanana.categories.skins');
+    expect(input.mod.tagOverrides).toBeUndefined();
+  });
+
+  it('updates the visible card tag order from shared priorities without changing mod state', async () => {
+    const settings = { deadlockPath: '/game', devMode: false } as AppSettings;
+    useAppStore.setState({ settings });
+    const scope = getInstallationScope(settings)!;
+    useCategoryStore.setState({ pathsByModel: { ModCategory: buildCategoryPaths([
+      { id: 1, name: 'Root label', itemCount: 1, children: [{ id: 2, name: 'Deep label', itemCount: 1 }] },
+    ]) } });
+    useInstalledTagsStore.setState({ byScope: { [scope]: [{ id: 'favorite', name: 'Favorites', keys: ['Mod:gamebanana:17'] }] } });
+    input = { ...input, mod: { ...input.mod, gameBananaId: 17, categoryId: 2 } };
+    await act(async () => root.render(<ModCard {...input} />));
+    const labels = () => [...host.querySelector('[data-fitting-tags]')!.children]
+      .filter(node => node.getAttribute('aria-hidden') !== 'true').map(node => node.textContent);
+    expect(labels()).toEqual(['Favorites', 'Deep label', 'Root label']);
+    await act(async () => useInstalledTagsStore.getState().setOrder(scope, ['tag:root label', 'custom:favorite', 'tag:deep label']));
+    expect(labels()).toEqual(['Root label', 'Favorites', 'Deep label']);
+    expect(input.onToggle).not.toHaveBeenCalled();
+  });
+
+  it.each(['grid', 'compact'] as const)('places repair icons before hero and category tags in %s cards', async viewMode => {
     input = { ...input, viewMode, mod: { ...input.mod, lockerHeroes: ['Abrams'], categoryName: 'Skins',
       outdatedVdata: [{ entry: 'scripts/heroes.vdata_c', missing: 1, sample: ['field'] }],
       staleModels: [{ entry: 'models/hero.vmdl_c', attachments: ['aim'] }],
@@ -178,7 +291,7 @@ describe('installed card menu mounting', () => {
     expect(host.querySelector('[data-issue-stack]')).toBeNull();
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('groups the requirements icon with repair icons before taxonomy in %s cards', async viewMode => {
+  it.each(['grid', 'compact'] as const)('groups the requirements icon with repair icons before taxonomy in %s cards', async viewMode => {
     input = { ...input, viewMode, mod: { ...input.mod, gameBananaId: 1, lockerHeroes: ['Abrams'], categoryName: 'Skins',
       outdatedVdata: [{ entry: 'scripts/heroes.vdata_c', missing: 1, sample: ['field'] }],
       staleModels: [{ entry: 'models/hero.vmdl_c', attachments: ['aim'] }],
@@ -210,7 +323,7 @@ describe('installed card menu mounting', () => {
     expect(requirementsOnly.querySelectorAll('svg')).toHaveLength(1);
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('places the hover swap button directly after More actions in %s', async viewMode => {
+  it.each(['grid', 'compact'] as const)('places the hover swap button directly after More actions in %s', async viewMode => {
     input = { ...input, viewMode, mod: { ...input.mod, enabled: false, lockerHeroes: ['Haze'] },
       swapTargets: [{ key: 'old', name: 'Current Haze skin', heroNames: ['Haze'] }], onSwap: vi.fn(async () => {}) };
     await act(async () => root.render(<ModCard {...input} />));
@@ -277,6 +390,8 @@ describe('installed card menu mounting', () => {
 
   it.each(['context', 'dropdown'] as const)('opens requirement management from the %s menu', async kind => {
     input = { ...input, mod: { ...input.mod, gameBananaId: 1 } };
+    useRequirementsStore.getState().remember({ id: 1, section: 'Mod' }, { status: 'loaded', checkedAt: Date.now(),
+      items: [{ name: 'Optional effects', importance: 'optional', state: 'on' }] });
     useAppStore.setState({ mods: [input.mod as Mod] });
     vi.spyOn(useRequirementsStore.getState(), 'load').mockResolvedValue();
     await act(async () => root.render(<ModCard {...input} />));
@@ -294,6 +409,27 @@ describe('installed card menu mounting', () => {
     await openMenu('context');
     expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
       .some(element => element.textContent === 'requirements.manageTitle')).toBe(false);
+  });
+
+  it.each(['loaded', 'unavailable', 'missing'] as const)('omits requirement management when GameBanana requirements are %s without declared items', async status => {
+    input = { ...input, mod: { ...input.mod, gameBananaId: 1 } };
+    if (status !== 'missing') useRequirementsStore.getState().remember({ id: 1, section: 'Mod' },
+      status === 'loaded' ? { status, checkedAt: Date.now(), items: [] } : { status, checkedAt: Date.now() });
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu('context');
+    expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .some(element => element.textContent === 'requirements.manageTitle')).toBe(false);
+  });
+
+  it('shows requirement management when declared requirements arrive after the card mounts', async () => {
+    input = { ...input, mod: { ...input.mod, gameBananaId: 1 } };
+    await act(async () => root.render(<ModCard {...input} />));
+    await act(async () => useRequirementsStore.getState().remember({ id: 1, section: 'Mod' }, {
+      status: 'loaded', checkedAt: Date.now(), items: [{ name: 'Required effects', importance: 'required', state: 'on' }],
+    }));
+    await openMenu('dropdown');
+    expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .some(element => element.textContent === 'requirements.manageTitle')).toBe(true);
   });
 
   const menuItemLabels = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
@@ -334,7 +470,7 @@ describe('installed card menu mounting', () => {
     expect(onViewDetails).toHaveBeenCalledTimes(1);
   });
 
-  it('labels a local group click as choosing files and keeps one picker entry in the menu', async () => {
+  it('keeps Choose files as the local group picker action', async () => {
     const onOpenPicker = vi.fn();
     input = { ...input, onOpenDetails: onOpenPicker, group: {
       variantCount: 2, enabledCount: 1, enabledLabels: [], onOpenPicker, opensPicker: true,
@@ -344,9 +480,13 @@ describe('installed card menu mounting', () => {
     await openMenu('context');
     expect(menuItemLabels()).toContain('installed.card.chooseFiles');
     expect(menuItemLabels()).not.toContain('installed.card.viewDetails');
+    expect(menuItemLabels()).not.toContain('installed.card.ungroupVariants');
+    const files = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === 'installed.card.chooseFiles')!;
+    await act(async () => files.click());
+    expect(onOpenPicker).toHaveBeenCalledOnce();
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('shows every grouped hero and puts additional %s tags in a mouse tooltip', async viewMode => {
+  it.each(['grid', 'compact'] as const)('shows every grouped hero and puts additional %s tags in a mouse tooltip', async viewMode => {
     const originalBounds = HTMLElement.prototype.getBoundingClientRect;
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
       if (this.hasAttribute('data-fitting-tags')) return DOMRect.fromRect({ width: 70, height: 22 });
@@ -383,7 +523,7 @@ describe('installed card menu mounting', () => {
     expect(host.querySelector('img[src*="haze"]')).toBeNull();
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('keeps single-hero Sound portrait art and image actions in %s', async viewMode => {
+  it.each(['grid', 'compact'] as const)('keeps single-hero Sound portrait art and image actions in %s', async viewMode => {
     const copyImage = vi.spyOn(imageActions, 'copyImageToClipboard').mockResolvedValue();
     const primary = { ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', lockerHeroes: ['Wraith'] };
     const earlier = { ...primary, id: 'earlier', enabled: false, lockerHeroes: ['Wraith'] };
@@ -408,7 +548,7 @@ describe('installed card menu mounting', () => {
     expect(copyImage).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('/locker/heroes/Wraith_Render.png'));
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('uses the normal Sound preview for a multihero file in %s', async viewMode => {
+  it.each(['grid', 'compact'] as const)('uses the normal Sound preview for a multihero file in %s', async viewMode => {
     input = { ...input, viewMode, mod: {
       ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', lockerHeroes: ['Haze', 'Wraith'],
     } };
@@ -422,7 +562,7 @@ describe('installed card menu mounting', () => {
       .some(item => item.textContent === 'imageContextMenu.image')).toBe(false);
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('does not choose a first portrait when Sound variants affect different heroes in %s', async viewMode => {
+  it.each(['grid', 'compact'] as const)('does not choose a first portrait when Sound variants affect different heroes in %s', async viewMode => {
     const primary = { ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', lockerHeroes: ['Wraith'] };
     const earlier = { ...primary, id: 'earlier', enabled: false, lockerHeroes: ['Haze'] };
     input = { ...input, viewMode, mod: primary, group: {
@@ -435,7 +575,7 @@ describe('installed card menu mounting', () => {
     expect(host.querySelector('img[src*="wraith.png"]')).not.toBeNull();
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('retains explicit thumbnail art for a multihero Sound in %s', async viewMode => {
+  it.each(['grid', 'compact'] as const)('retains explicit thumbnail art for a multihero Sound in %s', async viewMode => {
     const thumbnailUrl = 'https://example.invalid/authored-thumbnail.png';
     input = { ...input, viewMode, mod: {
       ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', thumbnailUrl, lockerHeroes: ['Haze', 'Wraith'],
@@ -448,7 +588,7 @@ describe('installed card menu mounting', () => {
       .some(item => item.textContent === 'imageContextMenu.image')).toBe(true);
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('does not borrow a sibling Sound hero for an unresolved %s representative', async viewMode => {
+  it.each(['grid', 'compact'] as const)('does not borrow a sibling Sound hero for an unresolved %s representative', async viewMode => {
     const primary = { ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', lockerHeroes: [] };
     const earlier = { ...primary, id: 'earlier', enabled: false, lockerHeroes: ['Haze'] };
     input = { ...input, viewMode, mod: primary, group: {
@@ -467,10 +607,10 @@ describe('installed card menu mounting', () => {
     await act(async () => root.render(<ModCard {...input} />));
     await openMenu('dropdown');
     await openLockerTags();
-    const choices = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
+    const choices = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')]
       .filter(item => item.querySelector('img'));
     expect(choices.map(item => item.textContent)).toEqual(['Baba', 'Solomon']);
     await act(async () => choices[1].click());
-    expect(input.onTagLocker).toHaveBeenCalledExactlyOnceWith('Solomon');
+    expect(input.onSetTags).toHaveBeenCalledExactlyOnceWith({ heroes: ['Solomon'] });
   });
 });

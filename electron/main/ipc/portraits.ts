@@ -12,6 +12,8 @@ import {
 } from '../services/customHeroCards';
 import type { CustomCardSlot } from '../../../src/types/portrait';
 import {
+    getSoulPreviewThumbnail,
+    saveSoulPreviewThumbnail,
     getSoulModelInfo,
     exportSoulModel,
     type SoulModelInfo,
@@ -116,6 +118,9 @@ ipcMain.handle(
         return getAppliedCustomCard(deadlockPath, heroName);
     }
 );
+
+ipcMain.handle('get-soul-preview-thumbnail', (_, key: string) => getSoulPreviewThumbnail(key));
+ipcMain.handle('save-soul-preview-thumbnail', (_, key: string, capture: import('../../../src/types/portrait').SoulPreviewThumbnailCapture) => saveSoulPreviewThumbnail(key, capture));
 
 ipcMain.handle(
     'get-soul-model-info',

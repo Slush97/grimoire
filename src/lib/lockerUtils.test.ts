@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle, isLockerManagedMod, isLockerManagedSound } from './lockerUtils';
+import { sortLockerMods, getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle, isLockerManagedMod, isLockerManagedSound } from './lockerUtils';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 
 const skinCategories: GameBananaCategoryNode[] = [{
@@ -38,6 +38,28 @@ function mod(over: Partial<Mod> & { id: string; metaKey: string; priority: numbe
  * line in the canonical SearchPaths block, so it must outrank every addons
  * folder; this used to be mirrored by hand on the Conflicts page and went stale.
  */
+describe('tag selections in Locker', () => {
+  it('routes every selected Base destination and keeps cleared tags out of Locker', () => {
+    const target = mod({ id: 'tags', metaKey: 'tags.vpk', priority: 1, sourceSection: 'Mod',
+      categoryName: 'Skins', lockerHeroes: ['Haze'], tagOverrides: { base: ['HUD', 'Maps'], heroes: ['Ivy'] } });
+    const groups = groupGlobalMods([target]);
+    expect(groups.hud).toEqual([target]);
+    expect(groups.maps).toEqual([target]);
+    const cleared = { ...target, tagOverrides: { base: [], heroes: [] } };
+    expect(getEffectiveGlobalType(cleared)).toBeUndefined();
+    expect(isLockerManagedMod(cleared)).toBe(false);
+    expect(isLockerManagedSound({ ...cleared, sourceSection: 'Sound' })).toBe(false);
+    const sounds = { ...cleared, tagOverrides: { base: ['Sounds'], heroes: ['Ivy'] } };
+    expect(isLockerManagedSound(sounds)).toBe(true);
+    expect(isLockerManagedMod(sounds)).toBe(false);
+    const skins = { ...cleared, tagOverrides: { base: ['Skins'], heroes: [] } };
+    expect(isLockerManagedMod({ ...skins, sourceSection: 'Wip' })).toBe(true);
+    expect(isLockerManagedMod({ ...skins, sourceSection: 'Sound' })).toBe(true);
+    expect(isLockerManagedSound({ ...skins, sourceSection: 'Sound' })).toBe(false);
+    expect(groupModsByCategory([{ ...cleared, categoryId: 33301, lockerHeroes: undefined }], buildHeroList(skinCategories)).unassigned).toHaveLength(1);
+  });
+});
+
 describe('modLoadOrder', () => {
   it('ranks the priority root ahead of base addons', () => {
     const global = mod({ id: 'g', metaKey: 'grimoire/pak99_dir.vpk', priority: 99 });
@@ -228,8 +250,43 @@ describe('Maps in General', () => {
   it('respects explicit assignments and ignores other sections', () => {
     expect(getEffectiveGlobalType({ ...map, globalType: 'hud' })).toBe('hud');
     expect(getEffectiveGlobalType({ ...map, lockerHero: 'Haze' })).toBeUndefined();
-    expect(getEffectiveGlobalType({ ...map, sourceSection: 'Sound' })).toBeUndefined();
+    expect(getEffectiveGlobalType({ ...map, sourceSection: 'Sound' })).toBe('sounds');
     expect(getEffectiveGlobalType({ ...map, categoryName: 'Minimaps' })).toBeUndefined();
     expect(getEffectiveGlobalType({ ...map, categoryName: undefined, globalType: 'maps' })).toBe('maps');
   });
+});
+
+describe('Locker mod display order', () => {
+  const options = {
+    favorites: new Set(['favorite', 'active-favorite']),
+    keyOf: (item: { id: string }) => item.id,
+    isActive: (item: { active: boolean }) => item.active,
+  };
+
+  it('keeps active mods ahead of favorites without changing their relative order', () => {
+    const items = [
+      { id: 'plain', active: false }, { id: 'active', active: true },
+      { id: 'favorite', active: false }, { id: 'active-favorite', active: true },
+      { id: 'other', active: false },
+    ];
+    expect(sortLockerMods(items, options).map(item => item.id))
+      .toEqual(['active', 'active-favorite', 'favorite', 'plain', 'other']);
+    expect(items.map(item => item.id)).toEqual(['plain', 'active', 'favorite', 'active-favorite', 'other']);
+  });
+
+  it('places favorites first when no mod is active and restores the existing order when cleared', () => {
+    const items = [{ id: 'plain', active: false }, { id: 'favorite', active: false }];
+    expect(sortLockerMods(items, options).map(item => item.id)).toEqual(['favorite', 'plain']);
+    expect(sortLockerMods(items, { ...options, favorites: new Set() })).toEqual(items);
+  });
+});
+
+it('shares mixed prop packs across General categories and folds legacy killstreak music into Sounds', () => {
+  const mixed = mod({ id: 'mixed', metaKey: 'mixed.vpk', priority: 1, propTypes: ['hidden-king', 'archmother', 'sinner'] });
+  const legacy = mod({ id: 'legacy', metaKey: 'legacy.vpk', priority: 2, globalType: 'killstreak-music' });
+  const heroSound = mod({ id: 'hero-sound', metaKey: 'hero.vpk', priority: 3, sourceSection: 'Sound', lockerHeroes: ['Ivy'] });
+  const groups = groupGlobalMods([mixed, legacy, heroSound]);
+  expect(groups['hidden-king']).toEqual([mixed]); expect(groups.archmother).toEqual([mixed]); expect(groups.sinner).toEqual([mixed]);
+  expect(groups.patron).toEqual([]); expect(groups.boxes).toEqual([]);
+  expect(groups.sounds).toEqual([legacy]); expect(groups['killstreak-music']).toEqual([]);
 });

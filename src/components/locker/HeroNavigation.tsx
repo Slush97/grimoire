@@ -9,9 +9,10 @@ interface HeroNavigationProps<Hero extends { name: string }> {
   onNavigate: (hero: Hero) => void;
   enabled: boolean;
   children?: ReactNode;
+  plain?: boolean;
 }
 
-export function HeroNavigation<Hero extends { name: string }>({ previous, next, onNavigate, enabled, children }: HeroNavigationProps<Hero>) {
+export function HeroNavigation<Hero extends { name: string }>({ previous, next, onNavigate, enabled, children, plain = false }: HeroNavigationProps<Hero>) {
   const { t } = useTranslation();
   const navigationRef = useRef<HTMLDivElement>(null);
 
@@ -40,22 +41,30 @@ export function HeroNavigation<Hero extends { name: string }>({ previous, next, 
   }, [enabled, next, onNavigate, previous]);
 
   return (
-    <div ref={navigationRef} className="flex items-center justify-between gap-3">
+    <div ref={navigationRef} className={plain ? 'grid grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-2' : 'flex items-center justify-between gap-3'}>
       <IconButton
+        className={plain ? 'relative z-10' : undefined}
+        tone={plain ? 'ghost' : 'default'}
         icon={ChevronLeft}
         label={t('locker.hero.previousHero', { hero: previous?.name ?? '' })}
         aria-keyshortcuts="ArrowLeft"
         disabled={!enabled || !previous}
-        onClick={() => previous && onNavigate(previous)}
-      />
+        onClick={() => enabled && previous && onNavigate(previous)}
+      >
+        {plain && <span aria-hidden data-hero-arrow-hitbox className="absolute -inset-y-3 -left-3 -right-20" />}
+      </IconButton>
       <div className="flex min-w-0 flex-1 justify-center">{children}</div>
       <IconButton
+        className={plain ? 'relative z-10' : undefined}
+        tone={plain ? 'ghost' : 'default'}
         icon={ChevronRight}
         label={t('locker.hero.nextHero', { hero: next?.name ?? '' })}
         aria-keyshortcuts="ArrowRight"
         disabled={!enabled || !next}
-        onClick={() => next && onNavigate(next)}
-      />
+        onClick={() => enabled && next && onNavigate(next)}
+      >
+        {plain && <span aria-hidden data-hero-arrow-hitbox className="absolute -inset-y-3 -left-20 -right-3" />}
+      </IconButton>
     </div>
   );
 }

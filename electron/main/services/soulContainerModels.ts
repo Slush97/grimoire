@@ -19,9 +19,12 @@
  * (see registerSoulModelProtocol).
  */
 import { promises as fs } from 'fs';
+import { randomUUID } from 'crypto';
+import type { SoulPreviewThumbnailInfo, SoulPreviewThumbnailCapture } from '../../../src/types/portrait';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 import { app, net } from 'electron';
+import { GENERAL_PROP_MODELS } from '../../../src/lib/categoryPaths';
 import { registerAssetProtocol } from './assetProtocol';
 import { runVpkmerge } from './modMerger';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
@@ -68,6 +71,50 @@ function modelFile(key: string): string {
 
 function versionFile(key: string): string {
     return join(modelDir(key), '.cache-version');
+}
+
+const THUMBNAIL_VERSION = 1;
+
+export async function getSoulPreviewThumbnail(key: string): Promise<SoulPreviewThumbnailInfo> {
+    try {
+        const [raw, image, model] = await Promise.all([
+            fs.readFile(join(modelDir(key), 'preview.json'), 'utf8'),
+            fs.stat(join(modelDir(key), 'preview.png')),
+            getSoulModelInfo(key),
+        ]);
+        const saved = JSON.parse(raw);
+        if (!model.hasModel || saved.version !== THUMBNAIL_VERSION || saved.imageMtimeMs !== image.mtimeMs || saved.modelMtimeMs !== model.mtimeMs
+            || typeof saved.yaw !== 'number' || !Number.isFinite(saved.yaw)) throw new Error('Stale thumbnail');
+        return { mtimeMs: image.mtimeMs, yaw: saved.yaw, ...(saved.portrait ? { portrait: true } : {}) };
+    } catch {
+        return { mtimeMs: null, yaw: null };
+    }
+}
+
+export async function saveSoulPreviewThumbnail(key: string, capture: SoulPreviewThumbnailCapture): Promise<SoulPreviewThumbnailInfo> {
+    if (!capture || !Number.isFinite(capture.yaw) || !Number.isFinite(capture.modelMtimeMs)
+        || typeof capture.pngDataUrl !== 'string' || capture.pngDataUrl.length > 12 * 1024 * 1024
+        || !capture.pngDataUrl.startsWith('data:image/png;base64,')) throw new Error('Invalid preview capture');
+    const png = Buffer.from(capture.pngDataUrl.slice('data:image/png;base64,'.length), 'base64');
+    if (png.length < 24 || !png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error('Invalid preview PNG');
+    const width = png.readUInt32BE(16), height = png.readUInt32BE(20);
+    const portrait = width === 768 && height === 1024;
+    if (!portrait && (width !== 1024 || height !== 576)) throw new Error('Invalid preview PNG size');
+    const model = await getSoulModelInfo(key);
+    if (!model.hasModel || model.mtimeMs !== capture.modelMtimeMs) throw new Error('Preview model changed');
+    const dir = modelDir(key);
+    const temporary = join(dir, `preview-${randomUUID()}.tmp`);
+    try {
+        await fs.writeFile(temporary, png);
+        await fs.rename(temporary, join(dir, 'preview.png'));
+        const image = await fs.stat(join(dir, 'preview.png'));
+        await fs.writeFile(temporary + '.json', JSON.stringify({ version: THUMBNAIL_VERSION,
+            portrait, modelMtimeMs: capture.modelMtimeMs, imageMtimeMs: image.mtimeMs, yaw: capture.yaw }));
+        await fs.rename(temporary + '.json', join(dir, 'preview.json'));
+    } finally {
+        await Promise.all([fs.rm(temporary, { force: true }), fs.rm(temporary + '.json', { force: true })]);
+    }
+    return getSoulPreviewThumbnail(key);
 }
 
 /**
@@ -231,6 +278,8 @@ export async function exportSoulModel(
     if (!vpk) {
         throw new Error(`Prop-container VPK not found: ${metaKey}`);
     }
+    const propType = (Object.keys(GENERAL_PROP_MODELS) as import('../../../src/types/mod').GlobalModType[])
+        .find(type => GENERAL_PROP_MODELS[type] === entry);
     const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
 
     const dir = modelDir(cacheKey);
@@ -256,7 +305,8 @@ export async function exportSoulModel(
     // against both the bundled and a fresh release build).
     // An animated export (the Installed preview) keeps a real rig and its clips.
     const raw = await fs.readFile(out);
-    const patched = options.animated ? stripDegenerateSkins(raw) : stripGlbSkins(raw);
+    const patched = options.animated || propType === 'hidden-king' || propType === 'archmother' || propType === 'sinner'
+        ? stripDegenerateSkins(raw) : stripGlbSkins(raw);
     if (patched !== raw) await fs.writeFile(out, patched);
     await fs.writeFile(versionFile(cacheKey), SOUL_CACHE_VERSION);
 
@@ -280,7 +330,9 @@ export function registerSoulModelProtocol(): void {
             // segment is the (still-encoded) key.
             const segment = url.pathname.split('/').filter(Boolean)[0] ?? '';
             const key = decodeURIComponent(segment);
-            const file = modelFile(key);
+            const filename = url.pathname.split('/').filter(Boolean)[1];
+            if (filename !== 'model.glb' && filename !== 'preview.png') return new Response(null, { status: 404 });
+            const file = filename === 'preview.png' ? join(modelDir(key), filename) : modelFile(key);
             await fs.access(file);
             return net.fetch(pathToFileURL(file).toString());
         } catch {

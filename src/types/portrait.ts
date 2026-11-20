@@ -55,6 +55,18 @@ export interface SoulModelInfo {
   mtimeMs: number | null;
 }
 
+export interface SoulPreviewThumbnailInfo {
+  portrait?: boolean;
+  mtimeMs: number | null;
+  yaw: number | null;
+}
+
+export interface SoulPreviewThumbnailCapture {
+  yaw: number;
+  pngDataUrl: string;
+  modelMtimeMs: number;
+}
+
 export interface HeroPoseSkinSource {
   metaKey: string;
   priority: number;

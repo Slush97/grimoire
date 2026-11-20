@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import {
   AlertCircle,
   Check,
-  EyeOff,
   Fingerprint,
   FilePlus,
   ImagePlus,
@@ -16,11 +15,12 @@ import {
 import { Modal, ModalFooter } from './common/Modal';
 import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from './common/ui';
 import { Input } from './common/forms';
+import { ModImageGallery, RevealImage } from './common/RevealImage';
 import {
   onImportCustomModsProgress,
-  peekImprint,
+  prepareLocalModImport,
+  releaseLocalModImport,
   readImageDataUrl,
-  showOpenDialog,
   showOpenDialogMulti,
 } from '../lib/api';
 import type {
@@ -36,28 +36,43 @@ import {
   deriveVariantLabel,
   fileNameOf,
   imprintVariantLabel,
+  localImportErrorMessage,
   pathDedupeKey,
-  suggestVariantGroupName,
 } from '../lib/customModImport';
 import { useAppStore } from '../stores/appStore';
 import { useNavigate } from 'react-router-dom';
 import { useModSafetyStore } from '../stores/modSafetyStore';
+import type { PreparedLocalModImport } from '../types/electron';
+import type { ModTagOverrides } from '../types/mod';
+import { useCategoryStore } from '../stores/categoryStore';
+import { EMPTY_CUSTOM_TAGS, EMPTY_TAG_ORDER, useInstalledTagsStore } from '../stores/installedTagsStore';
+import { getInstallationScope } from '../lib/appSettings';
+import { installedBaseTagOptions, sortInstalledTags } from '../lib/installedCardTaxonomy';
+import { gameBananaCategoryLabel } from '../lib/gameBananaCategories';
+import { HERO_NAMES_SORTED } from '../lib/lockerUtils';
+import { ChipText, HeroTagLabel, MOD_TAG_CHIP_CLASS, MOD_TAG_SURFACE_CLASS } from './installed/chips';
+import { formatBytes } from '../lib/formatBytes';
+import { MenuContent, MenuItem, MenuLabel, MenuRoot, MenuTrigger } from './common/menu';
+import { useStableCallback } from '../lib/useStableCallback';
 
 type RowStatus = 'pending' | 'importing' | 'done' | 'failed';
 
 interface ImportRow {
-  /** Identity AND dedupe key: one row per source file, so the path is both. */
+  id: string;
+  inspection: 'checking' | 'ready' | 'failed';
+  preparation?: PreparedLocalModImport;
+  inspectionError?: string;
+  labelFocused: boolean;
+  /** Selected source and dedupe key, including archives. */
   path: string;
   name: string;
+  nameTouched: boolean;
+  thumbnailDataUrl?: string;
+  nsfw: boolean;
   /** Name typed for the grouped variant picker. Until the user types one, the
    *  row shows `defaultVariantLabel`. */
   variantLabel: string;
   labelTouched: boolean;
-  /** The current name came from the user typing, not from a parse/peek fill. */
-  nameTouched: boolean;
-  imagePath: string;
-  thumbnailDataUrl: string;
-  nsfw: boolean;
   recognized: PeekImprintResult | null;
   status: RowStatus;
   imported: number;
@@ -72,12 +87,11 @@ interface ImportCustomModsModalProps {
    *  toast a summary. Failed rows stay listed in the dialog either way. */
   onFinished?: (results: ImportCustomModResult[]) => void;
   /** Add-variants mode: every file imported here becomes another variant of an
-   *  existing local mod instead of a mod of its own. The group owns the name,
-   *  so the per-row name field is hidden and every item is submitted under
+   *  existing local mod. The group owns the name and artwork, so every item uses
    *  `modName`. The host's `onImport` is what attaches the group id (and mints
    *  the group when the target is still a standalone mod), which keeps uuid
    *  minting out of this dialog. */
-  addToGroup?: { modName: string };
+  addToGroup?: { modName: string; nsfw?: boolean };
   /** Paths handed over by the app-wide drop controller. Staged as rows on
    *  arrival, then acknowledged through `onConsumedPaths`. */
   pendingPaths?: string[];
@@ -90,13 +104,14 @@ interface ImportCustomModsModalProps {
 
 const newRow = (path: string): ImportRow => ({
   path,
+  id: crypto.randomUUID(),
+  inspection: 'checking',
+  labelFocused: false,
   name: deriveModNameFromPath(path),
+  nameTouched: false,
+  nsfw: false,
   variantLabel: '',
   labelTouched: false,
-  nameTouched: false,
-  imagePath: '',
-  thumbnailDataUrl: '',
-  nsfw: false,
   recognized: null,
   status: 'pending',
   imported: 0,
@@ -104,9 +119,8 @@ const newRow = (path: string): ImportRow => ({
 
 /**
  * Batch local import: pick or drop any number of `.vpk` files and archives, get
- * a row per file with its name already parsed from the filename, and import the
- * lot in one go. Every row is editable (name, thumbnail, NSFW) for the users who
- * want per-file settings, but the default path is: drop, glance, import.
+ * a row per source. By default they become variants of one mod, sharing its
+ * name, gallery, tags and NSFW setting. Separate imports keep per-source details.
  *
  * Failures are per row, not per batch: the main process keeps going after a bad
  * source, so a corrupt archive in the middle of 20 files doesn't cost the other
@@ -119,7 +133,8 @@ const newRow = (path: string): ImportRow => ({
  * only be opened from a card, so the page always has mods.)
  *
  * With `addToGroup`, the same dialog adds variants to an existing local mod:
- * same picking, dropping and retry behavior, minus the per-row name field.
+ * same picking, dropping and retry behavior, preserving the group's artwork
+ * and existing tags.
  */
 export default function ImportCustomModsModal({
   onClose,
@@ -148,8 +163,27 @@ export default function ImportCustomModsModal({
   const [dragActive, setDragActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [groupAsVariants, setGroupAsVariants] = useState(false);
-  const [variantGroupName, setVariantGroupName] = useState('');
+  const [variantGroupName, setVariantGroupName] = useState<string | null>(null);
+  const [groupAsVariants, setGroupAsVariants] = useState(true);
+  const usesSharedName = !!addToGroup || groupAsVariants;
+  const showGroupingToggle = !addToGroup && rows.length > 1;
+  const groupNameId = useId();
+  const [galleryImages, setGalleryImages] = useState<string[]>([]);
+  const galleryInitialized = useRef(false);
+  const [groupNsfw, setGroupNsfw] = useState(addToGroup?.nsfw ?? false);
+  const [sharedLocked, setSharedLocked] = useState(false);
+  const sharedDisabled = submitting || sharedLocked;
+  const dialogGeneration = useRef({ value: 0 });
+  const [pendingImages, setPendingImages] = useState(0);
+  const [tagChanges, setTagChanges] = useState<{ add: ModTagOverrides; remove: ModTagOverrides }>({ add: {}, remove: {} });
+  const [customTagIds, setCustomTagIds] = useState<string[]>([]);
+  const tagScope = useAppStore(state => getInstallationScope(state.settings));
+  const customTags = useInstalledTagsStore(state => tagScope ? state.byScope[tagScope] ?? EMPTY_CUSTOM_TAGS : EMPTY_CUSTOM_TAGS);
+  const tagOrder = useInstalledTagsStore(state => tagScope ? state.orderByScope[tagScope] ?? EMPTY_TAG_ORDER : EMPTY_TAG_ORDER);
+  const heroNames = useCategoryStore(state => state.heroNames);
+  const pathsByModel = useCategoryStore(state => state.pathsByModel);
+  const taxonomyContext = useMemo(() => ({ heroNames, pathsByModel }), [heroNames, pathsByModel]);
+  useEffect(() => { if (tagScope) useInstalledTagsStore.getState().load(tagScope); }, [tagScope]);
   // Main returns the UUID it minted. Keep it across a partial-failure retry so
   // the remaining files join the members that already landed.
   const [variantGroupId, setVariantGroupId] = useState<string | null>(null);
@@ -166,70 +200,68 @@ export default function ImportCustomModsModal({
   useEffect(() => {
     return onImportCustomModsProgress((progress) => {
       const path = submittedPathsRef.current[progress.index];
-      if (!path) return;
+      if (!path || progress.vpkPath !== path) return;
       if (progress.phase === 'importing') {
         patchRow(path, { status: 'importing', error: undefined });
       } else if (progress.phase === 'done') {
         patchRow(path, { status: 'done', imported: progress.imported ?? 1 });
       } else {
-        patchRow(path, { status: 'failed', error: progress.error });
+        patchRow(path, { status: 'failed', error: progress.error ? localImportErrorMessage(progress.error) : undefined });
       }
     });
   }, [patchRow]);
 
-  /**
-   * Best-effort imprint recognition for a bare `.vpk`: a re-imported Grimoire
-   * file already knows its own title. Archives skip it (extraction happens later
-   * in main, and every extracted VPK still goes through adoption at import time,
-   * so nothing is lost). Only fills a name the user hasn't typed over.
-   */
-  const peekRow = useCallback((path: string) => {
-    if (!path.toLowerCase().endsWith('.vpk')) return;
-    void peekImprint(path)
-      .then((result) => {
-        if (!result) return;
-        setRows((prev) =>
-          prev.map((row) =>
-            row.path === path
-              ? {
-                  ...row,
-                  recognized: result,
-                  name: result.title && !row.nameTouched ? result.title : row.name,
-                  thumbnailDataUrl: row.thumbnailDataUrl || result.thumbnailUrl || '',
-                }
-              : row
-          )
-        );
-      })
-      .catch(() => {
-        // Recognition is a nicety; a failed peek just shows no note.
-      });
-  }, []);
-
-  // Peek every row exactly once, from an effect rather than from addPaths: a
-  // state updater must be pure, and StrictMode double-invokes it in dev, so
-  // firing IPC (or minting ids) inside one duplicates the work. The ref
-  // survives StrictMode's simulated remount, so the second pass is a no-op.
-  const peekedRef = useRef<Set<string>>(new Set());
+  // Keep each request tied to the row instance, not its filename. Removing
+  // and re-adding a source must never accept an older inspection's response.
+  const inspections = useRef(new Map<string, string>());
   useEffect(() => {
-    for (const row of rows) {
-      if (peekedRef.current.has(row.path)) continue;
-      peekedRef.current.add(row.path);
-      peekRow(row.path);
+    const live = new Set(rows.map(row => row.id));
+    for (const [id, requestId] of inspections.current) {
+      if (live.has(id)) continue;
+      inspections.current.delete(id);
+      void releaseLocalModImport(requestId).catch(() => {});
     }
-  }, [rows, peekRow]);
+    for (const row of rows) {
+      if (inspections.current.has(row.id)) continue;
+      const requestId = crypto.randomUUID();
+      inspections.current.set(row.id, requestId);
+      void prepareLocalModImport(row.path, requestId).then(preparation => {
+        if (inspections.current.get(row.id) !== requestId) return;
+        const recognized = preparation.members.length === 1 ? preparation.members[0].recognized : null;
+        setRows(previous => previous.map(current => current.id === row.id ? {
+          ...current, preparation, recognized, inspection: 'ready', inspectionError: undefined,
+          name: current.nameTouched ? current.name : recognized?.title || current.name,
+          thumbnailDataUrl: current.thumbnailDataUrl ?? recognized?.thumbnailUrl,
+        } : current));
+      }).catch(reason => {
+        if (inspections.current.get(row.id) !== requestId) return;
+        setRows(previous => previous.map(current => current.id === row.id
+          ? { ...current, inspection: 'failed', inspectionError: localImportErrorMessage(reason) } : current));
+      });
+    }
+  }, [rows]);
+  useEffect(() => {
+    const requests = inspections.current;
+    const generation = dialogGeneration.current;
+    return () => {
+      generation.value++;
+      for (const requestId of requests.values()) void releaseLocalModImport(requestId).catch(() => {});
+      requests.clear();
+    };
+  }, []);
 
   const addPaths = useCallback(
     (paths: string[]) => {
       if (paths.length === 0) return;
+      const candidates = paths.map(newRow);
       setRows((prev) => {
         const seen = new Set(prev.map((row) => pathDedupeKey(row.path, platform)));
         const fresh: ImportRow[] = [];
-        for (const path of paths) {
-          const key = pathDedupeKey(path, platform);
+        for (const candidate of candidates) {
+          const key = pathDedupeKey(candidate.path, platform);
           if (seen.has(key)) continue;
           seen.add(key);
-          fresh.push(newRow(path));
+          fresh.push(candidate);
         }
         return fresh.length > 0 ? [...prev, ...fresh] : prev;
       });
@@ -238,8 +270,8 @@ export default function ImportCustomModsModal({
   );
 
   // Stage paths dropped anywhere in the app. addPaths owns the dedupe and the
-  // row defaults, and the peek effect above keys off rows, so files arriving
-  // after mount get imprint recognition with no extra wiring.
+  // row defaults, and inspection keys off each row, so files arriving
+  // after mount get inspected with no extra wiring.
   useEffect(() => {
     if (!pendingPaths?.length) return;
     addPaths(pendingPaths);
@@ -248,6 +280,7 @@ export default function ImportCustomModsModal({
 
   useEffect(() => {
     onSubmittingChange?.(submitting);
+    return () => onSubmittingChange?.(false);
   }, [submitting, onSubmittingChange]);
 
   // Add-variants mode is itself a VPK drop target, so the app-wide controller
@@ -262,12 +295,18 @@ export default function ImportCustomModsModal({
 
   const pickFiles = async () => {
     if (submitting) return;
-    const picked = await showOpenDialogMulti({
-      title: t('installed.batchImport.selectFiles'),
-      filters: [{ name: t('common.fileTypes.vpkOrArchive'), extensions: VPK_IMPORT_EXTS }],
-    });
-    setError(null);
-    addPaths(picked);
+    const generation = dialogGeneration.current.value;
+    try {
+      const picked = await showOpenDialogMulti({
+        title: t('installed.batchImport.selectFiles'),
+        filters: [{ name: t('common.fileTypes.vpkOrArchive'), extensions: VPK_IMPORT_EXTS }],
+      });
+      if (generation !== dialogGeneration.current.value) return;
+      setError(null);
+      addPaths(picked);
+    } catch (reason) {
+      if (generation === dialogGeneration.current.value) setError(localImportErrorMessage(reason));
+    }
   };
 
   // Live for the add-variants instance. The batch instance rarely sees this:
@@ -292,103 +331,151 @@ export default function ImportCustomModsModal({
     addPaths(paths);
   };
 
-  const pickThumbnail = async (row: ImportRow) => {
-    if (submitting) return;
-    const picked = await showOpenDialog({
-      title: t('installed.imageField.selectImage'),
-      filters: [{ name: t('common.fileTypes.images'), extensions: IMAGE_EXTS }],
-    });
-    if (!picked) return;
+  const acceptRowImage = useStableCallback((row: ImportRow, image: string) => {
+    setRows(previous => previous.map(current => current.id === row.id ? { ...current, thumbnailDataUrl: image } : current));
+    // The last source may have moved into the shared editor during the read.
+    if (!addToGroup && usesSharedName && rows.length === 1 && rows[0].id === row.id) {
+      setGalleryImages(current => row.thumbnailDataUrl
+        ? current.map(source => source === row.thumbnailDataUrl ? image : source)
+        : [...new Set([...current, image])]);
+    }
+  });
+  const addImages = async (paths: string[], row?: ImportRow) => {
+    const generation = dialogGeneration.current.value;
+    const requestId = row ? inspections.current.get(row.id) : undefined;
+    const isCurrent = () => generation === dialogGeneration.current.value
+      && (!row || requestId !== undefined && inspections.current.get(row.id) === requestId);
+    setPendingImages(count => count + 1);
     try {
-      const dataUrl = await readImageDataUrl(picked);
-      patchRow(row.path, { imagePath: picked, thumbnailDataUrl: dataUrl });
-      setError(null);
-    } catch (err) {
-      patchRow(row.path, { imagePath: '', thumbnailDataUrl: '' });
-      setError(t('installed.imageField.readFailed', { error: String(err) }));
-    }
-  };
-
-  const dropThumbnail = async (row: ImportRow, e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (submitting) return;
-    const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-    if (!IMAGE_EXTS.includes(ext)) {
-      setError(t('installed.imageField.expectedImage', { exts: IMAGE_EXTS.join(', '), name: file.name }));
-      return;
-    }
-    const path = window.electronAPI.getDroppedFilePath(file);
-    if (!path) {
-      setError(t('installed.imageField.dropUnresolved'));
-      return;
-    }
-    try {
-      const dataUrl = await readImageDataUrl(path);
-      patchRow(row.path, { imagePath: path, thumbnailDataUrl: dataUrl });
-      setError(null);
-    } catch (err) {
-      setError(t('installed.imageField.readFailed', { error: String(err) }));
-    }
-  };
-
-  const allNsfw = rows.length > 0 && rows.every((row) => row.nsfw);
-  const toggleVariantImport = () => {
-    if (submitting || addToGroup) return;
-    setGroupAsVariants((enabled) => {
-      const next = !enabled;
-      if (next && !variantGroupName.trim()) {
-        setVariantGroupName(
-          suggestVariantGroupName(
-            rows.map((row) => ({ name: row.name, imprintTitle: row.recognized?.title }))
-          )
-        );
+      const images = await Promise.all((row ? paths.slice(0, 1) : paths).map(readImageDataUrl));
+      if (!isCurrent()) return;
+      if (row) {
+        acceptRowImage(row, images[0]);
+      } else {
+        galleryInitialized.current = true;
+        setGalleryImages(previous => [...new Set([...previous, ...images])]);
       }
-      return next;
-    });
+      setError(null);
+    } catch (reason) {
+      if (isCurrent()) setError(t('installed.imageField.readFailed', { error: localImportErrorMessage(reason) }));
+    } finally {
+      if (generation === dialogGeneration.current.value) setPendingImages(count => count - 1);
+    }
   };
+  const pickThumbnail = async (row?: ImportRow) => {
+    if (row ? submitting || pendingImages > 0 : sharedDisabled) return;
+    const generation = dialogGeneration.current.value;
+    try {
+      const picked = await showOpenDialogMulti({
+        title: t('installed.imageField.selectImage'),
+        filters: [{ name: t('common.fileTypes.images'), extensions: IMAGE_EXTS }],
+      });
+      if (generation === dialogGeneration.current.value && picked.length && (!row || inspections.current.has(row.id))) await addImages(picked, row);
+    } catch (reason) {
+      if (generation === dialogGeneration.current.value) setError(localImportErrorMessage(reason));
+    }
+  };
+  const dropThumbnail = async (e: React.DragEvent, row?: ImportRow) => {
+    e.preventDefault(); e.stopPropagation(); setDragActive(false);
+    if (row ? submitting || pendingImages > 0 : sharedDisabled) return;
+    const paths: string[] = [];
+    const files = Array.from(e.dataTransfer.files ?? []);
+    for (const file of row ? files.slice(0, 1) : files) {
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+      if (!IMAGE_EXTS.includes(ext)) {
+        setError(t('installed.imageField.expectedImage', { exts: IMAGE_EXTS.join(', '), name: file.name }));
+        return;
+      }
+      const path = window.electronAPI.getDroppedFilePath(file);
+      if (!path) { setError(t('installed.imageField.dropUnresolved')); return; }
+      paths.push(path);
+    }
+    if (paths.length) await addImages(paths, row);
+  };
+
+  const changeImportMode = (grouped: boolean, sources = rows) => {
+    if (grouped === groupAsVariants) return;
+    if (grouped && !galleryInitialized.current) {
+      const thumbnails = sources.map(row => row.thumbnailDataUrl).filter((image): image is string => !!image);
+      setGalleryImages([...new Set(thumbnails)]);
+      galleryInitialized.current = true;
+    }
+    setGroupAsVariants(grouped);
+  };
+
   const removeRow = (path: string) => {
-    const remaining = rows.filter((row) => row.path !== path);
+    const remaining = rows.filter(row => row.path !== path);
     setRows(remaining);
-    // Before anything has landed, one source does not need an explicit batch
-    // group. After a partial failure, keep the mode armed even if one retry row
-    // remains: it must rejoin the already-imported member via variantGroupId.
-    if (remaining.length < 2 && !variantGroupId) setGroupAsVariants(false);
+    // A new one-file import uses the shared editor. Partial retries retain the
+    // mode that already installed their successful sources.
+    if (remaining.length === 1 && !sharedLocked && !groupAsVariants) {
+      const single = remaining[0];
+      setVariantGroupName(single.name);
+      setGroupNsfw(single.nsfw);
+      setGalleryImages(single.thumbnailDataUrl ? [single.thumbnailDataUrl] : []);
+      galleryInitialized.current = true;
+      setTagChanges({ add: {}, remove: {} });
+      setCustomTagIds([]);
+    }
+    if (remaining.length < 2 && !sharedLocked) changeImportMode(true, remaining);
   };
   const clearRows = () => {
+    dialogGeneration.current.value++;
+    setPendingImages(0);
     setRows([]);
     setError(null);
-    if (!variantGroupId) setGroupAsVariants(false);
+    if (!variantGroupId) {
+      setGroupAsVariants(true);
+      galleryInitialized.current = false;
+      setVariantGroupName(null); setGalleryImages([]); setGroupNsfw(addToGroup?.nsfw ?? false);
+      setSharedLocked(false);
+      setTagChanges({ add: {}, remove: {} }); setCustomTagIds([]);
+    }
   };
-  const usesSharedName = !!addToGroup || groupAsVariants;
   // Bare VPKs map one-to-one to picker rows, so each shows its generated label
   // ready to edit: the name from its imprint when that tells it apart, else its
   // file name. Archives stay blank because one source can expand into several
   // members; typing there intentionally supplies a shared prefix.
   const imprints = rows.map((row) => row.recognized);
-  const sharedName = addToGroup ? addToGroup.modName : variantGroupName;
+  const sharedName = addToGroup ? addToGroup.modName : variantGroupName ?? rows[0]?.name ?? '';
   const defaultVariantLabel = (row: ImportRow): string =>
     row.path.toLowerCase().endsWith('.vpk')
       ? imprintVariantLabel(row.recognized, imprints, sharedName) ?? deriveVariantLabel(row.path)
       : '';
   const variantLabelOf = (row: ImportRow): string =>
     row.labelTouched ? row.variantLabel : defaultVariantLabel(row);
-  // In add-variants mode the group's name covers every row, so a row can never
-  // be unnamed and nothing blocks the submit.
-  const unnamedCount = addToGroup
-    ? 0
-    : groupAsVariants
-      ? (variantGroupName.trim().length === 0 ? 1 : 0)
-    : rows.filter((row) => row.name.trim().length === 0).length;
-  const canSubmit = rows.length > 0 && unnamedCount === 0 && !submitting;
+  const nameMissing = usesSharedName ? !sharedName.trim() : rows.some(row => !row.name.trim());
+  const canSubmit = rows.length > 0 && !nameMissing && !submitting && pendingImages === 0 && rows.every(row => row.inspection === 'ready');
+  const detected = {
+    base: [...new Set(rows.flatMap(row => row.preparation?.members.flatMap(member => member.baseTags) ?? []))],
+    heroes: [...new Set(rows.flatMap(row => row.preparation?.members.flatMap(member => member.heroes) ?? []))],
+  };
+  const selected = {
+    base: [...new Set([...detected.base.filter(tag => !tagChanges.remove.base?.includes(tag)), ...(tagChanges.add.base ?? [])])],
+    heroes: [...new Set([...detected.heroes.filter(tag => !tagChanges.remove.heroes?.includes(tag)), ...(tagChanges.add.heroes ?? [])])],
+  };
+  const setTag = (axis: 'base' | 'heroes', tag: string, included: boolean) => setTagChanges(previous => ({
+    add: { ...previous.add, [axis]: included ? [...new Set([...(previous.add[axis] ?? []), tag])]
+      : (previous.add[axis] ?? []).filter(value => value !== tag) },
+    remove: { ...previous.remove, [axis]: included ? (previous.remove[axis] ?? []).filter(value => value !== tag)
+      : [...new Set([...(previous.remove[axis] ?? []), tag])] },
+  }));
+  const baseChoices = sortInstalledTags(installedBaseTagOptions(taxonomyContext, detected.base)
+    .map(label => ({ key: `tag:${label.toLowerCase()}`, label })), tagOrder);
+  const tagChips = sortInstalledTags([
+    ...customTags.filter(tag => customTagIds.includes(tag.id)).map(tag => ({ key: `custom:${tag.id}`, label: tag.name, remove: () => setCustomTagIds(ids => ids.filter(id => id !== tag.id)) })),
+    ...selected.base.map(label => ({ key: `tag:${label.toLowerCase()}`, label: gameBananaCategoryLabel(label, t), remove: () => setTag('base', label, false) })),
+    ...selected.heroes.map(label => ({ key: `hero:${label}`, label, remove: () => setTag('heroes', label, false) })),
+  ], tagOrder);
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
+    const generation = dialogGeneration.current.value;
     setSubmitting(true);
     setError(null);
     const batch = rows;
+    // Freeze the chosen name so retries retain it when successful rows leave.
+    if (!addToGroup && groupAsVariants) setVariantGroupName(sharedName.trim());
     submittedPathsRef.current = batch.map((row) => row.path);
     setRows((prev) => prev.map((row) => ({ ...row, status: 'pending', error: undefined })));
 
@@ -396,29 +483,32 @@ export default function ImportCustomModsModal({
       const results = await onImport(
         batch.map((row) => ({
           vpkPath: row.path,
-          name: addToGroup
-            ? addToGroup.modName
-            : groupAsVariants
-              ? variantGroupName.trim()
-              : row.name.trim(),
+          name: usesSharedName ? sharedName.trim() : row.name.trim(),
           variantLabel: usesSharedName ? variantLabelOf(row).trim() || undefined : undefined,
-          thumbnailDataUrl: row.thumbnailDataUrl || undefined,
-          nsfw: row.nsfw,
-          localGroupId: groupAsVariants ? variantGroupId ?? undefined : undefined,
+          preparationId: row.preparation!.id,
+          ...(!addToGroup && groupAsVariants ? { galleryImages, tagChanges, customTagIds } : {}),
+          thumbnailDataUrl: !usesSharedName ? row.thumbnailDataUrl || undefined : undefined,
+          nsfw: usesSharedName ? groupNsfw : row.nsfw,
+          localGroupId: !addToGroup && groupAsVariants ? variantGroupId ?? undefined : undefined,
           localGroupBatchKey:
-            groupAsVariants && !variantGroupId ? 'import-modal-variant-group' : undefined,
+            !addToGroup && groupAsVariants && !variantGroupId ? 'import-modal-variant-group' : undefined,
         }))
       );
+      if (generation !== dialogGeneration.current.value) return;
+      if (results.some(result => result.ok)) setSharedLocked(true);
 
-      if (groupAsVariants) {
+      if (!addToGroup && groupAsVariants) {
         const resolvedGroupId = results.find((result) => result.localGroupId)?.localGroupId;
-        if (resolvedGroupId) setVariantGroupId(resolvedGroupId);
+        if (resolvedGroupId) {
+          setVariantGroupId(resolvedGroupId);
+          setSharedLocked(true);
+        }
       }
 
       const failed = new Map<string, string | undefined>();
       results.forEach((result, index) => {
         const path = batch[index]?.path;
-        if (path && !result.ok) failed.set(path, result.error);
+        if (path && !result.ok) failed.set(path, result.error ? localImportErrorMessage(result.error) : undefined);
       });
       reviewAfterClose.current ||= results.some(result => result.ok && result.needsReview);
       onFinished?.(results);
@@ -437,9 +527,10 @@ export default function ImportCustomModsModal({
       setError(t('installed.batchImport.someFailed', { count: failed.size }));
       setSubmitting(false);
     } catch (err) {
+      if (generation !== dialogGeneration.current.value) return;
       // The batch never ran (no game path, empty list): nothing landed, so no
       // row carries a reason. Clear any error left from an earlier attempt.
-      setError(String(err));
+      setError(localImportErrorMessage(err));
       setRows((prev) =>
         prev.map((row) => ({ ...row, status: 'pending' as const, error: undefined }))
       );
@@ -448,318 +539,180 @@ export default function ImportCustomModsModal({
   };
 
   const statusIcon = (row: ImportRow) => {
-    if (row.status === 'importing') {
-      return <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-accent" aria-hidden />;
+    if (row.status === 'importing' || row.inspection === 'checking') {
+      return <Loader2 className={`h-4 w-4 flex-shrink-0 animate-spin ${row.inspection === 'checking' ? 'text-state-warning' : 'text-accent'}`} aria-hidden />;
     }
     if (row.status === 'done') {
       return <Check className="h-4 w-4 flex-shrink-0 text-state-success" aria-hidden />;
     }
-    if (row.status === 'failed') {
+    if (row.status === 'failed' || row.inspection === 'failed') {
       return <AlertCircle className="h-4 w-4 flex-shrink-0 text-state-danger" aria-hidden />;
     }
     return null;
   };
 
+  const dropArea = (compact: boolean) => (
+    <button type="button" onClick={() => void pickFiles()} disabled={submitting}
+      aria-label={t('installed.batchImport.ariaBrowse')}
+      className={`flex w-full items-center justify-center rounded-sm border border-dashed px-4 text-center transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 ${compact ? 'flex-row flex-wrap gap-x-1 py-2.5' : 'flex-col gap-1 py-10'} ${dragActive
+        ? 'border-accent bg-accent/10' : 'cursor-pointer border-border bg-bg-tertiary/40 hover:border-hl/20 hover:bg-bg-tertiary'}`}>
+      {!compact && <UploadCloud className="h-7 w-7 text-text-secondary" aria-hidden />}
+      <span className={`${compact ? 'text-xs' : 'text-sm'} font-medium text-text-primary`}>
+        <Trans i18nKey="installed.batchImport.dropFilesHere" components={{ code: <code className="font-mono text-accent" /> }} />
+      </span>
+      <span className="text-xs text-text-secondary">{t('installed.import.orClickToBrowse')}</span>
+    </button>
+  );
+
+  const nsfwButton = (checked: boolean, onClick: () => void, disabled = sharedDisabled) => (
+    <button type="button" onClick={onClick} disabled={disabled} aria-pressed={checked}
+      className={`h-7 shrink-0 cursor-pointer rounded-sm border px-2 text-2xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${checked ? 'border-state-danger/50 bg-state-danger/15 text-state-danger' : 'border-border text-text-secondary hover:border-hl/20 hover:text-text-primary'}`}>
+      {t('installed.imageField.nsfw')}
+    </button>
+  );
+
   return (
-    <Modal
-      onClose={close}
-      labelledBy="import-custom-mods-title"
-      size="xl"
-      dismissable={!submitting}
-      panelClassName="max-h-[min(85vh,100%)]"
-    >
-      <ModalHeader
-        title={
-          addToGroup
-            ? t('installed.batchImport.addVariantsTitle', { name: addToGroup.modName })
-            : t('installed.batchImport.title')
-        }
-        titleId="import-custom-mods-title"
-        subtitle={rows.length > 0 ? t('installed.batchImport.fileCount', { count: rows.length }) : undefined}
-        onClose={close}
-        closeLabel={t('common.actions.close')}
-        closeDisabled={submitting}
-      />
-
-      <div
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4"
-        onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); if (!submitting) setDragActive(true); }}
-        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = submitting ? 'none' : 'copy'; if (!submitting) setDragActive(true); }}
-        onDragLeave={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          // Moving onto a child fires dragleave on this container too, which
-          // would strobe the highlight across the row list. Only clear when the
-          // pointer has actually left the drop surface.
-          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-          setDragActive(false);
-        }}
-        onDrop={handleDrop}
-      >
-        <p className="text-xs leading-5 text-text-secondary">
-          {addToGroup
-            ? t('installed.batchImport.addVariantsHelp', { name: addToGroup.modName })
-            : importsWaitDisabled
-              ? t('installed.batchImport.help')
-              : t('installed.batchImport.helpEnabled')}
-        </p>
-
-        {rows.length === 0 ? (
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label={t('installed.batchImport.ariaBrowse')}
-            onClick={pickFiles}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                void pickFiles();
-              }
-            }}
-            className={`flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-10 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
-              dragActive
-                ? 'border-accent bg-accent/10'
-                : 'cursor-pointer border-border bg-bg-tertiary/40 hover:border-hl/20 hover:bg-bg-tertiary'
-            }`}
-          >
-            <UploadCloud className="h-7 w-7 text-text-secondary" aria-hidden />
-            <span className="text-sm font-medium text-text-primary">
-              <Trans
-                i18nKey="installed.batchImport.dropFilesHere"
-                components={{ code: <code className="font-mono text-accent" /> }}
-              />
-            </span>
-            <span className="text-xs text-text-secondary">{t('installed.import.orClickToBrowse')}</span>
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-text-secondary">
-                {usesSharedName
-                  ? t('installed.batchImport.variantNamesHint')
-                  : t('installed.batchImport.namesHint')}
+    <Modal onClose={close} labelledBy="import-custom-mods-title" size="xl" dismissable={!submitting}
+      panelClassName="max-h-[min(85vh,100%)]">
+      <ModalHeader title={addToGroup ? t('installed.batchImport.addVariantsTitle', { name: addToGroup.modName })
+        : groupAsVariants ? t('installed.batchImport.title') : t('installed.batchImport.separateTitle')}
+        titleId="import-custom-mods-title" subtitle={rows.length ? t('installed.batchImport.fileCount', { count: rows.length }) : undefined}
+        onClose={close} closeLabel={t('common.actions.close')} closeDisabled={submitting} />
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4"
+        onDragEnter={e => { e.preventDefault(); e.stopPropagation(); if (!submitting) setDragActive(true); }}
+        onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = submitting ? 'none' : 'copy'; if (!submitting) setDragActive(true); }}
+        onDragLeave={e => {
+          e.preventDefault(); e.stopPropagation();
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragActive(false);
+        }} onDrop={handleDrop}>
+        <div className="space-y-0.5 text-xs leading-5 text-text-secondary">
+          <p>{addToGroup ? t('installed.batchImport.addVariantsHelp', { name: addToGroup.modName })
+            : groupAsVariants ? importsWaitDisabled ? t('installed.batchImport.help') : t('installed.batchImport.helpEnabled')
+              : importsWaitDisabled ? t('installed.batchImport.separateHelp') : t('installed.batchImport.separateHelpEnabled')}</p>
+          {!addToGroup && rows.length > 0 && <p>{usesSharedName ? t('installed.batchImport.variantNamesHint') : t('installed.batchImport.namesHint')}</p>}
+          {sharedLocked && groupAsVariants && <p>{t('installed.batchImport.retrySharedLocked')}</p>}
+        </div>
+        {rows.length === 0 ? dropArea(false) : <>
+          {!addToGroup && <div className="min-w-0 rounded-lg border border-border bg-bg-tertiary/40 p-3">
+            {showGroupingToggle && <button type="button"
+              className="flex w-full items-start gap-2.5 text-left disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={t('installed.batchImport.importAsVariants')} aria-pressed={groupAsVariants}
+              onClick={() => changeImportMode(!groupAsVariants)} disabled={sharedDisabled || pendingImages > 0}>
+              <CheckboxMark checked={groupAsVariants} className="mt-0.5" />
+              <Layers3 className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" aria-hidden />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-text-primary">{t('installed.batchImport.importAsVariants')}</span>
+                <span className="mt-0.5 block text-xs leading-5 text-text-secondary">{t('installed.batchImport.importAsVariantsHelp')}</span>
               </span>
-              <div className="flex items-center gap-2">
-                <Button variant="secondary" size="sm" icon={Plus} onClick={pickFiles} disabled={submitting}>
-                  {t('installed.batchImport.addMore')}
-                </Button>
-                {rows.length > 1 && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={EyeOff}
-                    onClick={() => setRows((prev) => prev.map((row) => ({ ...row, nsfw: !allNsfw })))}
-                    disabled={submitting}
-                  >
-                    {allNsfw ? t('installed.batchImport.clearAllNsfw') : t('installed.batchImport.markAllNsfw')}
-                  </Button>
-                )}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={clearRows}
-                  disabled={submitting}
-                >
-                  {t('installed.batchImport.clearAll')}
-                </Button>
+            </button>}
+            {groupAsVariants && <div className={`min-w-0 space-y-3 ${showGroupingToggle ? 'mt-3 border-t border-border pt-3' : ''}`}>
+              <div>
+                <span id={groupNameId} className="mb-1 block text-xs font-medium text-text-secondary">{t('installed.batchImport.variantGroupName')}</span>
+                <div className="flex items-center gap-2">
+                  <Input inputSize="sm" value={sharedName} onChange={e => setVariantGroupName(e.target.value)}
+                    aria-labelledby={groupNameId} placeholder={t('installed.batchImport.variantGroupNamePlaceholder')}
+                    disabled={sharedDisabled} aria-invalid={nameMissing || undefined}
+                    className={`min-w-0 flex-1 ${nameMissing ? 'ring-1 ring-state-danger/60' : ''}`} />
+                  {nsfwButton(groupNsfw, () => setGroupNsfw(!groupNsfw))}
+                </div>
               </div>
-            </div>
-
-            {!addToGroup && (rows.length > 1 || groupAsVariants) && (
-              <div className="rounded-lg border border-border bg-bg-tertiary/40 p-3">
-                <button
-                  type="button"
-                  className="peer flex w-full items-start gap-2.5 text-left disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-pressed={groupAsVariants}
-                  onClick={toggleVariantImport}
-                  disabled={submitting || (!!variantGroupId && groupAsVariants)}
-                >
-                  <CheckboxMark checked={groupAsVariants} className="mt-0.5" />
-                  <Layers3 className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" aria-hidden />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium text-text-primary">
-                      {t('installed.batchImport.importAsVariants')}
-                    </span>
-                    <span className="mt-0.5 block text-xs leading-5 text-text-secondary">
-                      {t('installed.batchImport.importAsVariantsHelp')}
-                    </span>
-                  </span>
-                </button>
-                {groupAsVariants && (
-                  <label className="mt-3 block border-t border-border pt-3">
-                    <span className="mb-1 block text-xs font-medium text-text-secondary">
-                      {t('installed.batchImport.variantGroupName')}
-                    </span>
-                    <Input
-                      inputSize="sm"
-                      value={variantGroupName}
-                      onChange={(e) => setVariantGroupName(e.target.value)}
-                      placeholder={t('installed.batchImport.variantGroupNamePlaceholder')}
-                      disabled={submitting}
-                      aria-invalid={!variantGroupName.trim() || undefined}
-                      className={!variantGroupName.trim() ? 'ring-1 ring-state-danger/60' : ''}
-                    />
-                  </label>
-                )}
-              </div>
-            )}
-
-            <ul className="space-y-1.5">
-              {rows.map((row) => {
-                const nameMissing = !usesSharedName && row.name.trim().length === 0;
-                return (
-                <li
-                  key={row.path}
-                  className={`flex items-center gap-2.5 rounded-lg border p-2 transition-colors ${
-                    row.status === 'failed'
-                      ? 'border-state-danger/40 bg-red-500/5'
-                      : 'border-border bg-bg-tertiary/40'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => void pickThumbnail(row)}
-                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; }}
-                    onDrop={(e) => void dropThumbnail(row, e)}
-                    disabled={submitting}
-                    title={t('installed.batchImport.thumbnailHint')}
-                    aria-label={t('installed.batchImport.thumbnailHint')}
-                    className="flex aspect-video w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-bg-tertiary text-text-secondary transition-colors hover:border-accent/50 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-                  >
-                    {row.thumbnailDataUrl ? (
-                      <img
-                        src={row.thumbnailDataUrl}
-                        alt={t('installed.imageField.thumbnailPreview')}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <ImagePlus className="h-4 w-4" aria-hidden />
-                    )}
+              <ModImageGallery images={galleryImages} mainImageIndex={0} disabled={sharedDisabled}
+                loading={pendingImages > 0} onImageClick={index => setGalleryImages(images => [images[index], ...images.filter((_, current) => current !== index)])}
+                onRemove={index => setGalleryImages(images => images.filter((_, current) => current !== index))}
+                onAdd={() => void pickThumbnail()} onDrop={event => void dropThumbnail(event)} />
+              <div className="flex flex-wrap items-center gap-1.5">
+                {tagChips.map(tag => <span key={tag.key} className={`${MOD_TAG_CHIP_CLASS} ${MOD_TAG_SURFACE_CLASS} gap-1.5`}>
+                  <ChipText>{tag.label}</ChipText>
+                  <button type="button" disabled={sharedDisabled} onClick={tag.remove} aria-label={t('installed.batchImport.removeTag', { name: tag.label })}
+                    className="shrink-0 cursor-pointer text-text-secondary hover:text-state-danger disabled:cursor-not-allowed">
+                    <X className="h-3 w-3" aria-hidden />
                   </button>
-
-                  <div className="min-w-0 flex-1">
-                    {/* Add-variants mode has no name to edit: the group owns it,
-                        and the file name below is what tells the rows apart. */}
-                    {!usesSharedName && (
-                      <Input
-                        inputSize="sm"
-                        value={row.name}
-                        onChange={(e) => patchRow(row.path, { name: e.target.value, nameTouched: true })}
-                        placeholder={t('installed.import.modNamePlaceholder')}
-                        disabled={submitting}
-                        aria-label={t('installed.batchImport.nameFor', { file: fileNameOf(row.path) })}
-                        aria-invalid={nameMissing || undefined}
-                        className={nameMissing ? 'ring-1 ring-state-danger/60' : ''}
-                      />
-                    )}
-                    {usesSharedName && (
-                      <Input
-                        inputSize="sm"
-                        value={variantLabelOf(row)}
-                        onChange={(e) =>
-                          patchRow(row.path, { variantLabel: e.target.value, labelTouched: true })
-                        }
-                        placeholder={deriveVariantLabel(row.path)}
-                        disabled={submitting}
-                        aria-label={t('installed.batchImport.variantNameFor', {
-                          file: fileNameOf(row.path),
-                        })}
-                      />
-                    )}
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <span className="truncate font-mono text-2xs text-text-secondary" title={row.path}>
-                        {fileNameOf(row.path)}
-                      </span>
-                      {nameMissing && (
-                        <span className="text-2xs text-state-danger">
-                          {t('installed.batchImport.nameRequired')}
-                        </span>
-                      )}
-                      {row.recognized && (
-                        <Tag tone="success" icon={Fingerprint}>
-                          {t('installed.import.recognizedFromImprint')}
-                        </Tag>
-                      )}
-                      {row.recognized?.gamebananaId && (
-                        <Tag tone="neutral">
-                          {t('installed.import.recognizedGameBananaId', { id: row.recognized.gamebananaId })}
-                        </Tag>
-                      )}
-                      {row.status === 'done' && row.imported > 1 && (
-                        <Tag tone="neutral">{t('installed.batchImport.importedCount', { count: row.imported })}</Tag>
-                      )}
-                      {row.error && (
-                        <span className="text-2xs text-state-danger">{row.error}</span>
-                      )}
-                    </div>
+                </span>)}
+                <MenuRoot kind="dropdown">
+                  <MenuTrigger asChild>{tagChips.length > 0
+                    ? <button type="button" disabled={sharedDisabled} aria-label={t('installed.batchImport.addTag')} title={t('installed.batchImport.addTag')}
+                        className={`${MOD_TAG_CHIP_CLASS} ${MOD_TAG_SURFACE_CLASS} cursor-pointer transition-colors hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50`}>
+                        <Plus className="h-3 w-3" aria-hidden />
+                      </button>
+                    : <Button variant="secondary" size="sm" icon={Plus} disabled={sharedDisabled}>{t('installed.batchImport.addTag')}</Button>}
+                  </MenuTrigger>
+                  <MenuContent align="start" className="max-h-72 overflow-y-auto">
+                    {customTags.some(tag => !customTagIds.includes(tag.id)) && <>
+                      <MenuLabel>{t('installed.tag.custom')}</MenuLabel>
+                      {sortInstalledTags(customTags.map(tag => ({ ...tag, key: `custom:${tag.id}` })), tagOrder).filter(tag => !customTagIds.includes(tag.id)).map(tag => (
+                        <MenuItem key={tag.id} onSelect={() => setCustomTagIds(ids => [...ids, tag.id])}>{tag.name}</MenuItem>
+                      ))}
+                    </>}
+                    {baseChoices.some(tag => !selected.base.includes(tag.label)) && <MenuLabel>{t('installed.tag.base')}</MenuLabel>}
+                    {baseChoices.filter(tag => !selected.base.includes(tag.label)).map(tag => <MenuItem key={tag.key} onSelect={() => setTag('base', tag.label, true)}>{gameBananaCategoryLabel(tag.label, t)}</MenuItem>)}
+                    <MenuLabel>{t('installed.tag.hero')}</MenuLabel>
+                    {[...new Set([...(heroNames.length ? heroNames : HERO_NAMES_SORTED), ...detected.heroes])].sort((a, b) => a.localeCompare(b))
+                      .filter(hero => !selected.heroes.includes(hero)).map(hero => <MenuItem key={hero} onSelect={() => setTag('heroes', hero, true)}><HeroTagLabel heroName={hero} /></MenuItem>)}
+                  </MenuContent>
+                </MenuRoot>
+              </div>
+            </div>}
+          </div>}
+          <ul className="space-y-1.5">
+            {rows.map(row => {
+              const heroes = [...new Set(row.preparation?.members.flatMap(member => member.heroes) ?? [])];
+              const variantName = row.labelFocused && !row.labelTouched
+                ? defaultVariantLabel(row) || deriveVariantLabel(row.path) : variantLabelOf(row);
+              return <li key={row.id} className={`flex items-center gap-2.5 rounded-sm border p-2 ${row.status === 'failed' || row.inspection === 'failed'
+                ? 'border-state-danger/40 bg-state-danger/5' : row.inspection === 'checking'
+                  ? 'border-state-warning/40 bg-state-warning/5' : 'border-border bg-bg-tertiary/40'}`}>
+                {!usesSharedName && <button type="button" disabled={submitting || pendingImages > 0}
+                  aria-label={t('installed.batchImport.thumbnailFor', { file: fileNameOf(row.path) })}
+                  title={row.thumbnailDataUrl ? t('installed.batchImport.removeImage') : t('installed.batchImport.thumbnailHint')}
+                  onClick={() => row.thumbnailDataUrl ? patchRow(row.path, { thumbnailDataUrl: '' }) : void pickThumbnail(row)}
+                  onDragOver={event => { event.preventDefault(); event.stopPropagation(); }}
+                  onDrop={event => void dropThumbnail(event, row)}
+                  className="flex aspect-video w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-sm border border-dashed border-border bg-bg-tertiary text-text-secondary hover:border-accent/50 hover:text-text-primary focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">
+                  {row.thumbnailDataUrl ? <RevealImage src={row.thumbnailDataUrl} alt={t('installed.imageField.thumbnailPreview')} className="h-full w-full object-contain" />
+                    : <ImagePlus className="h-5 w-5" aria-hidden />}
+                </button>}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Input inputSize="sm" value={usesSharedName ? variantName : row.name}
+                      onFocus={e => {
+                        if (!usesSharedName || row.labelFocused || row.labelTouched) return;
+                        patchRow(row.path, { labelFocused: true });
+                        e.currentTarget.value = defaultVariantLabel(row) || deriveVariantLabel(row.path);
+                        e.currentTarget.select();
+                      }}
+                      onChange={e => patchRow(row.path, usesSharedName ? { variantLabel: e.target.value, labelTouched: true }
+                        : { name: e.target.value, nameTouched: true })}
+                      placeholder={usesSharedName ? deriveVariantLabel(row.path) : deriveModNameFromPath(row.path)}
+                      disabled={submitting} aria-label={usesSharedName ? t('installed.batchImport.variantNameFor', { file: fileNameOf(row.path) }) : t('installed.batchImport.nameFor', { file: fileNameOf(row.path) })}
+                      aria-invalid={!usesSharedName && !row.name.trim() || undefined}
+                      className="min-w-0 flex-1" />
+                    {statusIcon(row)}
+                    {!usesSharedName && nsfwButton(row.nsfw, () => patchRow(row.path, { nsfw: !row.nsfw }), submitting)}
+                    <IconButton icon={X} size="sm" label={t('installed.batchImport.removeFile', { file: fileNameOf(row.path) })} onClick={() => removeRow(row.path)} disabled={submitting} />
                   </div>
-
-                  {statusIcon(row)}
-
-                  <button
-                    type="button"
-                    onClick={() => patchRow(row.path, { nsfw: !row.nsfw })}
-                    disabled={submitting}
-                    aria-pressed={row.nsfw}
-                    title={t('installed.imageField.nsfw')}
-                    className={`flex-shrink-0 rounded-md border px-2 py-1 text-2xs font-medium uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${
-                      row.nsfw
-                        ? 'border-accent/50 bg-accent/15 text-accent'
-                        : 'border-border text-text-secondary hover:border-hl/20 hover:text-text-primary'
-                    }`}
-                  >
-                    {t('installed.imageField.nsfw')}
-                  </button>
-
-                  <IconButton
-                    icon={X}
-                    size="sm"
-                    label={t('installed.batchImport.removeFile', { file: fileNameOf(row.path) })}
-                    onClick={() => removeRow(row.path)}
-                    disabled={submitting}
-                  />
-                </li>
-                );
-              })}
-            </ul>
-
-            <div
-              className={`rounded-lg border border-dashed px-3 py-2.5 text-center text-xs transition-colors ${
-                dragActive ? 'border-accent bg-accent/10 text-text-primary' : 'border-border text-text-secondary'
-              }`}
-            >
-              {t('installed.batchImport.dropMoreHere')}
-            </div>
-          </>
-        )}
-
-        {error && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-sm text-state-danger">
-            {error}
-          </div>
-        )}
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-2xs text-text-secondary">
+                    {heroes.map(hero => <span key={hero} title={hero}><HeroTagLabel heroName={hero} iconClassName="h-3 w-3" iconOnly /></span>)}
+                    <span className="min-w-0 truncate font-mono" title={row.path}>{fileNameOf(row.path)}</span>
+                    {row.preparation && <span className="shrink-0">({formatBytes(row.preparation.size)})</span>}
+                    {row.inspection === 'checking' && <span role="status">{t('installed.batchImport.checking')}</span>}
+                    {row.recognized && <Tag tone="success" icon={Fingerprint}>{t('installed.import.recognizedFromImprint')}</Tag>}
+                    {row.recognized?.gamebananaId && <Tag tone="neutral">{t('installed.import.recognizedGameBananaId', { id: row.recognized.gamebananaId })}</Tag>}
+                    {(row.inspectionError || row.error) && <span role="alert" className="text-state-danger">{row.inspectionError || row.error}</span>}
+                  </div>
+                </div>
+              </li>;
+            })}
+          </ul>
+          {dropArea(true)}
+        </>}
+        {error && <div role="alert" className="rounded-sm border border-state-danger/30 bg-state-danger/10 p-2 text-sm text-state-danger">{error}</div>}
       </div>
-
       <ModalFooter>
-        {unnamedCount > 0 && (
-          <span className="mr-auto text-2xs text-state-danger">
-            {t('installed.batchImport.unnamedBlocked', { count: unnamedCount })}
-          </span>
-        )}
-        <Button
-          variant="primary"
-          icon={FilePlus}
-          onClick={handleSubmit}
-          disabled={!canSubmit}
-          isLoading={submitting}
-        >
-          {addToGroup
-            ? t('installed.batchImport.addVariantCount', { count: rows.length })
-            : groupAsVariants
-              ? t('installed.batchImport.importVariantCount', { count: rows.length })
-            : rows.length > 1
-              ? t('installed.batchImport.importCount', { count: rows.length })
-              : t('profiles.actions.import')}
+        {rows.length > 0 && nameMissing && <span className="mr-auto text-2xs text-state-danger">{t('installed.batchImport.nameRequired')}</span>}
+        {rows.length > 0 && <Button variant="secondary" onClick={clearRows} disabled={submitting}>{t('installed.batchImport.clearAll')}</Button>}
+        <Button variant="primary" icon={FilePlus} onClick={handleSubmit} disabled={!canSubmit} isLoading={submitting}>
+          {addToGroup ? t('installed.batchImport.addVariantCount', { count: rows.length })
+            : t('profiles.actions.import')}
         </Button>
       </ModalFooter>
     </Modal>

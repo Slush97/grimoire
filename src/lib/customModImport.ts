@@ -9,6 +9,14 @@ export const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
 export const VPK_IMPORT_EXTS = ['vpk', 'zip', '7z', 'rar'];
 export const VPK_IMPORT_RE = /\.(vpk|zip|7z|rar)$/i;
 
+/** Keep local import failures readable without Electron's transport prefixes. */
+export function localImportErrorMessage(reason: unknown): string {
+  return String(reason)
+    .replace(/^(?:Error:\s*)?Error invoking remote method '[^']+':\s*/, '')
+    .replace(/^(?:\w*Error:\s*)+/, '')
+    .trim();
+}
+
 /** Outcome of classifying an external file drop against the supported mod types. */
 export interface DroppedModFiles {
   /** Disk paths of supported files, in the order they were dropped. */
@@ -123,20 +131,6 @@ export function imprintVariantLabel(
     return title;
   }
   return member?.variantLabel?.trim() || undefined;
-}
-
-/**
- * Name offered for a new variant group in the import dialog. Empty when the
- * rows' imprints name different mods: borrowing one member's name would title
- * the whole card after a single file inside it.
- */
-export function suggestVariantGroupName(
-  rows: readonly { name: string; imprintTitle?: string }[],
-): string {
-  const titles = new Set(
-    rows.map((row) => row.imprintTitle?.trim().toLowerCase()).filter((title) => !!title),
-  );
-  return titles.size > 1 ? '' : (rows[0]?.name.trim() ?? '');
 }
 
 /**

@@ -18,6 +18,25 @@ function member(over: Partial<LocalVariantGroupMember> & { id: string }): LocalV
 const mint = () => 'minted-uuid';
 
 describe('planLocalVariantGroup', () => {
+  it('rejects different downloaded submissions, including existing destination members', () => {
+    const all = [
+      member({ id: 'gb', gameBananaId: 42, localImport: false, localGroupId: 'g' }),
+      member({ id: 'other', gameBananaId: 43, localImport: false }),
+      member({ id: 'local', localImport: true, gameBananaId: 99 }),
+    ];
+    expect(() => planLocalVariantGroup(all, ['gb', 'other', 'local'], { mode: 'mint' }, mint)).toThrow('different GameBanana');
+    expect(() => planLocalVariantGroup(all, ['other', 'local'], { mode: 'join', groupId: 'g' }, mint)).toThrow('different GameBanana');
+    const crossSection = [all[0], { ...all[1], gameBananaId: 42, sourceSection: 'Sound' }, all[2]];
+    expect(() => planLocalVariantGroup(crossSection, ['gb', 'other', 'local'], { mode: 'mint' }, mint)).toThrow('different GameBanana');
+    expect(() => planLocalVariantGroup(all, ['gb', 'local'], { mode: 'mint' }, mint)).not.toThrow();
+    expect(() => planLocalVariantGroup(all, ['gb'], { mode: 'clear' }, mint)).not.toThrow();
+  });
+
+  it('allows Add variant to seed one submission before its local files are imported', () => {
+    const all = [member({ id: 'a', gameBananaId: 42 }), member({ id: 'b', gameBananaId: 42 })];
+    expect(() => planLocalVariantGroup(all, ['a', 'b'], { mode: 'mint' }, mint)).not.toThrow();
+    expect(() => planLocalVariantGroup(all, ['a'], { mode: 'mint' }, mint)).not.toThrow();
+  });
   it('mints a group and unifies the name on the first mod', () => {
     const all = [member({ id: 'a', name: 'Red Geist' }), member({ id: 'b', name: 'Blue Geist' })];
     const plan = planLocalVariantGroup(all, ['a', 'b'], { mode: 'mint' }, mint);
@@ -41,11 +60,14 @@ describe('planLocalVariantGroup', () => {
     ]);
   });
 
-  it('rejects a GameBanana mod', () => {
-    const all = [member({ id: 'a' }), member({ id: 'gb', name: 'Store Skin', gameBananaId: 42 })];
-    expect(() => planLocalVariantGroup(all, ['a', 'gb'], { mode: 'mint' }, mint)).toThrow(
-      /Only local mods/
-    );
+  it('groups a normal mod with local files without copying its provenance to them', () => {
+    const all = [member({ id: 'local' }), member({ id: 'gb', name: 'Store Skin', gameBananaId: 42 })];
+    const plan = planLocalVariantGroup(all, ['local', 'gb'], { mode: 'mint' }, mint);
+    expect(plan.writes).toEqual([
+      { id: 'local', metaKey: 'local.vpk', localGroupId: 'minted-uuid', localImport: true, modName: 'Store Skin' },
+      { id: 'gb', metaKey: 'gb.vpk', localGroupId: 'minted-uuid', localImport: false, modName: undefined },
+    ]);
+    expect(all[0].gameBananaId).toBeUndefined();
   });
 
   it('keeps an adopted GameBanana identity editable inside an explicit local group', () => {

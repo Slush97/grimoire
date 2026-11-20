@@ -37,6 +37,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     lockerUnappliedProfileId: null,
     confirmProfileUpdate: true,
     promptOptionalRequirements: false,
+    cycleTagFilters: false,
     experimentalStats: false,
     experimentalCrosshair: false,
     experimentalSocial: false,

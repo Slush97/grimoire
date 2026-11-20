@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, Eye, ThumbsUp, Volume2, VolumeX, AlertTriangle, Clock, Power, Play } from 'lucide-react';
+import { Download, Eye, ThumbsUp, Volume2, VolumeX, AlertTriangle, Power, Play } from 'lucide-react';
 import type { GameBananaMod } from '../../types/gamebanana';
 import { getModThumbnail, getSoundPreviewUrl, formatDate, isModOutdated } from '../../types/gamebanana';
 import ModThumbnail from '../ModThumbnail';
@@ -21,7 +21,6 @@ import {
   getReadableCardTargetWidth,
   getReadableDensity,
   type BrowseCardDesign,
-  type ViewMode,
 } from './cardGeometry';
 import { BROWSE_READABLE_MAX_VISIBLE_CHIPS, BrowseReadableChipRow } from './cardChips';
 import {
@@ -266,7 +265,6 @@ interface ModCardProps {
   installedDisabled?: boolean;
   downloading: boolean;
   queuePosition?: number;
-  viewMode: ViewMode;
   cardDesign: BrowseCardDesign;
   cardSize: number;
   cardWidth?: number;
@@ -294,29 +292,18 @@ interface ModCardProps {
 
 /** Placeholder with the geometry of the card it stands in for. */
 export function ModCardSkeleton({
-  viewMode,
   cardDesign,
   height,
   index,
 }: {
-  viewMode: ViewMode;
   cardDesign: BrowseCardDesign;
   height?: number;
   index?: number;
 }) {
-  const layout = viewMode === 'list' ? 'browse-list' : cardDesign === 'readable' ? 'browse' : 'browse-classic';
-  return viewMode === 'list' ? (
-    <SkeletonModCard layout={layout} index={index} className="self-start" />
-  ) : (
-    <SkeletonModCard layout={layout} height={height} index={index} />
-  );
+  return <SkeletonModCard layout={cardDesign === 'readable' ? 'browse' : 'browse-classic'} height={height} index={index} />;
 }
 
-// Browse list rows show the thumbnail in a w-32 h-20 box.
-const LIST_THUMB_WIDTH = 128;
-const LIST_THUMB_HEIGHT = 80;
-
-function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntentRef, onPlayingChange, onClick, onQuickDownload, onEnable, priority }: ModCardProps) {
+function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntentRef, onPlayingChange, onClick, onQuickDownload, onEnable, priority }: ModCardProps) {
   const { t } = useTranslation();
   const revealNsfwOnHover = useAppStore((state) => state.settings?.revealNsfwOnHover ?? false);
   const paths = useCategoryStore((state) => state.pathsByModel[categoryModelForSection(section)]);
@@ -324,8 +311,8 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   const taxonomy = getBrowseCardTaxonomy(mod, section, paths, heroNames);
   const thumbnail = getModThumbnail(mod);
   // Classic grid cards are aspect-[3/2], taller than a screenshot.
-  const thumbWidth = viewMode === 'list' ? LIST_THUMB_WIDTH : (cardWidth ?? cardSize);
-  const thumbHeight = viewMode === 'list' ? LIST_THUMB_HEIGHT : (thumbWidth * 2) / 3;
+  const thumbWidth = cardWidth ?? cardSize;
+  const thumbHeight = (thumbWidth * 2) / 3;
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   // At the smallest grid sizes the bottom overlay (title + stats + author) eats
   // most of a classic card, burying the art it's drawn over. Below this width
@@ -333,159 +320,12 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   // Keyed off the real card width so it tracks the card-size slider.
   const minimalChrome =
     cardDesign === 'classic' && typeof cardWidth === 'number' && cardWidth > 0 && cardWidth < 205;
-  const isList = viewMode === 'list';
   const isSoundSection = section === 'Sound';
   const hasAudioPreview = Boolean(audioPreview);
   const inferredHero = taxonomy.heroNames.length === 1 ? taxonomy.heroNames[0] : undefined;
   const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePosX = getHeroFacePosition(inferredHero).x;
   const [audioControlsActive, setAudioControlsActive] = useState(false);
-
-  // List view keeps original layout
-  if (isList) {
-    return (
-      <div
-        onClick={onClick}
-        onKeyDown={(e) => handleCardKeyDown(e, onClick)}
-        onMouseEnter={() => {
-          if (!suppressHoverIntentRef?.current) setAudioControlsActive(true);
-        }}
-        onMouseLeave={() => {
-          if (!isPlaying) setAudioControlsActive(false);
-        }}
-        onFocus={() => setAudioControlsActive(true)}
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPlaying) {
-            setAudioControlsActive(false);
-          }
-        }}
-        role="button"
-        tabIndex={0}
-        aria-label={t('browse.card.openDetails', { name: mod.name })}
-        data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
-        className={`browse-card-hover-surface relative bg-bg-secondary border rounded-xl overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3 ${
-          isPlaying
-            ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
-            : 'border-border hover:border-accent/50'
-        }`}
-      >
-        <div className="relative bg-bg-tertiary w-32 h-20 flex-shrink-0 rounded-lg overflow-hidden">
-          {isSoundSection ? (
-            heroRenderUrl ? (
-              <ImageContextMenu src={heroRenderUrl} alt={inferredHero ?? mod.name}>
-                <RevealImage
-                  src={heroRenderUrl}
-                  alt={inferredHero ?? mod.name}
-                  priority={priority}
-                  className="browse-card-media-zoom w-full h-full object-cover"
-                  style={{ objectPosition: `${heroFacePosX}% 25%` }}
-                />
-              </ImageContextMenu>
-            ) : thumbnail ? (
-              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" width={thumbWidth} height={thumbHeight} priority={priority} />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary flex items-center justify-center">
-                <div className="flex items-center gap-1 px-2 py-1 rounded-full border border-accent/40 bg-accent/10 text-text-primary text-[10px] font-semibold">
-                  <Volume2 className="w-3 h-3" />
-                  {t('browse.card.sound')}
-                </div>
-              </div>
-            )
-          ) : (
-            <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" width={thumbWidth} height={thumbHeight} priority={priority} />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="font-mod-title font-medium truncate flex-1">{mod.name}</h3>
-            {installed && installedDisabled && onEnable ? (
-              <button
-                onClick={(e) => { e.stopPropagation(); onEnable(); }}
-                className="flex-shrink-0 flex items-center gap-1.5 px-2.5 h-7 bg-state-warning/15 hover:bg-state-warning/25 border border-state-warning/40 text-state-warning rounded-full text-xs font-semibold transition-colors cursor-pointer"
-                title={t('browse.actions.enableDisabledTitle')}
-              >
-                <Power className="w-3 h-3" />
-                {t('browse.card.enable')}
-              </button>
-            ) : installed ? (
-              <Tag tone="success" variant="overlay" title={t('browse.card.installed')} className="flex-shrink-0">
-                <span aria-hidden>✓</span>
-                {t('browse.card.installed')}
-              </Tag>
-            ) : downloading ? (
-              <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
-                <BrowseDownloadSpinner className="text-accent" />
-              </span>
-            ) : (
-              <button
-                onClick={(e) => { e.stopPropagation(); onQuickDownload(e.currentTarget); }}
-                className="flex-shrink-0 flex items-center justify-center w-7 h-7 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-full shadow-lg transition-colors cursor-pointer"
-                title={t('browse.card.install')}
-              >
-                <Download className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-          {taxonomy.chips.length > 0 && (
-            <div className="mt-1">
-              <BrowseReadableChipRow chips={taxonomy.chips} availableWidth={Math.max(80, thumbWidth * 2)} />
-            </div>
-          )}
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-text-secondary">
-            {taxonomy.heroNames.map(hero => <span key={hero} title={hero}><HeroTagLabel heroName={hero} iconClassName="h-5 w-5" iconOnly /></span>)}
-            <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={t('browse.card.likes', { count: mod.likeCount ?? 0 })} />
-            <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={t('browse.card.views', { count: mod.viewCount ?? 0 })} />
-          </div>
-          {mod.submitter && <p className="text-text-secondary mt-1 truncate text-xs">{t('browse.card.byAuthor', { name: mod.submitter.name })}</p>}
-          {mod.dateModified > 0 && (
-            <IconText
-              icon={isModOutdated(mod.dateModified) ? AlertTriangle : Clock}
-              className={`mt-1 max-w-full text-xs ${isModOutdated(mod.dateModified) ? 'text-state-warning' : 'text-text-secondary'}`}
-              iconClassName="browse-meta-icon"
-            >
-              <span className="truncate">{isModOutdated(mod.dateModified) ? t('browse.card.outdatedPrefix') : ''}{formatDate(mod.dateModified)}</span>
-            </IconText>
-          )}
-        </div>
-
-        {/* Right-side audio cluster for sound mods — fills the empty space on wide rows */}
-        {isSoundSection && hasAudioPreview && (
-          <div
-            className="flex-shrink-0 w-72 hidden md:flex items-center gap-3 bg-bg-tertiary/50 rounded-full border border-border px-3 py-1.5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex-1 min-w-0">
-              {audioControlsActive ? (
-                <AudioPreviewPlayer src={audioPreview!} compact variant="inline" volume={volume} onPlayingChange={onPlayingChange} />
-              ) : (
-                <div className="flex items-center gap-3 text-text-secondary">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/50 bg-accent/25 text-text-primary">
-                    <Play className="h-4 w-4 ml-0.5 fill-current" />
-                  </span>
-                  <span className="h-1.5 min-w-0 flex-1 rounded-full bg-bg-primary" />
-                  <span className="shrink-0 text-[10px] tabular-nums">0:00</span>
-                </div>
-              )}
-            </div>
-            <div className="w-px h-4 bg-border flex-shrink-0" />
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <Volume2 className="w-3.5 h-3.5 text-text-secondary" />
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={Math.round(volume * 100)}
-                onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
-                className="w-14 h-1 accent-accent cursor-pointer"
-                aria-label={t('browse.card.volume')}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   // Grid: overlay card. Image fills card, info overlaid at bottom
   if (cardDesign === 'readable') {
@@ -497,7 +337,6 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           installedDisabled={installedDisabled}
           downloading={downloading}
           queuePosition={queuePosition}
-          viewMode={viewMode}
           cardDesign={cardDesign}
           cardSize={cardSize}
           cardWidth={cardWidth}
@@ -844,7 +683,6 @@ export const MemoizedModCard = React.memo(ModCard, (prev, next) => (
   prev.installedDisabled === next.installedDisabled &&
   prev.downloading === next.downloading &&
   prev.queuePosition === next.queuePosition &&
-  prev.viewMode === next.viewMode &&
   prev.cardDesign === next.cardDesign &&
   prev.cardSize === next.cardSize &&
   prev.cardWidth === next.cardWidth &&

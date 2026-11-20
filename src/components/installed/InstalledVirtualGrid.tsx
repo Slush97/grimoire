@@ -176,9 +176,9 @@ export const InstalledVirtualGrid = memo(function InstalledVirtualGrid<T extends
       const measure = () => {
         const style = getComputedStyle(grid);
         const previous = geometryRef.current;
-        const columns = installedColumnCount(style.gridTemplateColumns, viewMode);
+        const columns = installedColumnCount(style.gridTemplateColumns);
         const columnGap = parseFloat(style.columnGap) || (viewMode === 'compact' ? 12 : 16);
-        const rowGap = viewMode === 'list' ? 6 : parseFloat(style.rowGap) || columnGap;
+        const rowGap = parseFloat(style.rowGap) || columnGap;
         const width = Math.max(0, (grid.clientWidth - columnGap * (columns - 1)) / columns);
         // A hidden or not-yet-laid-out grid has no usable card geometry.
         // ResizeObserver will retry when its container acquires a width.

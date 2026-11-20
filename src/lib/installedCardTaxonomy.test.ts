@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildCategoryPaths } from './categoryPaths';
-import { getInstalledCardTaxonomy, getInstalledGroupTaxonomy, installedTaxonomyTags, type InstalledTaxonomyContext } from './installedCardTaxonomy';
+import { defaultInstalledTagOrder, sortInstalledTags, getInstalledCardTaxonomy, getInstalledGroupTaxonomy, getInstalledDefaultTaxonomy, installedTagChangesForVariants, installedTaxonomyTags, installedBaseTagOptions, type InstalledTaxonomyContext } from './installedCardTaxonomy';
 
 const context: InstalledTaxonomyContext = {
   heroNames: ['Solomon', 'Haze', 'Wraith'],
@@ -16,6 +16,58 @@ const context: InstalledTaxonomyContext = {
 };
 
 describe('getInstalledCardTaxonomy', () => {
+  it('retains detected heroes and local Base defaults after selections change or clear', () => {
+    const local = { globalType: 'maps' as const, lockerHeroes: [], tagOverrides: { base: ['Maps'], heroes: [] },
+      detectedTags: { heroes: ['Haze'], globalType: 'soul-container' as const } };
+    const defaults = getInstalledDefaultTaxonomy(local, [local], context);
+    expect(defaults.tags).toEqual([]);
+    expect(defaults.heroNames).toEqual(['Haze']);
+    expect(getInstalledDefaultTaxonomy({ ...local, tagOverrides: { base: [], heroes: [] } }, [local], context)).toEqual(defaults);
+    expect(local.globalType).toBe('maps');
+    expect(local.tagOverrides.base).toEqual(['Maps']);
+  });
+
+  it('changes grouped tags without copying unrelated Base tags or heroes between variants', () => {
+    const one = { categoryName: 'Skins', lockerHeroes: ['Haze'], tagOverrides: { base: ['Skins', 'HUD'] } };
+    const two = { categoryName: 'Skins', lockerHeroes: ['Wraith'], tagOverrides: { base: ['Skins', 'Effects'] } };
+    const plan = installedTagChangesForVariants(one, [one, two], { base: ['Skins', 'Effects'], heroes: ['Wraith'] }, context);
+    expect(plan[0]).toEqual({ mod: one, tags: { base: ['Skins'], heroes: [] } });
+    expect(plan[1].tags?.base).toEqual(expect.arrayContaining(['Skins', 'Effects']));
+    expect(plan[1].tags?.base).toHaveLength(2);
+    expect(plan[1].tags?.heroes).toEqual(['Wraith']);
+    expect(installedTagChangesForVariants(one, [one, two], { base: [], heroes: [] }, context).map(change => change.tags))
+      .toEqual([{ base: [], heroes: [] }, { base: [], heroes: [] }]);
+    expect(installedTagChangesForVariants(one, [one, two], null, context)).toEqual([{ mod: one, tags: null }, { mod: two, tags: null }]);
+    expect(one.tagOverrides.base).toEqual(['Skins', 'HUD']);
+    expect(two.tagOverrides.base).toEqual(['Skins', 'Effects']);
+  });
+
+  it('keeps original categories available after clearing or replacing Base tags, including section tags', () => {
+    const mod = { gameBananaId: 7, sourceSection: 'Sound', categoryId: 2, lockerHeroes: ['Haze'] };
+    expect(installedTaxonomyTags(getInstalledCardTaxonomy(mod, context), mod.sourceSection)).toEqual(['Abilities', 'Sounds']);
+    const cleared = getInstalledCardTaxonomy({ ...mod, tagOverrides: { base: [], heroes: [] } }, context);
+    expect(installedTaxonomyTags(cleared, mod.sourceSection)).toEqual([]);
+    expect(cleared.heroNames).toEqual([]);
+    const changed = getInstalledCardTaxonomy({ ...mod, tagOverrides: { base: ['HUD', 'Maps'] } }, context);
+    expect(installedTaxonomyTags(changed, mod.sourceSection)).toEqual(['HUD', 'Maps']);
+    expect(changed.heroNames).toEqual(['Haze']);
+    const clearedMod = { ...mod, tagOverrides: { base: [], heroes: [] } };
+    expect(getInstalledGroupTaxonomy(clearedMod, [clearedMod], context).tags).toEqual([]);
+    expect(installedBaseTagOptions(context, ['Legacy label'])).toEqual(expect.arrayContaining(['Skins', 'Sounds', 'HUD', 'Abilities', 'Faithful/Vanilla+', 'Legacy label']));
+    expect(installedBaseTagOptions(context)).not.toContain('Solomon');
+    const iconTags = installedBaseTagOptions({ pathsByModel: { ModCategory: buildCategoryPaths([{ id: 6, name: 'Icons', itemCount: 1 }]) } });
+    expect(iconTags).toContain('Icons');
+    expect(iconTags).not.toContain('Icon Packs');
+    const selected = { categoryId: 3, tagOverrides: { base: ['Faithful/Vanilla+', 'Skins'] } };
+    expect(getInstalledGroupTaxonomy(selected, [selected], context).tags).toEqual(['Faithful/Vanilla+', 'Skins']);
+  });
+
+  it('defaults custom tags first, retains the category hierarchy, and allows manual priorities to override both', () => {
+    const tags = [{ key: 'tag:skins' }, { key: 'custom:favorites', custom: true }, { key: 'tag:faithful/vanilla+' }];
+    expect(defaultInstalledTagOrder(tags, context.pathsByModel)).toEqual(['custom:favorites', 'tag:faithful/vanilla+', 'tag:skins']);
+    expect(sortInstalledTags(tags, ['tag:skins', 'custom:favorites']).map(tag => tag.key)).toEqual(['tag:skins', 'custom:favorites', 'tag:faithful/vanilla+']);
+    expect(sortInstalledTags(tags, []).map(tag => tag.key)).toEqual(tags.map(tag => tag.key));
+  });
   it('keeps every non-hero ancestor and the corrected leaf with one hero icon', () => {
     expect(getInstalledCardTaxonomy({ gameBananaId: 1, categoryId: 3, categoryName: 'Old leaf name' }, context)).toEqual({
       heroNames: ['Solomon'], categoryLabels: ['Skins', 'Faithful/Vanilla+'], categoryLabel: 'Faithful/Vanilla+', globalType: undefined,
@@ -175,4 +227,12 @@ describe('getInstalledGroupTaxonomy', () => {
     const duplicate = getInstalledGroupTaxonomy(representative, [representative, { categoryName: 'HUD' }]);
     expect(duplicate.tags).toEqual(['HUD']);
   });
+});
+
+it('omits Cursor Base labels from categories, saved choices and available options', () => {
+  const context = { pathsByModel: { ModCategory: buildCategoryPaths([{ id: 1, name: 'Cursors', itemCount: 1 }]) } };
+  expect(installedBaseTagOptions(context, ['Cursor', 'Cursors', 'HUD'])).not.toEqual(expect.arrayContaining(['Cursor']));
+  expect(installedBaseTagOptions(context, ['Cursor', 'Cursors', 'HUD'])).not.toContain('Cursors');
+  const mod = { sourceSection: 'Mod', categoryName: 'Cursors', tagOverrides: { base: ['Cursor', 'HUD'] } };
+  expect(getInstalledGroupTaxonomy(mod, [mod], context).tags).toEqual(['HUD']);
 });

@@ -4,6 +4,7 @@ import type { ModSafetyPrompt, InstalledModSafety } from './modSafety';
 import type { ChooseModUpdateReplacementArgs, ModUpdateState, StartModUpdatesArgs } from './modUpdates';
 import type {
     Mod,
+    ModTagOverrides,
     AppSettings,
     DeleteModEntry,
     ModSwapPlacement,
@@ -336,6 +337,19 @@ export interface SaveDialogOptions {
     filters?: Array<{ name: string; extensions: string[] }>;
 }
 
+export interface PreparedLocalModMember {
+    fileName: string;
+    recognized: PeekImprintResult | null;
+    heroes: string[];
+    baseTags: string[];
+}
+
+export interface PreparedLocalModImport {
+    id: string;
+    size: number;
+    members: PreparedLocalModMember[];
+}
+
 export interface ImportCustomModArgs {
     vpkPath: string;
     name: string;
@@ -344,6 +358,12 @@ export interface ImportCustomModArgs {
     variantLabel?: string;
     thumbnailDataUrl?: string;
     nsfw?: boolean;
+    preparationId?: string;
+    /** Shared artwork is saved once under the resolved local group id. */
+    galleryImages?: string[];
+    tagChanges?: { add: ModTagOverrides; remove: ModTagOverrides };
+    /** Renderer-only assignments applied after the final imported ids arrive. */
+    customTagIds?: string[];
     /** Join this existing local variant group instead of standing alone. Every
      *  VPK this source yields gets the id, so a SINGLE-vpk source imported into
      *  a group joins it rather than collapsing it. Omitted for a normal import,
@@ -404,6 +424,7 @@ export interface ImportCustomModResult {
     ok: boolean;
     /** Mod slots this source produced (an archive can yield several). */
     imported: number;
+    importedModIds?: string[];
     /** Imported disabled; this source contains versions still needing consent. */
     needsReview?: boolean;
     /** Resolved local group id when this source was imported as a variant.
@@ -703,12 +724,14 @@ export interface SearchLocalModsOptions {
      *  null), so this is what actually scopes a local category filter. Without
      *  it the id comparison matches no rows at all. */
     categoryName?: string;
-    /** Hero's category and every descendant. Matched against the mod's
-     *  sub-category id, so it is exact. Mod section only. */
-    heroCategoryIds?: number[];
-    /** Hero name, matched as a whole word in the title. For Sound and Wip,
-     *  which have no hero categories. Ignored when `heroCategoryIds` is set. */
+    /** Matching hero branches and descendants, keyed by section because
+     *  category IDs can collide between their independent trees. */
+    heroCategoryIds?: Record<string, number[]>;
+    /** Hero name, matched in Sound/Wip titles, plus Mod titles when extended
+     *  matching is enabled. Combined with category matches using OR. */
     heroName?: string;
+    /** Include Mod title matches and hero branches outside Skins. */
+    extendedHeroMatching?: boolean;
     sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
     nsfw?: 'all' | 'sfw' | 'nsfw';
     addedWithin?: 'all' | 'today' | 'week' | 'month' | 'custom';
@@ -1004,6 +1027,8 @@ export interface ElectronAPI {
     getAppliedCustomCard: (
         heroName: string
     ) => Promise<{ variant: string; dataUrl: string }[]>;
+    getSoulPreviewThumbnail: (key: string) => Promise<import('./portrait').SoulPreviewThumbnailInfo>;
+    saveSoulPreviewThumbnail: (key: string, capture: import('./portrait').SoulPreviewThumbnailCapture) => Promise<import('./portrait').SoulPreviewThumbnailInfo>;
     getSoulModelInfo: (key: string) => Promise<SoulModelInfo>;
     /** `entry` selects which model entry to export (soul container vs urn);
      *  defaults to the soul-container model when omitted. `animated` keeps a
@@ -1055,6 +1080,7 @@ export interface ElectronAPI {
     exportHeroParticles: (heroName: string, skinSources?: HeroPoseSkinSource[], clips?: string[]) => Promise<HeroParticleBundleInfo>;
     getPreviewCacheSize: () => Promise<{ bytes: number }>;
     clearPreviewCache: () => Promise<{ bytesFreed: number }>;
+    onPreviewCacheCleared: (callback: () => void) => () => void;
     getGameBananaFileServerDiagnostics: () => Promise<GameBananaFileServerDiagnostics>;
     getGameBananaDownloadProxy: () => Promise<GameBananaDownloadProxyConfig>;
     setGameBananaDownloadProxy: (config: Pick<GameBananaDownloadProxyConfig, 'enabled' | 'url'>) => Promise<GameBananaDownloadProxyConfig>;
@@ -1106,24 +1132,25 @@ export interface ElectronAPI {
     getLockerCardThumbnails: () => Promise<LockerCardThumbnail[]>;
     clearLockerOverrides: (scope: LockerClearScope) => Promise<void>;
     setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
+    setModTags: (modId: string, tags: ModTagOverrides | null) => Promise<Mod>;
     setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
-    /** Mark a mod Global (moves it to the citadel/grimoire priority root) or
-     *  clear it. See Mod.priorityMod. Distinct from setModPriority, which sets
-     *  a mod's pakNN slot within citadel/addons. */
-    setModPriorityFolder: (modId: string, priority: boolean) => Promise<Mod>;
     backfillGameBananaFileId: (
       modId: string,
       payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
     ) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
     reorderMods: (orderedIds: string[]) => Promise<Mod[]>;
-    reorderPriorityMods: (orderedIds: string[]) => Promise<Mod[]>;
     applyModToggleBatch: (
         enableIds: string[],
         disableIds: string[]
     ) => Promise<{ mods: Mod[]; failures: string[] }>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
     importCustomMods: (args: ImportCustomModsBatchArgs) => Promise<ImportCustomModsBatchResult>;
+    prepareLocalModImport: (path: string, requestId: string) => Promise<PreparedLocalModImport>;
+    releaseLocalModImport: (requestId: string) => Promise<void>;
+    getLocalModGallery: (groupId: string) => Promise<string[]>;
+    setLocalModGallery: (groupId: string, images: string[]) => Promise<Mod[]>;
+    setModsNsfw: (modIds: string[], nsfw: boolean) => Promise<Mod[]>;
     onImportCustomModsProgress: (
         callback: (progress: ImportCustomModsProgress) => void
     ) => () => void;

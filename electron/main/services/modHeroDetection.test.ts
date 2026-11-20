@@ -31,6 +31,18 @@ beforeEach(() => {
 });
 
 describe('installed hero detection', () => {
+    it('overlays tag selections without changing original categories or detected heroes', () => {
+        const metadata = { gameBananaId: 10, categoryName: 'Skins > Ivy', abilitySounds: null };
+        expect(resolveModClassification(mod, metadata).lockerHeroes).toEqual(['Ivy']);
+        expect(resolveModClassification(mod, { ...metadata, tagOverrides: { base: [], heroes: [] } }))
+            .toMatchObject({ lockerHeroes: [], globalType: undefined, lockerHero: undefined });
+        expect(resolveModClassification(mod, { ...metadata, tagOverrides: { base: ['HUD'], heroes: ['Haze', 'Wraith'] } }))
+            .toMatchObject({ lockerHeroes: ['Haze', 'Wraith'], globalType: 'hud', detectedTags: { heroes: ['Ivy'], globalType: undefined } });
+        expect(resolveModClassification(mod, { ...metadata, tagOverrides: { base: ['HUD'] } }).lockerHeroes).toEqual(['Ivy']);
+        expect(resolveModClassification(mod, metadata).lockerHeroes).toEqual(['Ivy']);
+        expect(metadata.categoryName).toBe('Skins > Ivy');
+    });
+
     it.each(['Sound', 'Wip'])('detects every payload hero before contradictory %s file labels', (sourceSection) => {
         parser.read.mockReturnValue([
             'sounds/vo/atlas/line.vsnd_c',
@@ -178,6 +190,53 @@ describe('shared installed classification', () => {
     });
 });
 
+describe('skins without an assigned hero category', () => {
+    const paths = buildCategoryPaths([{ id: 1, name: 'Skins', itemCount: 0, children: [{ id: 2, name: 'Ivy', itemCount: 0 }] }]);
+    const skin: ModMetadata = { gameBananaId: 7, sourceSection: 'Mod', categoryId: 1, categoryName: 'Skins' };
+
+    it.each([
+        { fileDescription: 'Haze and Ivy variants', sourceFileName: 'Wraith', modName: 'Rem', heroes: ['Haze', 'Ivy'], source: 'description' },
+        { fileDescription: 'Golden outfit', sourceFileName: 'Lady_Geist-gold', modName: 'Rem', heroes: ['Lady Geist'], source: 'file' },
+        { fileDescription: '', sourceFileName: 'gold', modName: 'Haze and Wraith outfits', heroes: ['Haze', 'Wraith'], source: 'name' },
+        { fileDescription: '', sourceFileName: 'gold', modName: 'Generic outfit', heroes: [], source: 'name' },
+    ])('uses $source matching without parsing the payload: $modName', ({ heroes, source, ...labels }) => {
+        parser.read.mockReturnValue(null);
+        const metadata = { ...skin, ...labels };
+        expect(isModHeroDetectionEligible(metadata, paths)).toBe(true);
+        expect(needsModHeroDetection(mod, metadata, paths)).toBe(false);
+        expect(detectModHeroes(mod, metadata, paths)).toMatchObject({ heroes, source });
+        expect(resolveModClassification(mod, metadata, paths).lockerHeroes).toEqual(heroes);
+        expect(parser.read).toHaveBeenCalledTimes(heroes.length ? 0 : 1);
+        expect(parser.localHero).not.toHaveBeenCalled();
+    });
+
+    it('works offline and refreshes cached text matches when the original labels change', () => {
+        const metadata = { ...skin, modName: 'Haze outfit' };
+        const previous = detectModHeroes(mod, metadata);
+        expect(detectModHeroes(mod, { ...metadata, heroDetection: previous })).toBe(previous);
+        expect(detectModHeroes(mod, { ...metadata, heroDetection: previous, fileDescription: 'Ivy variant' }))
+            .toMatchObject({ heroes: ['Ivy'], source: 'description' });
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+
+    it('keeps explicit hero categories and manual assignments ahead of textual matches', () => {
+        const categorized = { ...skin, categoryId: 2, categoryName: 'Ivy', modName: 'Haze outfit' };
+        expect(isModHeroDetectionEligible(categorized, paths)).toBe(false);
+        expect(resolveModClassification(mod, categorized, paths).lockerHeroes).toEqual(['Ivy']);
+        expect(resolveModClassification(mod, { ...skin, modName: 'Haze outfit', lockerHero: 'Wraith', lockerHeroSource: 'manual' }, paths))
+            .toMatchObject({ lockerHero: 'Wraith', lockerHeroes: ['Wraith'] });
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+
+    it('does not reuse text-only results when a mod becomes eligible for payload detection', () => {
+        const previous = detectModHeroes(mod, { ...skin, modName: 'Haze outfit' });
+        parser.read.mockReturnValue(['sounds/vo/wraith/line.vsnd_c']);
+        expect(detectModHeroes(mod, { ...skin, categoryId: undefined, categoryName: 'HUD', heroDetection: previous }))
+            .toMatchObject({ heroes: ['Wraith'], source: 'vpk' });
+        expect(parser.read).toHaveBeenCalledOnce();
+    });
+});
+
 it.each(['Sound', 'Wip'])('keeps existing single-hero consumers compatible with resolved %s tags', (sourceSection) => {
     const metadata: ModMetadata = { sourceSection, fileDescription: 'Haze' };
     const single = resolveModClassification(mod, metadata);
@@ -266,4 +325,70 @@ describe('original file text matching', () => {
         expect(heroesMentionedInFileText(['Remodel Silverhand Hazelnut', 'Fathom Kali Trapper', 'shopkeeper neutral_gremlin']))
             .toEqual([]);
     });
+});
+
+describe('General prop classification', () => {
+    it('keeps mixed local prop packs classified across cached scans', () => {
+        parser.read.mockReturnValue([
+            'materials/models/npc/patron_amber/color.vtex_c',
+            'models/props_gameplay/sinners_sacrifice_vault/sinners_sacrifice.vmdl_c',
+        ]);
+        const result = resolveModClassification(mod, {});
+        expect(result).toMatchObject({ globalType: 'hidden-king', propTypes: ['hidden-king', 'sinner'], lockerHeroes: [] });
+        parser.read.mockClear();
+        const cached = resolveModClassification(mod, { ...result.metadataPatch });
+        expect(cached.propTypes).toEqual(['hidden-king', 'sinner']);
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+    it('leaves breakables in Other and respects explicit classifications', () => {
+        parser.read.mockReturnValue(['models/items/item_crate.vmdl_c']);
+        expect(resolveModClassification(mod, { gameBananaId: 123, categoryName: 'Other/Misc' }))
+            .toMatchObject({ lockerHeroes: [] });
+        expect(resolveModClassification(mod, { gameBananaId: 123, categoryName: 'Boxes' }).globalType).toBeUndefined();
+        expect(resolveModClassification(mod, { globalType: 'hud', globalTypeSource: 'manual' }).globalType).toBe('hud');
+    });
+});
+
+describe('asset-only Other fallback', () => {
+    const linked = { gameBananaId: 999, categoryName: 'Other/Misc' };
+    it('never scans known hero or non-prop General assignments just to look for props', () => {
+        resolveModClassification(mod, { globalType: 'effects', globalTypeSource: 'manual' });
+        resolveModClassification(mod, { ...linked, tagOverrides: { heroes: ['Ivy'] } });
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+    it('caches negative results and refuses category or user-tag lookalikes', () => {
+        const data = { ...linked, categoryName: 'Patrons', tagOverrides: { base: ['Patrons'], heroes: [] } };
+        const result = resolveModClassification(mod, data);
+        expect(result.globalType).toBeUndefined(); expect(result.propTypes).toBeUndefined();
+        expect(result.metadataPatch?.propDetection?.types).toEqual([]);
+        parser.read.mockClear();
+        resolveModClassification(mod, { ...data, ...result.metadataPatch });
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+    it('keeps detected membership through tag removal, but rechecks changed content', () => {
+        parser.read.mockReturnValue(['materials/models/props_gameplay/soul_container/soul_container_color.vtex_c']);
+        const result = resolveModClassification(mod, linked);
+        expect(result.propTypes).toEqual(['soul-container']);
+        const data = { ...linked, ...result.metadataPatch, tagOverrides: { base: [] } };
+        parser.read.mockClear();
+        expect(resolveModClassification(mod, data).propTypes).toEqual(['soul-container']);
+        expect(parser.read).not.toHaveBeenCalled();
+        parser.read.mockReturnValue([]);
+        expect(resolveModClassification({ ...mod, size: mod.size + 1 }, data).propTypes).toBeUndefined();
+        expect(parser.read).toHaveBeenCalledOnce();
+    });
+    it('does not permanently cache an unreadable VPK as having no props', () => {
+        parser.read.mockReturnValue(null);
+        expect(resolveModClassification(mod, linked).metadataPatch?.propDetection).toBeUndefined();
+        parser.read.mockReturnValue(['models/props_gameplay/idol_urn/idol_urn.vmdl_c']);
+        expect(resolveModClassification(mod, linked).propTypes).toEqual(['spirit-urn']);
+    });
+});
+
+it('reclassifies legacy patron detections into both exact slots and discards Boxes evidence', () => {
+    parser.read.mockReturnValue(['models/npc/patron_amber/patron_amber.vmdl_c', 'materials/models/npc/patron_sapphire/color.vtex_c']);
+    const result = resolveModClassification(mod, { globalType: 'patron', globalTypeSource: 'manual',
+        propDetection: { version: 1, size: mod.size, modifiedAt: mod.installedAt, types: ['patron', 'boxes'] } });
+    expect(result.propTypes).toEqual(['hidden-king', 'archmother']);
+    expect(result.metadataPatch?.propDetection?.version).toBe(2);
 });

@@ -75,6 +75,15 @@ export default function PreferencesSection() {
 
           <FilterDivider className="h-px bg-hl/5" />
 
+          <Toggle id="settings-preferences-settings-preferences-cycleTagFilters-toggle"
+            checked={settings?.cycleTagFilters ?? false}
+            onChange={(checked) => update({ cycleTagFilters: checked })}
+            label={t('settings.preferences.cycleTagFilters')}
+            description={t('settings.toggles.cycleTagFilters')}
+          />
+
+          <FilterDivider className="h-px bg-hl/5" />
+
           <Toggle id="settings-preferences-settings-preferences-ignoreOverlap-toggle"
             checked={settings?.ignoreConflictsByDefault ?? false}
             onChange={(checked) => update({ ignoreConflictsByDefault: checked })}

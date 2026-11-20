@@ -3,17 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { installedColumnCount, installedGridOffset, installedPinnedRows, installedRowEstimate } from './installedWindowing';
 
 describe('Installed window geometry', () => {
-  it('uses resolved auto-fill tracks and a single list column', () => {
-    expect(installedColumnCount('240px 240px 240px 240px', 'grid')).toBe(4);
-    expect(installedColumnCount('210.25px 210.25px', 'compact')).toBe(2);
-    expect(installedColumnCount('240px 240px', 'list')).toBe(1);
-    expect(installedColumnCount('none', 'grid')).toBe(1);
+  it('uses resolved auto-fill tracks', () => {
+    expect(installedColumnCount('240px 240px 240px 240px')).toBe(4);
+    expect(installedColumnCount('210.25px 210.25px')).toBe(2);
+    expect(installedColumnCount('none')).toBe(1);
   });
 
-  it('estimates different image widths and retains the existing list row estimate', () => {
+  it('estimates different image widths and compact cards', () => {
     expect(installedRowEstimate(320, 'grid')).toBeGreaterThan(installedRowEstimate(220, 'grid'));
     expect(installedRowEstimate(320, 'compact')).toBeLessThan(installedRowEstimate(320, 'grid'));
-    expect(installedRowEstimate(320, 'list')).toBe(58);
     expect(installedRowEstimate(261, 'grid')).toBeCloseTo(212, 0);
     expect(installedRowEstimate(322, 'grid')).toBe(246);
     expect(installedRowEstimate(261, 'compact')).toBe(194);

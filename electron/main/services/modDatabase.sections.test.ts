@@ -70,6 +70,67 @@ describe('section-aware catalog identity', () => {
     expect(searchMods({ query: 'blue' }).mods.map(mod => mod.section)).toEqual(['Mod']);
   });
 
+  it('combines category and hero-title matches without duplicates or cross-section category leaks', () => {
+    directory();
+    upsertMods([
+      { ...row('Mod', 'Blue outfit'), id: 1, subCategoryId: 42 },
+      { ...row('Mod', 'Haze_blue outfit'), id: 2, subCategoryId: 99 },
+      { ...row('Sound', 'Haze blue audio'), id: 3 },
+      { ...row('Sound', 'Other audio'), id: 4, subCategoryId: 42 },
+      { ...row('Mod', 'Hazelnut blue outfit'), id: 5 },
+      { ...row('Wip', 'Haze blue prototype'), id: 6 },
+      { ...row('Mod', 'Haze blue nested outfit'), id: 7, subCategoryId: 43 },
+    ]);
+    const scope = { heroCategoryIds: { Mod: [42, 43] }, heroName: 'Haze', extendedHeroMatching: true };
+    expect(searchMods({ ...scope, section: 'Mod' }).mods.map(mod => mod.id).sort()).toEqual([1, 2, 7]);
+    for (const query of [undefined, 'blue', 'lue']) {
+      const options = { ...scope, query, sections: ['Mod', 'Sound', 'Wip'], sortBy: 'name' as const };
+      const result = searchMods(options);
+      expect(result.totalCount).toBe(5);
+      expect(result.mods.map(mod => mod.id).sort()).toEqual([1, 2, 3, 6, 7]);
+      const pages = [0, 2, 4].flatMap(offset => searchMods({ ...options, limit: 2, offset }).mods);
+      expect(pages.map(mod => mod.id)).toEqual(result.mods.map(mod => mod.id));
+    }
+  });
+
+  it('matches hero branches in every category and section without including unselected sections', () => {
+    directory();
+    upsertMods([
+      { ...row('Mod', 'Blue outfit'), id: 1, categoryName: 'Skins', subCategoryId: 42 },
+      { ...row('Mod', 'Blue interface'), id: 2, categoryName: 'HUD', subCategoryId: 90 },
+      { ...row('Mod', 'Haze_blue particle effect'), id: 3, categoryName: 'Effects', subCategoryId: 91 },
+      { ...row('Sound', 'Blue voice pack'), id: 4, subCategoryId: 70 },
+      { ...row('Sound', 'Other blue voice pack'), id: 5, subCategoryId: 42 },
+      { ...row('Wip', 'Haze blue prototype'), id: 6, subCategoryId: 70 },
+      { ...row('Sound', 'Blue root-category audio'), id: 7, categoryId: 70 },
+    ]);
+    for (const query of [undefined, 'blue', 'lue']) {
+      const options = { query, sections: ['Mod', 'Sound'], categoryId: 1, categoryName: 'Skins',
+        heroName: 'Haze', extendedHeroMatching: true, heroCategoryIds: { Mod: [42, 90], Sound: [70], Wip: [70] }, sortBy: 'name' as const };
+      const result = searchMods(options);
+      expect(result.totalCount).toBe(5);
+      expect(result.mods.map(mod => mod.id).sort()).toEqual([1, 2, 3, 4, 7]);
+      const pages = [0, 2, 4].flatMap(offset => searchMods({ ...options, limit: 2, offset }).mods);
+      expect(pages.map(mod => mod.id)).toEqual(result.mods.map(mod => mod.id));
+      expect(searchMods({ ...options, sections: ['Sound'] }).mods.map(mod => mod.id).sort()).toEqual([4, 7]);
+    }
+  });
+
+  it('keeps standard hero matching limited to Mod skin categories while retaining Sound and Wip title matches', () => {
+    directory();
+    upsertMods([
+      { ...row('Mod', 'Blue outfit'), id: 1, subCategoryId: 42 },
+      { ...row('Mod', 'Haze blue HUD'), id: 2, subCategoryId: 70 },
+      { ...row('Sound', 'Haze blue audio'), id: 3 },
+      { ...row('Wip', 'Haze blue prototype'), id: 4 },
+    ]);
+    for (const query of [undefined, 'blue', 'lue']) {
+      const options = { query, sections: ['Mod', 'Sound', 'Wip'], heroCategoryIds: { Mod: [42] }, heroName: 'Haze' };
+      expect(searchMods(options).mods.map(mod => mod.id).sort()).toEqual([1, 3, 4]);
+      expect(searchMods({ ...options, extendedHeroMatching: true }).mods.map(mod => mod.id).sort()).toEqual([1, 2, 3, 4]);
+    }
+  });
+
   it('migrates a legacy cache without losing enrichment, categories or immediate search', () => {
     directory();
     const legacy = new DatabaseSync(join(fixture.directory, 'mods-cache.db'));

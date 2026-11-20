@@ -28,6 +28,10 @@ const merged: MergedModInfo = {
 };
 
 describe('canJoinLocalVariantGroup', () => {
+  it('keeps file origin independent of grouping and embedded GameBanana identity', () => {
+    expect(canJoinLocalVariantGroup(mod({ id: 'remote', gameBananaId: 42, localGroupId: 'mixed', localImport: false }))).toBe(false);
+    expect(canJoinLocalVariantGroup(mod({ id: 'imported', gameBananaId: 42, localImport: true }))).toBe(true);
+  });
   it('accepts ordinary local mods', () => {
     expect(canJoinLocalVariantGroup(mod({ id: 'local' }))).toBe(true);
   });
@@ -54,6 +58,19 @@ describe('canJoinLocalVariantGroup', () => {
 });
 
 describe('localVariantSelectionEligibility', () => {
+  it('allows at most one downloaded submission and requires local attachments', () => {
+    const gb = mod({ id: 'gb', gameBananaId: 42, localImport: false });
+    const other = mod({ id: 'other', gameBananaId: 43, localImport: false });
+    const local = mod({ id: 'local', localImport: true, gameBananaId: 99 });
+    expect(localVariantSelectionEligibility([gb, other])).toEqual({ eligible: false, reason: 'gamebanana' });
+    expect(localVariantSelectionEligibility([gb, other, local])).toEqual({ eligible: false, reason: 'gamebanana' });
+    expect(localVariantSelectionEligibility([gb, { ...gb, id: 'sound', sourceSection: 'Sound' }, local]))
+      .toEqual({ eligible: false, reason: 'gamebanana' });
+    expect(localVariantSelectionEligibility([gb, { ...gb, id: 'variant' }]))
+      .toEqual({ eligible: false, reason: 'local-required' });
+    expect(localVariantSelectionEligibility([gb, { ...gb, id: 'variant' }, local])).toEqual({ eligible: true });
+    expect(localVariantSelectionEligibility([local, { ...local, id: 'local2', gameBananaId: 100 }])).toEqual({ eligible: true });
+  });
   it('requires at least two selected mods', () => {
     expect(localVariantSelectionEligibility([])).toEqual({
       eligible: false,
@@ -89,13 +106,13 @@ describe('localVariantSelectionEligibility', () => {
     ).toEqual({ eligible: false, reason: 'merged' });
   });
 
-  it('rejects a selection containing a GameBanana mod', () => {
+  it('allows a GameBanana mod and a local mod to group', () => {
     expect(
       localVariantSelectionEligibility([
         mod({ id: 'local' }),
         mod({ id: 'remote', gameBananaId: 42 }),
       ])
-    ).toEqual({ eligible: false, reason: 'gamebanana' });
+    ).toEqual({ eligible: true });
   });
 
   it('rejects mixed Global priority-folder placement like the main-process planner', () => {

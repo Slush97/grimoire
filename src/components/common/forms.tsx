@@ -129,6 +129,7 @@ export interface DropdownSelectOption {
 }
 
 export interface DropdownSelectSearchConfig {
+    icon?: LucideIcon;
     ariaLabel: string;
     placeholder: string;
     getEmptyMessage: (query: string) => string;
@@ -201,6 +202,7 @@ export function DropdownSelect({
     const [open, setOpen] = useState(false);
     const [internalSearchQuery, setInternalSearchQuery] = useState('');
     const searchQuery = search?.value ?? internalSearchQuery;
+    const SearchIcon = search?.icon ?? Search;
     const onSearchChange = search?.onChange;
     const setSearchQuery = useCallback((value: string) => {
         setInternalSearchQuery(value);
@@ -551,7 +553,7 @@ export function DropdownSelect({
                         <div className="border-b border-border p-2">
                           <div className="flex items-center gap-2">
                             <div className="relative min-w-0 flex-1">
-                                <Search
+                                <SearchIcon
                                     className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary"
                                     aria-hidden="true"
                                 />

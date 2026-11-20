@@ -1,29 +1,13 @@
 import { useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUpToLine, CameraOff, FileWarning } from 'lucide-react';
+import { CameraOff, FileWarning } from 'lucide-react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
 import type { Mod } from '../../types/mod';
 import soulUrn from '../../assets/soul-urn.png';
 
-/** Stand-in for PriorityEditor on Global (priority-root) cards. They load
- *  before every numbered mod and reorderMods filters them out of reposition
- *  batches, so a position number would be both a lie and dead UI. Echoes the
- *  PriorityEditor chip geometry, accent-tinted so Global reads as its own
- *  tier rather than position zero. */
-export function GlobalLoadBadge({ variant }: { variant: 'overlay' | 'inline' }) {
-  const { t } = useTranslation();
-  return (
-    <span
-      title={t('installed.priority.hint')}
-      aria-label={t('installed.priority.chip')}
-      className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-accent/60 px-2 text-accent ${
-        variant === 'overlay' ? 'bg-black/70' : 'bg-bg-tertiary'
-      }`}
-    >
-      <ArrowUpToLine className="h-3 w-3" strokeWidth={2.5} />
-    </span>
-  );
-}
+// Shared geometry and neutral colors for Installed cards and import tag controls.
+export const MOD_TAG_CHIP_CLASS = 'inline-flex h-[22px] min-w-0 items-center overflow-hidden rounded-md px-1.5 text-2xs font-semibold leading-none';
+export const MOD_TAG_SURFACE_CLASS = 'border border-hl/[0.06] bg-bg-tertiary/65 text-text-secondary/80';
 
 export function ChipText({ children }: { children: ReactNode }) {
   return <span className="relative top-[1.5px] min-w-0 truncate leading-[14px]">{children}</span>;
@@ -33,10 +17,11 @@ export function MetaTextChip({ label, className, title }: { label: string; class
   return <span className={className} title={title ?? label}><ChipText>{label}</ChipText></span>;
 }
 
-function OverlappingIcons({ items, maxWidth, title, ...attributes }: {
+function OverlappingIcons({ items, maxWidth, title, iconSize = 22, ...attributes }: {
   items: { id: string; content: ReactNode; title?: string }[];
   maxWidth: number;
   title: string;
+  iconSize?: 16 | 20 | 22;
 } & HTMLAttributes<HTMLSpanElement>) {
   if (items.length === 0) return null;
   return (
@@ -44,12 +29,12 @@ function OverlappingIcons({ items, maxWidth, title, ...attributes }: {
       role="img"
       aria-label={title}
       title={title}
-      className="relative isolate inline-block h-[22px] min-w-[22px]"
-      style={{ width: Math.min(maxWidth, items.length * 22) }}
+      className="relative isolate inline-block shrink-0"
+      style={{ width: Math.min(maxWidth, items.length * iconSize), height: iconSize, minWidth: iconSize }}
       {...attributes}
     >
       {items.map((item, index) => (
-        <span key={item.id} title={item.title} className="absolute top-0 w-[22px]" style={{ left: items.length === 1 ? 0 : `calc((100% - 22px) * ${index / (items.length - 1)})` }}>
+        <span key={item.id} title={item.title} className="absolute top-0 flex items-center" style={{ width: iconSize, height: iconSize, left: items.length === 1 ? 0 : `calc((100% - ${iconSize}px) * ${index / (items.length - 1)})` }}>
           {item.content}
         </span>
       )).reverse()}
@@ -58,12 +43,15 @@ function OverlappingIcons({ items, maxWidth, title, ...attributes }: {
 }
 
 /** Earlier heroes paint in front; the overflow urn stays behind every hero. */
-export function HeroIconStack({ heroes, maxVisible = 5 }: { heroes: readonly string[]; maxVisible?: number }) {
+export function HeroIconStack({ heroes, maxVisible = 6, iconSize = 22, maxWidth = 66 }: {
+  heroes: readonly string[]; maxVisible?: number; iconSize?: 16 | 20 | 22; maxWidth?: number;
+}) {
   const icons = heroes.length > maxVisible ? [...heroes.slice(0, maxVisible - 1), null] : heroes;
-  return <OverlappingIcons data-hero-stack maxWidth={66} title={heroes.join(', ')} items={icons.map(hero => ({
+  const iconClassName = iconSize === 16 ? 'h-4 w-4' : iconSize === 20 ? 'h-5 w-5' : 'h-[22px] w-[22px]';
+  return <OverlappingIcons data-hero-stack maxWidth={maxWidth} iconSize={iconSize} title={heroes.join(', ')} items={icons.map(hero => ({
     id: hero ?? 'overflow',
-    content: hero !== null ? <HeroTagLabel heroName={hero} iconClassName="h-[22px] w-[22px]" iconOnly /> : (
-      <img src={soulUrn} alt="" aria-hidden="true" draggable={false} className="block h-[22px] w-[22px] object-contain grayscale brightness-50 opacity-70" />
+    content: hero !== null ? <HeroTagLabel heroName={hero} iconClassName={iconClassName} iconOnly /> : (
+      <img src={soulUrn} alt="" aria-hidden="true" draggable={false} className={`block ${iconClassName} object-contain grayscale brightness-50 opacity-70`} />
     ),
   }))} />;
 }

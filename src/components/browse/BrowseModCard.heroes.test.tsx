@@ -12,9 +12,8 @@ vi.mock('react-i18next', () => ({
 }));
 
 const layouts = [
-  { label: 'classic', viewMode: 'grid', cardDesign: 'classic' },
-  { label: 'readable', viewMode: 'grid', cardDesign: 'readable' },
-  { label: 'list', viewMode: 'list', cardDesign: 'classic' },
+  { label: 'classic', cardDesign: 'classic' },
+  { label: 'readable', cardDesign: 'readable' },
 ] as const;
 
 const sound = (name: string, extra: Partial<GameBananaMod> = {}): GameBananaMod => ({
@@ -53,7 +52,7 @@ describe('Browse Sound hero rendering', () => {
     extra: Partial<ComponentProps<typeof MemoizedModCard>> = {},
   ) => {
     await act(async () => root.render(<MemoizedModCard
-      mod={mod} installed={false} downloading={false} viewMode={layout.viewMode} cardDesign={layout.cardDesign}
+      mod={mod} installed={false} downloading={false} cardDesign={layout.cardDesign}
       cardSize={320} cardWidth={320} section="Sound" volume={1} onVolumeChange={vi.fn()}
       hideNsfwPreviews={false} isPlaying={false} onPlayingChange={vi.fn()} onClick={vi.fn()} onQuickDownload={vi.fn()}
       {...extra}

@@ -41,7 +41,7 @@ describe('cancel all queued downloads', () => {
         .find(button => button.textContent === 'downloadQueue.cancelAll');
     const openQueue = async () => {
         await act(async () => root.render(<DownloadQueueIndicator />));
-        await act(async () => host.querySelector<HTMLButtonElement>('[title="downloadQueue.showDetails"]')!.click());
+        await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="downloadQueue.showDetails"]')!.click());
     };
 
     beforeEach(() => {
@@ -67,6 +67,78 @@ describe('cancel all queued downloads', () => {
         act(() => root.unmount());
         host.remove();
         window.electronAPI = previousApi;
+        vi.restoreAllMocks();
+    });
+
+    it('previews on hover, opens on click and disables hidden controls', async () => {
+        await act(async () => root.render(<DownloadQueueIndicator />));
+        const frame = host.querySelector<HTMLElement>('[data-download-view]')!;
+        const panel = (view: string) => host.querySelector<HTMLElement>(`[data-download-panel="${view}"]`)!;
+        expect(frame.dataset.downloadView).toBe('collapsed');
+        await act(async () => frame.dispatchEvent(new MouseEvent('pointerover', { bubbles: true, relatedTarget: document.body })));
+        expect(frame.dataset.downloadView).toBe('preview');
+        expect(panel('collapsed').getAttribute('aria-hidden')).toBe('true');
+        await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="downloadQueue.showDetails"]')!.click());
+        expect(frame.dataset.downloadView).toBe('expanded');
+        expect(panel('expanded').hasAttribute('inert')).toBe(false);
+        expect(panel('preview').getAttribute('aria-hidden')).toBe('true');
+        await act(async () => frame.dispatchEvent(new MouseEvent('pointerout', { bubbles: true, relatedTarget: document.body })));
+        expect(frame.dataset.downloadView).toBe('expanded');
+        await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="downloadQueue.collapse"]')!.click());
+        expect(frame.dataset.downloadView).toBe('collapsed');
+    });
+
+    it('keeps keyboard focus in the active view when opening and collapsing', async () => {
+        await act(async () => root.render(<DownloadQueueIndicator />));
+        const originalMatches = HTMLElement.prototype.matches;
+        const focusVisible = vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (this: HTMLElement, selector: string) {
+            return selector === ':focus-visible' || originalMatches.call(this, selector);
+        });
+        const frame = host.querySelector<HTMLElement>('[data-download-view]')!;
+        const trigger = () => host.querySelector<HTMLButtonElement>('[aria-label="downloadQueue.showDetails"]')!;
+        await act(async () => trigger().focus());
+        expect(frame.dataset.downloadView).toBe('preview');
+        expect(document.activeElement).toBe(trigger());
+        await act(async () => trigger().click());
+        expect(document.activeElement?.getAttribute('aria-label')).toBe('downloadQueue.collapse');
+        await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+        expect(frame.dataset.downloadView).toBe('collapsed');
+        expect(document.activeElement).toBe(trigger());
+        focusVisible.mockRestore();
+    });
+
+    it('starts collapsed when activity returns after a hovered queue disappears', async () => {
+        await act(async () => root.render(<DownloadQueueIndicator />));
+        const activity = mocks.activity;
+        const frame = host.querySelector<HTMLElement>('[data-download-view]')!;
+        await act(async () => frame.dispatchEvent(new MouseEvent('pointerover', { bubbles: true, relatedTarget: document.body })));
+        mocks.activity = { ...activity, current: null, queue: [] };
+        await act(async () => root.render(<DownloadQueueIndicator />));
+        expect(host.textContent).toBe('');
+        mocks.activity = activity;
+        await act(async () => root.render(<DownloadQueueIndicator />));
+        expect(host.querySelector<HTMLElement>('[data-download-view]')!.dataset.downloadView).toBe('collapsed');
+    });
+
+    it('ignores hover until collapsing has finished and keeps the trigger tooltip-free', async () => {
+        vi.useFakeTimers();
+        try {
+            await openQueue();
+            const frame = host.querySelector<HTMLElement>('[data-download-view]')!;
+            const hover = () => frame.dispatchEvent(new MouseEvent('pointerover', { bubbles: true, relatedTarget: document.body }));
+            await act(async () => hover());
+            await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="downloadQueue.collapse"]')!.click());
+            await act(async () => hover());
+            expect(frame.dataset.downloadView).toBe('collapsed');
+            await act(async () => vi.advanceTimersByTime(299));
+            expect(frame.dataset.downloadView).toBe('collapsed');
+            await act(async () => vi.advanceTimersByTime(1));
+            await act(async () => hover());
+            expect(frame.dataset.downloadView).toBe('preview');
+            expect(host.querySelector('[aria-label="downloadQueue.showDetails"]')?.hasAttribute('title')).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('clears waiting requests with one queue command and leaves the active download alone', async () => {

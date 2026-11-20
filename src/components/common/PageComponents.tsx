@@ -46,11 +46,11 @@ interface ViewModeToggleProps {
 export function ViewModeToggle({ value, options, onChange, className = '' }: ViewModeToggleProps) {
     const anyIcon = options.some((o) => o.icon);
     return (
-        <div className={`flex items-center rounded-sm border border-border bg-bg-secondary p-0.5 text-sm ${className}`}>
+        <div className={`flex h-10 items-center rounded-lg border border-border bg-bg-secondary p-[3px] text-sm ${className}`}>
             {options.map((option) => {
                 const Icon = option.icon;
                 const active = value === option.value;
-                const baseCls = anyIcon ? 'p-1.5' : 'px-3 py-1';
+                const baseCls = anyIcon ? 'px-1.5' : 'px-3';
                 return (
                     <button
                         key={option.value}
@@ -58,7 +58,8 @@ export function ViewModeToggle({ value, options, onChange, className = '' }: Vie
                         onClick={() => onChange(option.value)}
                         title={option.label}
                         aria-label={option.label}
-                        className={`${baseCls} rounded-sm transition-colors cursor-pointer ${active
+                        aria-pressed={active}
+                        className={`${baseCls} flex h-8 items-center justify-center rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer ${active
                             ? 'border border-accent/40 bg-accent/10 text-text-primary'
                             : 'border border-transparent text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
                             }`}

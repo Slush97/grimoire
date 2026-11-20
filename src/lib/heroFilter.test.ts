@@ -43,6 +43,13 @@ describe('nameMentionsHero', () => {
     expect(nameMentionsHero('RatKing flag', 'Rat King')).toBe(true);
   });
 
+  it('matches the same separated hero names used by Browse card title detection', () => {
+    expect(nameMentionsHero('Lady_Geist-blue skin', 'Lady Geist')).toBe(true);
+    expect(nameMentionsHero('Mo-and-Krill_gold', 'Mo & Krill')).toBe(true);
+    expect(nameMentionsHero('Rat_King flag', 'Rat King')).toBe(true);
+    expect(nameMentionsHero('Hazelnut_outfit', 'Haze')).toBe(false);
+  });
+
   it.each([
     ['DeAdMaN voice pack', 'Deadman Danny'],
     ['dAnNy voice pack', 'Deadman Danny'],

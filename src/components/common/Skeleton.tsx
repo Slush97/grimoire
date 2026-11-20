@@ -62,10 +62,8 @@ export function SkeletonCircle({ size = 32, className = '' }: { size?: number; c
 export type SkeletonCardLayout =
   | 'browse'
   | 'browse-classic'
-  | 'browse-list'
   | 'installed'
-  | 'installed-compact'
-  | 'installed-list';
+  | 'installed-compact';
 
 // Title and author bars vary a little per card so a grid of placeholders does
 // not look stamped out.
@@ -125,34 +123,6 @@ export function SkeletonModCard({
           <div className="h-3.5 rounded-sm bg-hl/[0.06]" style={{ width: title }} />
           <div className="h-2.5 rounded-sm bg-hl/[0.05]" style={{ width: sub }} />
         </div>
-      </div>
-    );
-  }
-
-  if (layout === 'browse-list') {
-    return (
-      <div aria-hidden className={`flex items-center gap-4 rounded-xl border border-border bg-bg-secondary p-3 ${className}`}>
-        <div className="skeleton h-20 w-32 flex-shrink-0 rounded-lg" />
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="skeleton h-3.5 rounded-sm" style={{ width: title }} />
-          <div className="skeleton h-2.5 rounded-sm" style={{ width: sub }} />
-          <div className="skeleton h-2.5 w-20 rounded-sm" />
-        </div>
-      </div>
-    );
-  }
-
-  if (layout === 'installed-list') {
-    // ModListRowContent: priority chip, 56px thumbnail, title + meta, toggle.
-    return (
-      <div aria-hidden className={`grid min-h-[58px] grid-cols-[32px_56px_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-hl/[0.06] bg-bg-secondary/60 px-3 ${className}`}>
-        <div className="skeleton h-5 w-7 rounded-sm" />
-        <div className="skeleton h-10 w-14 rounded-lg" />
-        <div className="min-w-0 space-y-2">
-          <div className="skeleton h-3 rounded-sm" style={{ width: title }} />
-          <div className="skeleton h-2.5 rounded-sm" style={{ width: sub }} />
-        </div>
-        <div className="skeleton h-6 w-11 rounded-full" />
       </div>
     );
   }
