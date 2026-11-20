@@ -3,7 +3,7 @@ import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { AppearanceBg, AppearanceSurface, AppSettings, GlobalModType, Mod } from '../types/mod';
 import { getAssetPath } from './assetPath';
 import { categorySubtreeIds } from './heroFilter';
-import { baseTagGlobalType, resolveInstalledGeneralType } from './categoryPaths';
+import { generalPropModel, baseTagGlobalType, resolveInstalledGeneralType } from './categoryPaths';
 import {
   HERO_NAMES as SHARED_HERO_NAMES,
   HERO_ALIASES as SHARED_HERO_ALIASES,
@@ -365,15 +365,22 @@ export function isLockerManagedSound(mod: Mod): boolean {
 }
 
 /** Main resolves category-derived and explicit classifications consistently. */
-export function getEffectiveGlobalType(mod: Pick<Mod, 'globalType' | 'globalTypeSource' | 'gameBananaId' | 'sourceSection' | 'categoryName' | 'lockerHeroes' | 'lockerHero' | 'lockerHeroSource' | 'tagOverrides'>): GlobalModType | undefined {
-  if (mod.tagOverrides?.base !== undefined) return mod.tagOverrides.base.map(baseTagGlobalType).find(type => type !== undefined);
-  return mod.globalType ?? resolveInstalledGeneralType(mod, undefined, modHeroNames(mod));
+export function getEffectiveGlobalType(mod: Pick<Mod, 'globalType' | 'propTypes' | 'globalTypeSource' | 'gameBananaId' | 'sourceSection' | 'categoryName' | 'lockerHeroes' | 'lockerHero' | 'lockerHeroSource' | 'tagOverrides'>): GlobalModType | undefined {
+  if (mod.propTypes?.length) return mod.propTypes[0];
+  const heroes = modHeroNames(mod);
+  const type = mod.tagOverrides?.base !== undefined
+    ? mod.tagOverrides.base.map(baseTagGlobalType).find(type => type !== undefined && !generalPropModel(type))
+    : mod.propTypes?.[0] ?? mod.globalType ?? resolveInstalledGeneralType(mod, undefined, heroes);
+  if (type && (generalPropModel(type) || type === 'patron' || type === 'boxes')) return undefined;
+  if (type === 'sounds' || type === 'killstreak-music') return heroes.length ? undefined : 'sounds';
+  return type;
 }
 
 export function getEffectiveGlobalTypes(mod: Parameters<typeof getEffectiveGlobalType>[0]): GlobalModType[] {
-  if (mod.tagOverrides?.base !== undefined) return [...new Set(mod.tagOverrides.base.map(baseTagGlobalType).filter((type): type is GlobalModType => !!type))];
-  const type = getEffectiveGlobalType(mod);
-  return type ? [type] : [];
+  const tags = mod.tagOverrides?.base?.map(baseTagGlobalType).filter((type): type is GlobalModType =>
+    !!type && type !== 'patron' && type !== 'boxes' && !generalPropModel(type) && (type !== 'sounds' || !modHeroNames(mod).length));
+  const type = getEffectiveGlobalType({ ...mod, propTypes: undefined });
+  return [...new Set([...(mod.propTypes ?? []), ...(tags ?? (type ? [type] : []))])];
 }
 
 /** The effective set is supplied by main; legacy local hero tags remain usable. */
@@ -463,6 +470,12 @@ export { GLOBAL_MOD_TYPE_LABELS } from './categoryPaths';
 
 export function globalModTypeLabel(type: GlobalModType, t: (key: string) => string): string {
   switch (type) {
+    case 'patron': return t('locker.page.patrons');
+    case 'hidden-king': return t('locker.page.hiddenKing');
+    case 'archmother': return t('locker.page.archmother');
+    case 'sinner': return t('locker.page.sinners');
+    case 'boxes': return t('locker.page.boxes');
+    case 'sounds': return t('locker.page.sounds');
     case 'soul-container':
       return t('locker.page.soulContainers');
     case 'spirit-urn':
@@ -482,13 +495,13 @@ export function globalModTypeLabel(type: GlobalModType, t: (key: string) => stri
     case 'announcer':
       return t('locker.page.announcer');
     case 'killstreak-music':
-      return t('locker.page.killstreakMusic');
+      return t('locker.page.sounds');
   }
 }
 
 /** Carousel/section order for the global types. */
 export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
-  'soul-container', 'spirit-urn', 'hideout', 'hud', 'animations', 'maps', 'killstreak-music',
+  'soul-container', 'spirit-urn', 'hidden-king', 'archmother', 'sinner', 'hideout', 'hud', 'animations', 'maps', 'sounds',
 ];
 
 /**
@@ -520,6 +533,12 @@ export type GlobalModGroups = Record<GlobalModType, Mod[]>;
  */
 export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
   const groups: GlobalModGroups = {
+    'hidden-king': [],
+    archmother: [],
+    patron: [],
+    sinner: [],
+    boxes: [],
+    sounds: [],
     'soul-container': [],
     'spirit-urn': [],
     hideout: [],

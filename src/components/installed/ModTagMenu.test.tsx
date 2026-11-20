@@ -59,3 +59,24 @@ it('fills mixed hero tags before removing them, preserves other heroes and keeps
     act(() => root.unmount()); host.remove(); useAppStore.setState(before); useToastStore.setState({ toasts: previousToasts }); vi.restoreAllMocks();
   }
 });
+
+it('combines file detections for one mod while hiding icons during multi-selection', async () => {
+  const host = document.createElement('div'); document.body.append(host); const root = createRoot(host);
+  const mod: Mod = { id: 'prop', metaKey: 'prop', name: 'Prop', fileName: 'prop.vpk', path: '/prop.vpk',
+    enabled: false, priority: 1, size: 100, installedAt: '2026-11-19', propTypes: ['hidden-king'], tagOverrides: { base: [] } };
+  const render = async (item: Mod, bulk = false, variants = [item]) => act(async () => root.render(
+    <MenuRoot kind="dropdown" open><MenuContent><ModTagMenuItems mod={item} variants={variants} bulk={bulk}
+      onApply={vi.fn(async () => {})} /></MenuContent></MenuRoot>));
+  try {
+    await render(mod); expect(document.querySelectorAll('.lucide-vault')).toHaveLength(1);
+    const row = document.querySelector('.lucide-vault')!.closest('[role="menuitemcheckbox"]')!;
+    expect(row.getAttribute('aria-checked')).toBe('false');
+    await render({ ...mod, propTypes: [], tagOverrides: { base: ['Patrons'] } });
+    expect(document.querySelectorAll('.lucide-vault')).toHaveLength(0);
+    const primary = { ...mod, propTypes: [] };
+    const files: Mod[] = [primary, { ...mod, id: 'second', propTypes: ['sinner'] }, { ...mod, id: 'third', propTypes: ['archmother', 'sinner'] }];
+    await render(primary, false, files); expect(document.querySelectorAll('.lucide-vault')).toHaveLength(2);
+    await render(primary, true, files); expect(document.querySelectorAll('.lucide-vault')).toHaveLength(0);
+    await render(mod, true); expect(document.querySelectorAll('.lucide-vault')).toHaveLength(0);
+  } finally { act(() => root.unmount()); host.remove(); }
+});

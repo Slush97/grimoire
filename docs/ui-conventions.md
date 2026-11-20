@@ -44,16 +44,19 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
 - **Elevation:** borders give depth. Shadows only on floating layers (modal, menu, popover, toast).
 - **Control heights:** 32px default, 28px small. `Button` and `IconButton` enforce this.
   Installed toolbar controls use 38px, including Overlap and Update.
-  Browse toolbar controls use 40px.
+  Browse and the main Locker Gallery toolbar controls use 40px. Locker Gallery
+  reuses toolbar/primary buttons with rounded-lg corners and a matching joined
+  Gallery/List control. Its sticky toolbar matches Browse/Installed padding
+  (`px-4 py-3 sm:px-6`), 8px control gaps and bottom divider.
 - **z-index:** pick from the ladder at the top of `index.css`. Never invent one.
 
 ## Components
 
-- **Buttons:** `Button` (primary, secondary, toolbar, ghost, danger, success, warning, update; sm/md; `icon`, `isLoading`) or `IconButton` (icon-only, `label` required, doubles as tooltip). One primary per view. Toolbar controls use toolbar for their neutral surface and primary when selected; text-only toolbar actions use ghost. Danger belongs in confirmations, not on every row.
+- **Buttons:** `Button` (primary, secondary, toolbar, ghost, danger, success, warning, update; sm/md; `icon`, `isLoading`) or `IconButton` (icon-only, `label` required, doubles as tooltip; `shape="round"` for Locker card controls). One primary per view. Toolbar controls use toolbar for their neutral surface and primary when selected; text-only toolbar actions use ghost. Danger belongs in confirmations, not on every row.
 - **Pick-one toggles:** `SegmentedControl`. One toggle style; no pills.
   Browse view-option menus use `ViewOptionControl` for their joined tabs.
   Browse and Installed mod layouts use grids, with card-size sliders.
-- **Tab strips:** `MultiSelectSegments` provides the shared Browse section and
+- **Tab strips:** Single-choice Locker tabs and Effects options use `SegmentedControl` with `variant="joined"` for one sliding highlight, disabled-option skipping and arrow/Home/End navigation. Keep applied dots, icons and counts inside option labels. `MultiSelectSegments` provides the shared Browse section and
   Installed filter presentation. Callers own selection rules, including whether
   an empty selection or right-click solo selection is allowed. Installed
   dropdowns use its neutral tone, matching Browse's filter choices; Browse's
@@ -79,7 +82,7 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
   the existing overlay layers.
 - **Drag previews:** portal `DragOverlay` to `document.body`. Its coordinates are relative to the viewport; blur and transforms on a containing panel would offset or clip it. Keep the overlay mounted, disable its pointer events, and use the z-index ladder.
 - **Installed selection:** `InstalledSelectionToolbar` owns the floating selection UI. Reuse `ModTagMenuItems` and `ModListMenuItems` in toolbar and card menus. Mixed membership uses an accent-colored Lucide Minus indicator; clicking it assigns to all selected files. Bulk menus stay open, suppress default-tag pins, and preserve unrelated tags. The right-aligned 24px card selection checkbox replaces the toggle in its existing 48x28px hitbox and excludes utility actions while retaining load-order display.
-- **Mod favorites:** Installed and Locker share `useModFavorites` and `modPreferenceKey`, including grouping migrations and the existing storage key. Locker uses `ModFavoriteButton` between Delete and Shuffle; selected favorite and shuffle icons stay visible without a background when the other controls hide. Display active mods first in their existing order, then inactive favorites, then the rest. Favorites never change enabled state, load order or shuffle membership.
+- **Mod favorites:** Installed and Locker share `useModFavorites` and `modPreferenceKey`, including grouping migrations and the existing storage key. Locker uses `ModFavoriteButton` between Delete and Shuffle. Compact rows retain their bare selected favorite/shuffle icons when controls hide. General and hero skin cards use `LockerGeneralCard`, `LockerCardHeader` and `LockerCardAction` from `ShuffleControls`: the header combines status in one persistent pill, while all round controls reveal on hover/focus. Display active mods first in their existing order, then inactive favorites, then the rest. Favorites never change enabled state, load order or shuffle membership.
 - **Status:** `Tag` (HUD-style card markers), `Badge` (pills), `Skeleton` (placeholders).
 
 ## Page anatomy

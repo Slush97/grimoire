@@ -42,6 +42,7 @@ export interface ModMetadata {
     lockerHeroSource?: import('../../../src/types/mod').LockerHeroSource;
     /** Fingerprinted Sound, WiP, HUD, or conservative local-file hero detection. */
     heroDetection?: import('../../../src/types/mod').InstalledHeroDetection;
+    propDetection?: import('../../../src/types/mod').InstalledPropDetection;
     /** Legacy local inference marker, retained with existing local metadata. */
     lockerHeroVpkChecked?: boolean;
     /** Preserved local General classification or an explicit manual override.

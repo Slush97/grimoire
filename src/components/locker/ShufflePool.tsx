@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from 'react';
 import { ImageOff, ListChecks, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { IconButton, ModalHeader } from '../common/ui';
+import { Button, IconButton, ModalHeader } from '../common/ui';
 import { Modal, ModalBody } from '../common/Modal';
 import { Input } from '../common/forms';
 import ModThumbnail from '../ModThumbnail';
@@ -31,14 +31,10 @@ export default function ShufflePool() {
   const placeholder = <div className="flex h-full w-full items-center justify-center text-text-secondary"><ImageOff className="h-4 w-4" aria-hidden /></div>;
 
   return <>
-    <button
-      type="button"
-      onClick={() => setOpen(true)}
-      className="flex items-center gap-1.5 self-stretch rounded-sm border border-border bg-bg-secondary px-3 text-sm text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary cursor-pointer"
-    >
-      <ListChecks className="w-4 h-4" />
+    <Button variant="toolbar" icon={ListChecks} onClick={() => setOpen(true)}
+      aria-haspopup="dialog" className="h-10! rounded-lg! px-3!">
       {t('locker.randomize.pool.open', { count: included.size })}
-    </button>
+    </Button>
     {open && <Modal onClose={() => setOpen(false)} labelledBy={titleId} size="lg">
       <ModalHeader title={t('locker.randomize.pool.title')} titleId={titleId} onClose={() => setOpen(false)} />
       <ModalBody className="space-y-4">

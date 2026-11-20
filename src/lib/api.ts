@@ -321,6 +321,14 @@ export async function getAppliedCustomCard(
 }
 
 /** Whether a soul-container mod has an exported model in the user's library (+ mtime). */
+export async function getSoulPreviewThumbnail(key: string) {
+  return window.electronAPI.getSoulPreviewThumbnail(key);
+}
+
+export async function saveSoulPreviewThumbnail(key: string, capture: import('../types/portrait').SoulPreviewThumbnailCapture) {
+  return window.electronAPI.saveSoulPreviewThumbnail(key, capture);
+}
+
 export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
   return window.electronAPI.getSoulModelInfo(key);
 }

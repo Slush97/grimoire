@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { GlobalModType, Mod } from '../types/mod';
 import { buildHeroList } from './lockerUtils';
 import {
@@ -799,8 +799,8 @@ describe('planRandomization', () => {
           'soul-container',
           [
             // Enabled but never opted in: the user's current pick.
-            mod({ id: 'soul-keep', gameBananaId: 1, globalType: 'soul-container', enabled: true, priority: 1 }),
-            mod({ id: 'soul-b', gameBananaId: 2, globalType: 'soul-container', enabled: false, priority: 2 }),
+            mod({ id: 'soul-keep', gameBananaId: 1, globalType: 'soul-container', propTypes: ['soul-container'], enabled: true, priority: 1 }),
+            mod({ id: 'soul-b', gameBananaId: 2, globalType: 'soul-container', propTypes: ['soul-container'], enabled: false, priority: 2 }),
           ],
         ],
       ]);
@@ -820,9 +820,9 @@ describe('planRandomization', () => {
         [
           'spirit-urn',
           [
-            mod({ id: 'urn-global', gameBananaId: 1, globalType: 'spirit-urn', enabled: true, priorityMod: true }),
-            mod({ id: 'urn-a', gameBananaId: 2, globalType: 'spirit-urn', enabled: true, priority: 1 }),
-            mod({ id: 'urn-b', gameBananaId: 3, globalType: 'spirit-urn', enabled: false, priority: 2 }),
+            mod({ id: 'urn-global', gameBananaId: 1, globalType: 'spirit-urn', propTypes: ['spirit-urn'], enabled: true, priorityMod: true }),
+            mod({ id: 'urn-a', gameBananaId: 2, globalType: 'spirit-urn', propTypes: ['spirit-urn'], enabled: true, priority: 1 }),
+            mod({ id: 'urn-b', gameBananaId: 3, globalType: 'spirit-urn', propTypes: ['spirit-urn'], enabled: false, priority: 2 }),
           ],
         ],
       ]);
@@ -1117,7 +1117,7 @@ describe('shuffleGroupKind', () => {
     expect(shuffleGroupKind(heroSkin, options)).toBe('hero');
     expect(shuffleGroupKind(bucketMod, options)).toBe('bucket');
     expect(shuffleGroupKind(globalMod, options)).toBe('priority');
-    expect(shuffleGroupKind(untouched, options)).toBeNull();
+    expect(shuffleGroupKind(untouched, options)).toBe('bucket');
 
     const plan = planLaunchShuffle({
       mods,
@@ -1287,4 +1287,34 @@ it('keeps a hero animation enabled while shuffling that hero\'s skins', () => {
   expect(shuffleGroupKind(animation, { heroList })).toBe('bucket');
   expect(plan.enableIds).toEqual(['other']);
   expect(plan.disableIds).toEqual(['skin']);
+});
+
+it('preserves legacy Killstreak Music shuffle membership and variant choices in Sounds', () => {
+  vi.stubGlobal('localStorage', { getItem: (key: string) => key === 'lockerShuffleIncluded'
+    ? JSON.stringify(['bucket:killstreak-music:gamebanana:42', 'gamebanana:7'])
+    : JSON.stringify({ 'bucket:killstreak-music:gamebanana:42': 'random' }) });
+  try {
+    expect(readStoredShuffleIncluded()).toEqual(new Set(['bucket:sounds:gamebanana:42', 'gamebanana:7']));
+    expect(readStoredShuffleVariants()).toEqual(new Map([['bucket:sounds:gamebanana:42', 'random']]));
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it('carries legacy Patron shuffle preferences into both detected destinations', () => {
+  vi.stubGlobal('localStorage', { getItem: (key: string) => key === 'lockerShuffleIncluded'
+    ? '["bucket:patron:gamebanana:42"]' : '{"bucket:patron:gamebanana:42":"random"}' });
+  try {
+    expect([...readStoredShuffleIncluded()]).toEqual(['bucket:hidden-king:gamebanana:42', 'bucket:archmother:gamebanana:42']);
+    expect([...readStoredShuffleVariants().keys()]).toEqual(['bucket:hidden-king:gamebanana:42', 'bucket:archmother:gamebanana:42']);
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it('shuffles a two-patron VPK once without duplicate or contradictory actions', () => {
+  const first = mod({ id: 'first', propTypes: ['hidden-king', 'archmother'], enabled: true });
+  const next = mod({ id: 'next', propTypes: ['hidden-king', 'archmother'] });
+  const rng = vi.fn(() => 0.99);
+  const plan = planLaunchShuffle({ mods: [first, next], heroList: [],
+    included: new Set([shufflePoolKey(first), shufflePoolKey(next)]), rng });
+  expect(plan.enableIds).toEqual(['next']);
+  expect(plan.disableIds).toEqual(['first']);
+  expect(rng).toHaveBeenCalledOnce();
 });

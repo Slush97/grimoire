@@ -151,6 +151,14 @@ describe('installed card menu mounting', () => {
     expect(visibleLabels).toHaveLength(0);
   });
 
+  it('shows detected preview tags from another VPK in a grouped mod menu', async () => {
+    const files: Mod[] = [{ ...input.mod, metaKey: 'test.vpk', path: '/test.vpk' }, { ...input.mod, metaKey: 'sibling.vpk', path: '/sibling.vpk', id: 'sibling', propTypes: ['hidden-king', 'sinner'] }];
+    input = { ...input, group: { variants: files, variantCount: 2, enabledCount: 2, enabledLabels: [], onOpenPicker: vi.fn() } };
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu('context'); await openLockerTags();
+    expect(document.querySelectorAll('.lucide-vault')).toHaveLength(2);
+  });
+
   it('assigns a custom tag from the context menu and immediately renders it on the card', async () => {
     const settings = { deadlockPath: '/game', devDeadlockPath: '/dev', devMode: false } as AppSettings;
     useAppStore.setState({ settings });
@@ -184,7 +192,7 @@ describe('installed card menu mounting', () => {
     for (const label of ['Sounds', 'Abilities', 'Haze', 'Wraith']) {
       expect(choices.find(item => item.textContent === gameBananaCategoryLabel(label, translate))?.getAttribute('aria-checked')).toBe('true');
     }
-    expect(choices.find(item => item.textContent === 'gamebanana.categories.hud')?.querySelector('.lucide-vault')).not.toBeNull();
+    expect(choices.find(item => item.textContent === 'gamebanana.categories.hud')?.querySelector('.lucide-vault')).toBeNull();
     expect(choices.find(item => item.textContent === 'gamebanana.categories.abilities')?.querySelector('.lucide-vault')).toBeNull();
     expect(document.body.textContent).not.toContain('installed.tag.custom');
     expect(document.body.textContent).toContain('installed.tag.base');

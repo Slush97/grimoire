@@ -458,7 +458,16 @@ export interface ApplyTrippySkinResult {
  * destination from GameBanana category ancestry. Explicit manual assignments
  * and previously classified local files retain their chosen destination.
  */
-export type GlobalModType = 'soul-container' | 'spirit-urn' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music' | 'effects' | 'animations' | 'maps';
+export type GlobalModType = 'hidden-king' | 'archmother' | 'patron' | 'sinner' | 'boxes' | 'sounds' | 'soul-container' | 'spirit-urn' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music' | 'effects' | 'animations' | 'maps';
+
+/** Asset-only result, independent of editable tags and category metadata. */
+export interface InstalledPropDetection {
+  version: number;
+  size: number;
+  modifiedAt: string;
+  sha256?: string;
+  types: GlobalModType[];
+}
 export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
 
 /** Cached automatic hero matches for one installed payload. */
@@ -698,6 +707,7 @@ export interface Mod {
   /** Effective General destination from category ancestry, a manual override,
    *  or a preserved legacy local classification. */
   globalType?: GlobalModType;
+  propTypes?: GlobalModType[];
   /** Explicit user classification, retained independently of automatic tags. */
   globalTypeSource?: 'manual';
   /** Set when this mod was produced by mergeMods. Carries the unroll payload

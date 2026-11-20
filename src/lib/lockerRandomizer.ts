@@ -215,7 +215,10 @@ export function readStoredShuffleIncluded(): Set<string> {
     if (!stored) return new Set();
     const parsed = JSON.parse(stored);
     if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((k): k is string => typeof k === 'string'));
+    return new Set(parsed.filter((k): k is string => typeof k === 'string')
+      .flatMap(key => key.startsWith('bucket:patron:')
+        ? ['hidden-king', 'archmother'].map(type => key.replace(/^bucket:patron:/, 'bucket:' + type + ':'))
+        : [key.replace(/^bucket:killstreak-music:/, 'bucket:sounds:')]));
   } catch {
     return new Set();
   }
@@ -270,7 +273,9 @@ export function readStoredShuffleVariants(): Map<string, VariantChoice> {
     return new Map(
       Object.entries(parsed).filter(
         (entry): entry is [string, VariantChoice] => isVariantChoice(entry[1])
-      )
+      ).flatMap(([key, choice]): [string, VariantChoice][] => key.startsWith('bucket:patron:')
+        ? ['hidden-king', 'archmother'].map(type => [key.replace(/^bucket:patron:/, 'bucket:' + type + ':'), choice])
+        : [[key.replace(/^bucket:killstreak-music:/, 'bucket:sounds:'), choice]])
     );
   } catch {
     return new Map();
@@ -562,7 +567,7 @@ export function planLaunchShuffle(options: LaunchShufflePlanOptions): RandomizeP
   // library instead of overlapping.
   const groups = groupGlobalMods(mods);
   const globalBuckets = new Map<GlobalModType, Mod[]>(
-    GLOBAL_MOD_TYPE_ORDER.map((type) => [type, groups[type]])
+    GLOBAL_MOD_TYPE_ORDER.map((type) => [type, groups[type].filter(mod => getEffectiveGlobalType(mod) === type)])
   );
   return planRandomization({
     heroSkins: map,

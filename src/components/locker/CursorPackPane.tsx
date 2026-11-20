@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Check, Search, Trash2, Upload } from 'lucide-react';
-import { Button, IconButton, Tag } from '../common/ui';
+import { Search, Trash2, Upload } from 'lucide-react';
+import { Button } from '../common/ui';
+import { LockerCardAction, LockerCardHeader, LockerGeneralCard, LOCKER_CARD_GRID_CLASS, LOCKER_CARD_MEDIA_CLASS, LOCKER_CARD_TITLE_CLASS } from './ShuffleControls';
 import { ConfirmModal } from '../common/PageComponents';
 import { showOpenDialogMulti } from '../../lib/api';
 import { useAppStore } from '../../stores/appStore';
@@ -69,43 +70,21 @@ interface CursorCardProps {
 function CursorCard({ name, subtitle, active, busy, previewKey, packId, onSelect, onDelete }: CursorCardProps) {
   const { t } = useTranslation();
   return (
-    <div
-      className={`relative rounded-sm border bg-bg-secondary p-2.5 transition-colors ${
-        active ? 'border-accent' : 'border-border hover:border-hl/25'
-      }`}
-    >
-      <button
-        type="button"
-        aria-pressed={active}
-        disabled={busy}
-        onClick={onSelect}
-        className="flex w-full cursor-pointer flex-col gap-2 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-wait"
-      >
-        <div className="relative aspect-video w-full overflow-hidden rounded-sm bg-bg-sunken">
-          <CursorPreviewArt previewKey={previewKey} packId={packId} />
-          {active && (
-            <Tag tone="accent" variant="overlay" icon={Check} className="absolute left-2 top-2">
-              {t('common.status.active')}
-            </Tag>
-          )}
-        </div>
-        <div className={`min-w-0 ${onDelete ? 'pr-9' : ''}`}>
-          <div className="truncate font-reaver text-sm text-text-primary">{name}</div>
-          <div className="truncate text-2xs text-text-secondary">{subtitle}</div>
-        </div>
-      </button>
-      {onDelete && (
-        <IconButton
-          icon={Trash2}
-          tone="danger"
-          size="sm"
-          label={t('locker.cursors.deleteNamed', { name })}
-          disabled={busy}
-          onClick={onDelete}
-          className="absolute bottom-2.5 right-2.5"
-        />
-      )}
-    </div>
+    <LockerGeneralCard active={active} data-locker-cursor-card={packId ?? 'default'}>
+      <div className={`${LOCKER_CARD_MEDIA_CLASS} aspect-video`}>
+        <CursorPreviewArt previewKey={previewKey} packId={packId} />
+        <LockerCardHeader active={active}>
+          {onDelete && <LockerCardAction icon={Trash2} label={t('locker.cursors.deleteNamed', { name })}
+            disabled={busy} onClick={onDelete} />}
+        </LockerCardHeader>
+      </div>
+      <div className="mt-auto px-0.5">
+        <div className={LOCKER_CARD_TITLE_CLASS}>{name}</div>
+        <div className="truncate text-2xs text-text-secondary">{subtitle}</div>
+      </div>
+      <button type="button" aria-label={name} aria-pressed={active} disabled={busy} onClick={onSelect}
+        className="absolute inset-0 z-10 cursor-pointer rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-wait" />
+    </LockerGeneralCard>
   );
 }
 
@@ -150,7 +129,7 @@ export default function CursorPackPane() {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-4">
+      <div className={LOCKER_CARD_GRID_CLASS}>
         <CursorCard
           name={t('locker.cursors.default')}
           subtitle={t('locker.cursors.defaultSubtitle')}

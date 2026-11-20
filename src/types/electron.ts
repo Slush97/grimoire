@@ -1024,6 +1024,8 @@ export interface ElectronAPI {
     getAppliedCustomCard: (
         heroName: string
     ) => Promise<{ variant: string; dataUrl: string }[]>;
+    getSoulPreviewThumbnail: (key: string) => Promise<import('./portrait').SoulPreviewThumbnailInfo>;
+    saveSoulPreviewThumbnail: (key: string, capture: import('./portrait').SoulPreviewThumbnailCapture) => Promise<import('./portrait').SoulPreviewThumbnailInfo>;
     getSoulModelInfo: (key: string) => Promise<SoulModelInfo>;
     /** `entry` selects which model entry to export (soul container vs urn);
      *  defaults to the soul-container model when omitted. `animated` keeps a
@@ -1075,6 +1077,7 @@ export interface ElectronAPI {
     exportHeroParticles: (heroName: string, skinSources?: HeroPoseSkinSource[], clips?: string[]) => Promise<HeroParticleBundleInfo>;
     getPreviewCacheSize: () => Promise<{ bytes: number }>;
     clearPreviewCache: () => Promise<{ bytesFreed: number }>;
+    onPreviewCacheCleared: (callback: () => void) => () => void;
     getGameBananaFileServerDiagnostics: () => Promise<GameBananaFileServerDiagnostics>;
     getGameBananaDownloadProxy: () => Promise<GameBananaDownloadProxyConfig>;
     setGameBananaDownloadProxy: (config: Pick<GameBananaDownloadProxyConfig, 'enabled' | 'url'>) => Promise<GameBananaDownloadProxyConfig>;

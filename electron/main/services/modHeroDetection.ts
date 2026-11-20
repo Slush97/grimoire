@@ -1,12 +1,12 @@
 import { HERO_ALIASES } from '@grimoire/social-types/heroes';
 import type { GlobalModType, InstalledHeroDetection, LockerHeroSource } from '../../../src/types/mod';
-import { baseTagGlobalType, categoryGeneralType, categoryHeroName, resolveCategoryPath, resolveInstalledGeneralType, type CategoryPaths } from '../../../src/lib/categoryPaths';
+import { isGeneralPropType, detectGeneralPropTypes, baseTagGlobalType, categoryGeneralType, categoryHeroName, resolveCategoryPath, resolveInstalledGeneralType, type CategoryPaths } from '../../../src/lib/categoryPaths';
 import type { ModMetadata } from './metadata';
 import { canonicalSupportedHeroName, supportedHeroNames } from './heroCodenames';
 import { inferHeroesFromVpkPaths, invalidateVpkParseCache, parseVpkDirectoryCached } from './vpk';
 import { inferHeroFromVpkTree } from './unknownModDetection';
 
-export const MOD_HERO_DETECTION_VERSION = 1;
+export const MOD_HERO_DETECTION_VERSION = 2;
 
 type DetectionMod = { size: number; installedAt: string };
 
@@ -139,7 +139,8 @@ export function detectModHeroes(
 
 function detectLocalHeroes(mod: DetectionMod & { path: string }, metadata: ModMetadata): InstalledHeroDetection | undefined {
     if (!needsDetection(mod, metadata, 'local')) return metadata.heroDetection;
-    if (parseVpkDirectoryCached(mod.path) === null) {
+    const paths = parseVpkDirectoryCached(mod.path);
+    if (paths === null) {
         invalidateVpkParseCache(mod.path);
         return undefined;
     }
@@ -164,7 +165,8 @@ export interface ResolvedModClassification {
     lockerHeroSource?: LockerHeroSource;
     lockerHeroes: string[];
     globalType?: GlobalModType;
-    metadataPatch?: Pick<ModMetadata, 'heroDetection'>;
+    propTypes?: GlobalModType[];
+    metadataPatch?: Pick<ModMetadata, 'heroDetection' | 'propDetection'>;
     detectedTags?: { heroes: string[]; globalType?: GlobalModType };
 }
 
@@ -174,19 +176,42 @@ export function resolveModClassification(
     metadata: ModMetadata | undefined,
     paths?: CategoryPaths,
 ): ResolvedModClassification {
-    const detected = resolveDetectedModClassification(mod, metadata, paths);
-    const overrides = metadata?.tagOverrides;
-    if (!overrides) return detected;
-    const lockerHeroes = overrides.heroes ?? detected.lockerHeroes;
-    const globalType = overrides.base === undefined ? detected.globalType
-        : overrides.base.map(baseTagGlobalType).find(type => type !== undefined);
+    const data = metadata ?? {};
+    // Preview-category labels never establish asset identity. Ignore their
+    // legacy manual routing while keeping the underlying tag data intact.
+    const identity = data.globalType && isGeneralPropType(data.globalType)
+        ? { ...data, globalType: undefined, globalTypeSource: undefined } : data;
+    const detected = resolveDetectedModClassification(mod, identity, paths);
+    const overrides = data.tagOverrides;
+    const lockerHeroes = overrides?.heroes ?? detected.lockerHeroes;
+    const candidates = overrides?.base === undefined ? [detected.globalType]
+        : overrides.base.map(baseTagGlobalType);
+    const globalType = candidates.find(type => type && !isGeneralPropType(type));
+    const previous = data.propDetection;
+    const valid = previous?.version === 2 && previous.size === mod.size
+        && previous.modifiedAt === mod.installedAt && previous.sha256 === data.sha256;
+    const isOther = !globalType && lockerHeroes.length === 0;
+    let propTypes: GlobalModType[] = valid ? previous.types : [];
+    const patch: NonNullable<ResolvedModClassification['metadataPatch']> = { ...detected.metadataPatch };
+    // Only inspect the Other candidates (or revalidate a previously detected
+    // prop after its content changes). Cache negative results as well.
+    if (!valid && (isOther || previous?.types.length) && (data.sourceSection ?? 'Mod') === 'Mod') {
+        const entries = parseVpkDirectoryCached(mod.path);
+        if (entries) {
+            propTypes = detectGeneralPropTypes(entries);
+            patch.propDetection = { version: 2, size: mod.size, modifiedAt: mod.installedAt,
+                sha256: data.sha256, types: propTypes };
+        }
+    }
     return {
         ...detected,
-        detectedTags: { heroes: detected.lockerHeroes, globalType: detected.globalType },
-        globalType,
+        globalType: propTypes[0] ?? globalType,
+        ...(propTypes.length ? { propTypes } : {}),
         lockerHeroes,
-        lockerHero: lockerHeroes.length === 1 ? lockerHeroes[0] : undefined,
-        lockerHeroSource: overrides.heroes === undefined ? detected.lockerHeroSource : 'manual',
+        lockerHero: overrides?.heroes === undefined ? detected.lockerHero : lockerHeroes.length === 1 ? lockerHeroes[0] : undefined,
+        lockerHeroSource: overrides?.heroes === undefined ? detected.lockerHeroSource : 'manual',
+        ...(overrides ? { detectedTags: { heroes: detected.lockerHeroes, globalType: detected.globalType } } : {}),
+        ...(Object.keys(patch).length ? { metadataPatch: patch } : {}),
     };
 }
 

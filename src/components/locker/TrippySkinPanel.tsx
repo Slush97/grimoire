@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import { trippySkinDraftSchema } from '../../lib/effectDraftSchema';
 import { useTranslation } from 'react-i18next';
+import { SegmentedControl } from '../common/ui';
 import { Loader2, AlertCircle, Check, RefreshCw, RotateCcw } from 'lucide-react';
 import {
   applyTrippySkin,
@@ -29,13 +30,6 @@ const pct = (x: number): number => Math.round(x * 100);
 /** Quantize to the same 2 decimals the main process keys its caches by, so the
  *  dirty check compares like with like. */
 const q = (x: number): number => Math.round(x * 100) / 100;
-
-const segBtn = (selected: boolean) =>
-  `rounded px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
-    selected
-      ? 'border border-accent/40 bg-accent/10 text-text-primary'
-      : 'border border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
-  }`;
 
 /**
  * The Body + Gun surface of the Effects panel: paints a hero's body/weapon
@@ -265,23 +259,10 @@ export default function TrippySkinPanel({
 
       <div className="flex items-center gap-2">
         <span className="text-2xs font-medium text-text-secondary">{t('locker.trippy.paint')}</span>
-        <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
-          {(['all', 'body', 'weapons'] as const).map((target) => (
-            <button
-              key={target}
-              type="button"
-              disabled={busy}
-              onClick={() => setTargets(target)}
-              className={segBtn(targets === target)}
-            >
-              {target === 'all'
-                ? t('locker.trippy.bodyGun')
-                : target === 'body'
-                  ? t('locker.trippy.body')
-                  : t('locker.trippy.gun')}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl variant="joined" size="sm" value={targets} onChange={setTargets} disabled={busy}
+          label={t('locker.trippy.paint')} options={(['all', 'body', 'weapons'] as const).map(value => ({ value,
+            label: t(value === 'all' ? 'locker.trippy.bodyGun' : value === 'body' ? 'locker.trippy.body' : 'locker.trippy.gun'),
+          }))} />
       </div>
 
       {/* Actions */}

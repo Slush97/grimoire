@@ -8,7 +8,7 @@ import { getInstallationScope } from '../../lib/appSettings';
 import { EMPTY_CUSTOM_TAGS, EMPTY_TAG_ORDER, customTagMemberKey, customTagsForMods, useInstalledTagsStore } from '../../stores/installedTagsStore';
 import { getInstalledDefaultTaxonomy, getInstalledGroupTaxonomy, installedBaseTagOptions, sortInstalledTags } from '../../lib/installedCardTaxonomy';
 import { HERO_NAMES_SORTED } from '../../lib/lockerUtils';
-import { baseTagHasLockerDestination } from '../../lib/categoryPaths';
+import { baseTagHasDetectedProp } from '../../lib/categoryPaths';
 import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import { MenuItem, MenuLabel, MenuSeparator, MenuCheckboxItem } from '../common/menu';
 import { HeroTagLabel } from './chips';
@@ -21,6 +21,7 @@ export function ModTagMenuItems({ mod, variants, bulk = false, disabled = false,
   onApply: (tags: Mod['tagOverrides'] | null, clearCustom?: boolean) => Promise<void>;
 }) {
   const { t } = useTranslation();
+  const detectedProps = new Set([mod, ...variants].flatMap(item => item.propTypes ?? []));
   const settings = useAppStore(state => state.settings);
   const tagScope = getInstallationScope(settings);
   const heroNames = useCategoryStore(state => state.heroNames);
@@ -92,7 +93,7 @@ export function ModTagMenuItems({ mod, variants, bulk = false, disabled = false,
     {baseOptions.map(({ key, label }) => <MenuCheckboxItem key={key} indicatorPlacement="end" disabled={menuBusy}
       checked={state('base', label)}
       endAdornment={<>
-        {baseTagHasLockerDestination(label) && <Vault aria-hidden className="h-3.5 w-3.5 shrink-0" />}
+        {!bulk && baseTagHasDetectedProp(label, detectedProps) && <span className="shrink-0" title={t('installed.tag.detectedInGeneral')}><Vault aria-hidden className="h-3.5 w-3.5" /></span>}
         {!bulk && defaults.tags.includes(label) && <span className="shrink-0" title={t('installed.tag.defaultTag')}><Pin aria-hidden className="h-3.5 w-3.5" /></span>}
       </>}
       onCheckedChange={checked => void toggleAxis('base', label, checked)}>

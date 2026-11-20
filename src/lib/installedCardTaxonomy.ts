@@ -1,12 +1,12 @@
 import type { GlobalModType, Mod } from '../types/mod';
-import { baseTagGlobalType, categoryModelForSection, normalizeCategoryLabel, resolveCategoryPath, type CategoryPaths } from './categoryPaths';
+import { generalPropModel, baseTagGlobalType, categoryModelForSection, normalizeCategoryLabel, resolveCategoryPath, type CategoryPaths } from './categoryPaths';
 import { heroNameForLabel } from './heroNames';
 import { GLOBAL_MOD_TYPE_LABELS, canonicalHeroName, skinCategoryHero } from './lockerUtils';
 
 export type InstalledCardTaxonomyInput = Pick<
   Mod,
   'categoryId' | 'categoryName' | 'globalType' | 'lockerHero' | 'sourceSection'
-> & Partial<Pick<Mod, 'gameBananaId' | 'lockerHeroes' | 'lockerHeroSource' | 'tagOverrides' | 'detectedTags'>>;
+> & Partial<Pick<Mod, 'gameBananaId' | 'lockerHeroes' | 'lockerHeroSource' | 'tagOverrides' | 'detectedTags' | 'propTypes'>>;
 
 export interface InstalledTaxonomyContext {
   heroByCategoryId?: ReadonlyMap<number, string>;
@@ -85,13 +85,14 @@ export function getInstalledCardTaxonomy(
     ?? (mod.globalType ? [] : explicitHero ? [explicitHero] : section === 'Mod' ? (mappedHero ? [mappedHero] : categoryHeroes) : []));
   const categoryLabels = uniqueLabels(mod.tagOverrides?.base ?? labels.filter(label => !heroNameForLabel(label, context.heroNames)
     && !heroNames.some(hero => hero.toLowerCase() === canonicalHeroName(label).toLowerCase())));
+  categoryLabels.splice(0, categoryLabels.length, ...categoryLabels.filter(label => !/^cursors?$/i.test(label)));
   if (mod.tagOverrides?.base) {
     const depths = new Map(labels.map((label, index) => [label.toLowerCase(), index]));
     categoryLabels.sort((a, b) => (depths.get(a.toLowerCase()) ?? -1) - (depths.get(b.toLowerCase()) ?? -1));
   }
   // Locally generated/imported files keep their explicit General label when
   // there is no category to display. Linked files only expose real categories.
-  const customLabels = mod.tagOverrides?.base === undefined && !linked && labels.length === 0 && mod.globalType
+  const customLabels = mod.tagOverrides?.base === undefined && !linked && labels.length === 0 && mod.globalType && !generalPropModel(mod.globalType)
     ? [GLOBAL_MOD_TYPE_LABELS[mod.globalType]] : [];
   return {
     heroNames,
@@ -203,7 +204,9 @@ export function installedBaseTagOptions(context: InstalledTaxonomyContext, curre
   }
   const destinations = new Set(labels.map(baseTagGlobalType));
   for (const [type, label] of Object.entries(GLOBAL_MOD_TYPE_LABELS)) {
+    // GameBanana keeps one Patrons tag; the two model slots are Locker destinations.
+    if (type === 'hidden-king' || type === 'archmother') continue;
     if (baseTagGlobalType(label) && !destinations.has(type as GlobalModType)) labels.push(label);
   }
-  return uniqueLabels(labels).sort((a, b) => a.localeCompare(b));
+  return uniqueLabels(labels).filter(label => !/^cursors?$/i.test(label)).sort((a, b) => a.localeCompare(b));
 }

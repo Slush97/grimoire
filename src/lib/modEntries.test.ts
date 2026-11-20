@@ -144,7 +144,8 @@ describe('entryTags', () => {
   });
 
   it('retains local explicit classifications without inventing an unclassified bucket', () => {
-    expect(entryTags(single({ gameBananaId: undefined, globalType: 'soul-container' }))).toEqual([
+    expect(entryTags(single({ gameBananaId: undefined, globalType: 'soul-container' }))).toEqual([]);
+    expect(entryTags(single({ gameBananaId: undefined, globalType: 'soul-container', tagOverrides: { base: ['Soul Containers'] } }))).toEqual([
       { key: 'tag:soul containers', label: 'Soul Containers' },
     ]);
     expect(entryTags(single({ categoryName: undefined }))).toEqual([]);

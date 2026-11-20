@@ -1,4 +1,5 @@
 import type { Mod } from '../types/mod';
+import { generalPropModel } from './categoryPaths';
 import { getEffectiveGlobalType } from './lockerUtils';
 
 /** Game models of the props a mod can reskin. Mirrors the entries in electron soulContainerModels. */
@@ -14,8 +15,8 @@ function categoryLeaf(name: string | undefined): string {
 /** The prop model a mod reskins, for the 3D preview of mods that change a prop rather than a hero. */
 export function installedPropModel(mod: Mod): string | null {
   const type = getEffectiveGlobalType(mod);
-  if (type === 'soul-container') return SOUL_CONTAINER_MODEL;
-  if (type === 'spirit-urn') return SPIRIT_URN_MODEL;
+  const entry = type && generalPropModel(type);
+  if (entry) return entry;
   if (categoryLeaf(mod.categoryName) === "sinner's sacrifice") return SINNERS_SACRIFICE_MODEL;
   return null;
 }

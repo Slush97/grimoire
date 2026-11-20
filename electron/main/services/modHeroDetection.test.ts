@@ -206,7 +206,7 @@ describe('skins without an assigned hero category', () => {
         expect(needsModHeroDetection(mod, metadata, paths)).toBe(false);
         expect(detectModHeroes(mod, metadata, paths)).toMatchObject({ heroes, source });
         expect(resolveModClassification(mod, metadata, paths).lockerHeroes).toEqual(heroes);
-        expect(parser.read).not.toHaveBeenCalled();
+        expect(parser.read).toHaveBeenCalledTimes(heroes.length ? 0 : 1);
         expect(parser.localHero).not.toHaveBeenCalled();
     });
 
@@ -325,4 +325,70 @@ describe('original file text matching', () => {
         expect(heroesMentionedInFileText(['Remodel Silverhand Hazelnut', 'Fathom Kali Trapper', 'shopkeeper neutral_gremlin']))
             .toEqual([]);
     });
+});
+
+describe('General prop classification', () => {
+    it('keeps mixed local prop packs classified across cached scans', () => {
+        parser.read.mockReturnValue([
+            'materials/models/npc/patron_amber/color.vtex_c',
+            'models/props_gameplay/sinners_sacrifice_vault/sinners_sacrifice.vmdl_c',
+        ]);
+        const result = resolveModClassification(mod, {});
+        expect(result).toMatchObject({ globalType: 'hidden-king', propTypes: ['hidden-king', 'sinner'], lockerHeroes: [] });
+        parser.read.mockClear();
+        const cached = resolveModClassification(mod, { ...result.metadataPatch });
+        expect(cached.propTypes).toEqual(['hidden-king', 'sinner']);
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+    it('leaves breakables in Other and respects explicit classifications', () => {
+        parser.read.mockReturnValue(['models/items/item_crate.vmdl_c']);
+        expect(resolveModClassification(mod, { gameBananaId: 123, categoryName: 'Other/Misc' }))
+            .toMatchObject({ lockerHeroes: [] });
+        expect(resolveModClassification(mod, { gameBananaId: 123, categoryName: 'Boxes' }).globalType).toBeUndefined();
+        expect(resolveModClassification(mod, { globalType: 'hud', globalTypeSource: 'manual' }).globalType).toBe('hud');
+    });
+});
+
+describe('asset-only Other fallback', () => {
+    const linked = { gameBananaId: 999, categoryName: 'Other/Misc' };
+    it('never scans known hero or non-prop General assignments just to look for props', () => {
+        resolveModClassification(mod, { globalType: 'effects', globalTypeSource: 'manual' });
+        resolveModClassification(mod, { ...linked, tagOverrides: { heroes: ['Ivy'] } });
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+    it('caches negative results and refuses category or user-tag lookalikes', () => {
+        const data = { ...linked, categoryName: 'Patrons', tagOverrides: { base: ['Patrons'], heroes: [] } };
+        const result = resolveModClassification(mod, data);
+        expect(result.globalType).toBeUndefined(); expect(result.propTypes).toBeUndefined();
+        expect(result.metadataPatch?.propDetection?.types).toEqual([]);
+        parser.read.mockClear();
+        resolveModClassification(mod, { ...data, ...result.metadataPatch });
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+    it('keeps detected membership through tag removal, but rechecks changed content', () => {
+        parser.read.mockReturnValue(['materials/models/props_gameplay/soul_container/soul_container_color.vtex_c']);
+        const result = resolveModClassification(mod, linked);
+        expect(result.propTypes).toEqual(['soul-container']);
+        const data = { ...linked, ...result.metadataPatch, tagOverrides: { base: [] } };
+        parser.read.mockClear();
+        expect(resolveModClassification(mod, data).propTypes).toEqual(['soul-container']);
+        expect(parser.read).not.toHaveBeenCalled();
+        parser.read.mockReturnValue([]);
+        expect(resolveModClassification({ ...mod, size: mod.size + 1 }, data).propTypes).toBeUndefined();
+        expect(parser.read).toHaveBeenCalledOnce();
+    });
+    it('does not permanently cache an unreadable VPK as having no props', () => {
+        parser.read.mockReturnValue(null);
+        expect(resolveModClassification(mod, linked).metadataPatch?.propDetection).toBeUndefined();
+        parser.read.mockReturnValue(['models/props_gameplay/idol_urn/idol_urn.vmdl_c']);
+        expect(resolveModClassification(mod, linked).propTypes).toEqual(['spirit-urn']);
+    });
+});
+
+it('reclassifies legacy patron detections into both exact slots and discards Boxes evidence', () => {
+    parser.read.mockReturnValue(['models/npc/patron_amber/patron_amber.vmdl_c', 'materials/models/npc/patron_sapphire/color.vtex_c']);
+    const result = resolveModClassification(mod, { globalType: 'patron', globalTypeSource: 'manual',
+        propDetection: { version: 1, size: mod.size, modifiedAt: mod.installedAt, types: ['patron', 'boxes'] } });
+    expect(result.propTypes).toEqual(['hidden-king', 'archmother']);
+    expect(result.metadataPatch?.propDetection?.version).toBe(2);
 });

@@ -1913,7 +1913,8 @@
       "base": "Base",
       "defaultTag": "Default tag",
       "global": "General",
-      "hero": "Hero"
+      "hero": "Hero",
+      "detectedInGeneral": "Detected in General"
     },
     "preview": {
       "previousFile": "Previous file",
@@ -2647,11 +2648,6 @@
       "facetInstalled": "{{label}} (installed, off)",
       "categoryCount_one": "{{count}} category",
       "categoryCount_other": "{{count}} categories",
-      "fileCount_one": "{{count}} file",
-      "fileCount_other": "{{count}} files",
-      "unassignedCount_one": "{{count}} unassigned",
-      "unassignedCount_other": "{{count}} unassigned",
-      "switchToListViewToSeeUnassigned": "Switch to List view to see unassigned mods",
       "collapseAll": "Collapse all",
       "expandAll": "Expand all",
       "collapseAllHeroes": "Collapse all heroes",
@@ -2665,24 +2661,14 @@
       "noHeroCategoriesFound": "No hero categories found.",
       "global": "General",
       "globalEmptyHint": "Import soul containers & spirit urns",
-      "unassigned": "Unassigned",
-      "unassignedDescription": "These mods couldn't be matched automatically. Assign them to a hero or a General category.",
       "noPreview": "No preview",
       "sound": "Sound · ",
-      "tagAsHero": "Assign to...",
-      "tagAsHeroNamed": "Assign {{name}} to a hero or General category",
-      "generalCategory": "General / {{category}}",
       "effects": "Effects",
       "animations": "Animations",
       "maps": "Maps",
       "heroNotFound": "Hero Not Found",
       "backToLocker": "Back to Locker",
       "back": "Back",
-      "changeCategory": "Change category",
-      "changeCategoryForNamed": "Change category for {{name}}",
-      "changeGlobalCategory": "Change General category",
-      "moveToCategory": "Move to General tab",
-      "removeFromGlobal": "Remove from General",
       "noGlobalNonHeroCosmeticsInstalledYet": "No general (non-hero) cosmetics installed yet.",
       "disableNamed": "Disable {{name}}",
       "enableNamed": "Enable {{name}}",
@@ -2698,13 +2684,19 @@
       "sounds": "Sounds",
       "noSoundModsTagged": "No sound mods tagged for this hero yet. Tag one from Installed (multi-select → Tag).",
       "downloadASkinForThisHero": "Download a skin for this hero to manage it here.",
+      "patrons": "Patrons",
+      "sinners": "Sinners",
+      "boxes": "Boxes",
+      "other": "Other",
       "soulContainers": "Soul Containers",
       "spiritUrns": "Spirit Urns",
       "hideout": "Hideout",
       "iconPacks": "Icon Packs",
       "hud": "HUD",
       "announcer": "Announcer / SFX",
-      "killstreakMusic": "Killstreak Music"
+      "killstreakMusic": "Killstreak Music",
+      "hiddenKing": "Hidden King",
+      "archmother": "Archmother"
     },
     "hero": {
       "skins": "Skins",
@@ -2746,6 +2738,12 @@
       "deleteNamed": "Delete {{name}}",
       "deleteTitle": "Delete {{name}}?",
       "deleteMessage": "This removes the cursor pack from Grimoire. If it is the active one, the default cursors come back."
+    },
+    "preview": {
+      "interact": "{{name}}: left-click to toggle, right-drag to rotate",
+      "resume": "Resume auto-spin",
+      "save": "Save preview",
+      "saveFailed": "Could not save the preview."
     }
   },
   "profiles": {

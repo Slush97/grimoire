@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
-import { buildCategoryPaths, categoryGeneralType, categoryHeroName, categoryModelForSection, normalizeCategoryLabel, resolveCategoryPath, resolveInstalledGeneralType } from './categoryPaths';
+import { detectGeneralPropTypes, generalPropModel, buildCategoryPaths, categoryGeneralType, categoryHeroName, categoryModelForSection, normalizeCategoryLabel, resolveCategoryPath, resolveInstalledGeneralType } from './categoryPaths';
 
 const node = (id: number, name: string, children: GameBananaCategoryNode[] = []): GameBananaCategoryNode => ({
   id, name, children, itemCount: 1, profileUrl: `https://gamebanana.com/mods/cats/${id}`,
@@ -110,7 +110,7 @@ describe('category-based General classification', () => {
     expect(resolveInstalledGeneralType({ categoryName: 'Animations', globalType: 'effects' })).toBe('effects');
     expect(resolveInstalledGeneralType({ ...linked, categoryName: 'Animations', lockerHero: 'Haze', lockerHeroSource: 'manual' })).toBeUndefined();
     expect(resolveInstalledGeneralType({ ...linked, categoryName: 'Maps', globalType: null, globalTypeSource: 'manual' })).toBeUndefined();
-    expect(resolveInstalledGeneralType({ ...linked, sourceSection: 'Sound', categoryName: 'Maps' })).toBeUndefined();
+    expect(resolveInstalledGeneralType({ ...linked, sourceSection: 'Sound', categoryName: 'Maps' })).toBe('sounds');
   });
 
   it('uses actual leaf and ancestor categories rather than generating classification tags', () => {
@@ -118,7 +118,7 @@ describe('category-based General classification', () => {
     expect(categoryGeneralType(generalPaths.get(21)!)).toBe('soul-container');
     expect(categoryGeneralType(generalPaths.get(22)!)).toBe('spirit-urn');
     expect(categoryGeneralType(generalPaths.get(23)!)).toBe('hideout');
-    expect(categoryGeneralType([{ name: 'Killstreak Music' }])).toBe('killstreak-music');
+    expect(categoryGeneralType([{ name: 'Killstreak Music' }])).toBe('sounds');
     expect(categoryGeneralType([{ name: 'Other/Misc' }])).toBeUndefined();
     expect(categoryGeneralType([{ name: 'Character HUD' }])).toBeUndefined();
   });
@@ -156,4 +156,35 @@ describe('Locker built-in destinations', () => {
       expect(categoryGeneralType([{ name }])).toBeUndefined();
     }
   });
+});
+
+describe('General prop previews', () => {
+  it('detects mixed prop packs from models and texture-only overrides', () => {
+    expect(detectGeneralPropTypes([
+      'models/npc/patron_sapphire/patron_sapphire.vmdl_c',
+      'materials/models/props_gameplay/sinners_sacrifice_vault/sinners_sacrifice_color.vtex_c',
+      'materials/models/items/item_crate/crate_color.vtex_c',
+    ])).toEqual(['archmother', 'sinner']);
+    expect(detectGeneralPropTypes(['models/heroes/ivy/ivy.vmdl_c', 'models/architecture/crate_cage.vmdl_c'])).toEqual([]);
+  });
+  it('uses exact patron slots and has no breakable or generic patron preview', () => {
+    expect(generalPropModel('hidden-king')).toBe('models/npc/patron_amber/patron_amber.vmdl_c');
+    expect(generalPropModel('archmother')).toBe('models/npc/patron_sapphire/patron_sapphire.vmdl_c');
+    expect(generalPropModel('patron')).toBeUndefined();
+    expect(generalPropModel('boxes')).toBeUndefined();
+    expect(detectGeneralPropTypes(['models/items/item_crate.vmdl_c', 'models/items/crystal_crate.vmdl_c'])).toEqual([]);
+  });
+  it('routes global sounds while retaining hero sounds on the hero axis', () => {
+    expect(resolveInstalledGeneralType({ sourceSection: 'Sound' })).toBe('sounds');
+    expect(resolveInstalledGeneralType({ sourceSection: 'Sound', categoryName: 'Sounds' }, undefined, ['Ivy'])).toBeUndefined();
+    expect(categoryGeneralType([{ name: 'Other' }, { name: 'Patrons' }])).toBe('patron');
+    expect(categoryGeneralType([{ name: "Sinner's Sacrifice" }])).toBe('sinner');
+    expect(categoryGeneralType([{ name: 'Boxes' }])).toBe('boxes');
+  });
+});
+
+it('keeps the same patron order when VPK paths arrive in a different order', () => {
+  const entries = ['models/npc/patron_sapphire/patron_sapphire.vmdl_c', 'materials/models/npc/patron_amber/color.vtex_c'];
+  expect(detectGeneralPropTypes(entries)).toEqual(['hidden-king', 'archmother']);
+  expect(detectGeneralPropTypes([...entries].reverse())).toEqual(['hidden-king', 'archmother']);
 });

@@ -3,30 +3,29 @@ import { lazy, memo, Suspense, useCallback, useEffect, useId, useLayoutEffect, u
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Box, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, Ghost, Images, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Shuffle, Sparkles, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Box, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, Ghost, Images, Layers, Music, Palette, Shield, Shirt, Shuffle, Sparkles, Star, Trash2 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import { useShallow } from 'zustand/react/shallow';
 import {
   getGamebananaCategories,
   getHeroColorSupport,
   getLockerOverview,
-  setModGlobalType,
-  setModLockerHero,
 } from '../lib/api';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
+import { generalPropModel } from '../lib/categoryPaths';
 import { modRestoreKey } from '../lib/soloRestore';
 import { getAssetPath } from '../lib/assetPath';
 import { shakeElement } from '../lib/shakeElement';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
-import { UnassignedModTagSelect } from '../components/locker/UnassignedModTagSelect';
 import CursorPackPane, { CursorImportButton } from '../components/locker/CursorPackPane';
-import { ModFavoriteButton, ShuffleIncludeButton } from '../components/locker/ShuffleControls';
+import { ModFavoriteButton, ShuffleIncludeButton, LockerCardAction, LockerCardHeader, LockerGeneralCard, LOCKER_CARD_GRID_CLASS, LOCKER_CARD_MEDIA_CLASS, LOCKER_CARD_TITLE_CLASS } from '../components/locker/ShuffleControls';
 import { modPreferenceKey, useModFavorites } from '../lib/disabledModPrefs';
 import { LockerHeroView } from './LockerHero';
 import { LockerViewerPanel } from '../components/locker/LockerViewerHost';
 import { getLockerHeroNeighbors } from '../lib/lockerHeroNavigation';
 import ModThumbnail from '../components/ModThumbnail';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
+import { FloatingPanelArea } from '../components/common/FloatingPanelArea';
 
 // Heavy (three.js): only pulled in when the soul-container type is viewed.
 import { SoulRegistryProvider } from '../components/locker/SoulRegistryProvider';
@@ -39,10 +38,9 @@ const SpiritUrnImportModal = lazy(() => import('../components/locker/SpiritUrnIm
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { GlobalModType, LockerOverview, Mod } from '../types/mod';
-import { ViewModeToggle, EmptyState, SectionHeader, ConfirmModal } from '../components/common/PageComponents';
-import { Tag, ToggleIndicator } from '../components/common/ui';
+import { ViewModeToggle, EmptyState, ConfirmModal } from '../components/common/PageComponents';
+import { Button, ToggleIndicator } from '../components/common/ui';
 import { Skeleton } from '../components/common/Skeleton';
-import { RevealImage } from '../components/common/RevealImage';
 import {
   FAVORITE_HEROES_KEY,
   globalModTypeLabel,
@@ -78,7 +76,6 @@ import {
   shuffleSkinKey,
   type VariantChoice,
 } from '../lib/lockerRandomizer';
-import { SPIRIT_URN_MODEL } from '../lib/installedPropPreview';
 import { useCursorPackStore } from '../stores/cursorPackStore';
 import {
   appendHeroTypeaheadCharacter,
@@ -245,6 +242,7 @@ function FacetSheenDefs() {
 }
 
 export default function Locker() {
+  const [heroViewport, setHeroViewport] = useState<HTMLDivElement | null>(null);
   const { t } = useTranslation();
   const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMods, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, shuffleVariants, setShuffleVariant } =
     useAppStore(useShallow((s) => ({
@@ -524,23 +522,12 @@ export default function Locker() {
     () => mods.filter((m) => isLockerManagedMod(m) && !getEffectiveGlobalType(m)),
     [mods]
   );
-  // Killstreak Music sounds are global (match-wide, no hero), so keep them off
-  // the per-hero Sounds axis even when GameBanana filed them under a hero or
-  // inferHeroFromTitle tagged one. getEffectiveGlobalType reflects that routing.
+  // Non-hero sounds live in General; hero sounds keep their hero placement.
   const lockerSounds = useMemo(
     () => mods.filter((m) => isLockerManagedSound(m) && !getEffectiveGlobalType(m)),
     [mods]
   );
   const globalGroups = useMemo(() => groupGlobalMods(mods), [mods]);
-  const globalCount = useMemo(
-    () => new Set(GLOBAL_MOD_TYPE_ORDER.flatMap(type => globalGroups[type].map(mod => mod.id))).size + cursorPackCount,
-    [globalGroups, cursorPackCount]
-  );
-  const globalTypeCount = useMemo(
-    () => GLOBAL_MOD_TYPE_ORDER.filter(type => globalGroups[type].length > 0).length + (cursorPackCount > 0 ? 1 : 0),
-    [globalGroups, cursorPackCount]
-  );
-
   // Calculate heroMods, passing heroList for name-based category inference
   const heroMods = useMemo(() => {
     return groupModsByCategory(lockerMods, baseHeroList);
@@ -548,6 +535,22 @@ export default function Locker() {
   const heroSounds = useMemo(() => {
     return groupModsByCategory(lockerSounds, baseHeroList);
   }, [lockerSounds, baseHeroList]);
+  const otherMods = useMemo(() => {
+    const assigned = new Set([
+      ...[...heroMods.map.values(), ...heroSounds.map.values()].flat().map(mod => mod.id),
+      ...GLOBAL_MOD_TYPE_ORDER.flatMap(type => globalGroups[type].map(mod => mod.id)),
+    ]);
+    return mods.filter(mod => !assigned.has(mod.id));
+  }, [mods, heroMods, heroSounds, globalGroups]);
+  const globalCount = useMemo(
+    () => new Set(GLOBAL_MOD_TYPE_ORDER.flatMap(type => globalGroups[type].map(mod => mod.id))).size + otherMods.length + cursorPackCount,
+    [globalGroups, otherMods.length, cursorPackCount]
+  );
+  const globalTypeCount = useMemo(
+    () => GLOBAL_MOD_TYPE_ORDER.filter(type => globalGroups[type].length > 0).length + (cursorPackCount > 0 ? 1 : 0) + (otherMods.length > 0 ? 1 : 0),
+    [globalGroups, otherMods.length, cursorPackCount]
+  );
+
   // Issue #208: the image shown on a hero's card/backdrop is the active
   // (highest-priority enabled) skin's chosen Locker image, if the user picked
   // one. Otherwise undefined and the card falls back to the hero render.
@@ -578,15 +581,6 @@ export default function Locker() {
   );
   const installedSkinCount = useMemo(() => countLockerSkins(lockerMods), [lockerMods]);
   const installedSoundCount = useMemo(() => countLockerSkins(lockerSounds), [lockerSounds]);
-  const unassignedSkins = useMemo(() => groupLockerSkins(heroMods.unassigned), [heroMods]);
-  // Sound mods that couldn't be auto-mapped to a hero (e.g. inferHeroFromTitle
-  // didn't catch the hero name in the title). Surfaced in the same Unassigned
-  // section so users can tag them from one place.
-  const unassignedSounds = useMemo(
-    () => groupLockerSkins(heroSounds.unassigned),
-    [heroSounds]
-  );
-
   // Canonical hero names that currently have an applied card / ability sound /
   // effect (recolor or trippy paint), derived from the override overview. Keyed
   // by canonicalHeroName so "The Doorman" and "Doorman" resolve to one hero.
@@ -1071,35 +1065,6 @@ export default function Locker() {
     return current ? current.enabled || toggleMod(current.id) : false;
   };
 
-  // Sorted hero name list for the "tag as hero" dropdown on Unassigned cards.
-  // We use only heroes that have a GameBanana category, because that's the
-  // pool the locker grouping logic resolves names against; picking a hero
-  // outside this set would silently fail to move the mod.
-  const tagHeroOptions = useMemo(
-    () => [...baseHeroList].sort((a, b) => a.name.localeCompare(b.name)),
-    [baseHeroList]
-  );
-
-  const tagModHero = async (modId: string, heroName: string | null) => {
-    try {
-      await setModLockerHero(modId, heroName);
-      await loadMods({ silent: true });
-    } catch (err) {
-      console.error('[Locker] Failed to set lockerHero override:', err);
-    }
-  };
-
-  // Manual override for the Global axis: reassign a mod to another global type,
-  // or pass null to drop it off the Global axis entirely (see set-mod-global-type).
-  const tagModGlobalType = async (modId: string, globalType: GlobalModType | null) => {
-    try {
-      await setModGlobalType(modId, globalType);
-      await loadMods();
-    } catch (err) {
-      console.error('[Locker] Failed to set globalType override:', err);
-    }
-  };
-
   if (!activeDeadlockPath) {
     return (
       <EmptyState
@@ -1115,9 +1080,9 @@ export default function Locker() {
     // so the hero cards land where their placeholders were.
     return (
       <div className="p-6 space-y-6">
-        <div className="flex h-9 items-center justify-between gap-3" aria-hidden>
+        <div className="flex h-10 items-center justify-between gap-3" aria-hidden>
           <Skeleton className="h-3 w-48" />
-          <Skeleton className="h-9 w-24" />
+          <Skeleton className="h-10 w-24" />
         </div>
         <div
           className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3"
@@ -1167,8 +1132,11 @@ export default function Locker() {
           </div>,
           document.body,
         )}
-      <div className="p-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div data-locker-gallery-header
+        className={`sticky top-0 z-40 border-b border-border px-4 py-3 sm:px-6 ${settings?.sidebarTransparent
+          ? 'app-background-fixed' : 'bg-bg-primary/95 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80'} ${
+          heroOverlay.item || globalOverlay.item || missingOverlay.item ? 'invisible pointer-events-none' : ''}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-text-secondary">
           {[
             t('locker.page.heroCount', { count: displayedHeroList.length }),
@@ -1180,74 +1148,43 @@ export default function Locker() {
             .filter(Boolean)
             .join(' • ')}
         </div>
-        <div className="flex items-center gap-3">
+        <div data-locker-gallery-toolbar className="flex flex-wrap items-center gap-2">
           {(hasShuffleableMods || shuffleIncluded.size > 0) && <ShufflePool />}
           {hasShuffleableMods && (
-            <button
-              type="button"
+            <Button
+              variant={shuffleOnLaunch ? 'primary' : 'toolbar'} icon={Shuffle}
               role="switch"
               aria-checked={shuffleOnLaunch}
               onClick={() => setShuffleOnLaunch(!shuffleOnLaunch)}
-              className="group/toggle flex items-center gap-2 self-stretch rounded-sm border border-border bg-bg-secondary px-3 text-sm text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary cursor-pointer"
+              className="group/toggle h-10! rounded-lg! px-3!"
               title={t('locker.randomize.onLaunchHint')}
             >
-              <Shuffle className="w-4 h-4" />
               <span>{t('locker.randomize.onLaunch')}</span>
               {shuffleOnLaunch && (
                 <span
                   className={`rounded-full px-1.5 text-xs tabular-nums ${
-                    shuffleIncluded.size > 0 ? 'bg-accent/15 text-accent' : 'bg-yellow-500/15 text-yellow-400'
+                    shuffleIncluded.size > 0 ? 'bg-accent/15 text-accent' : 'bg-state-warning/15 text-state-warning'
                   }`}
                 >
                   {shuffleIncluded.size}
                 </span>
               )}
               <ToggleIndicator checked={shuffleOnLaunch} className="ml-0.5 scale-90" />
-            </button>
+            </Button>
           )}
-          {viewMode === 'gallery' &&
-            unassignedSkins.length + unassignedSounds.length > 0 && (
-              <button
-                onClick={() => {
-                  setViewMode('list');
-                  lockerScrollRef.current?.scrollTo({ top: 0 });
-                }}
-                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/20 transition-colors"
-                title={t('locker.page.switchToListViewToSeeUnassigned')}
-              >
-                <Layers className="w-3 h-3" />
-                {t('locker.page.unassignedCount', {
-                  count: unassignedSkins.length + unassignedSounds.length,
-                })}
-              </button>
-            )}
           {viewMode === 'list' && heroList.length > 0 && (
-            <button
-              onClick={toggleExpandAll}
-              className="flex items-center gap-1.5 self-stretch rounded-sm border border-border bg-bg-secondary px-3 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
-              title={allExpanded ? t('locker.page.collapseAllHeroes') : t('locker.page.expandAllHeroes')}
-            >
-              {allExpanded ? (
-                <ChevronsDownUp className="w-4 h-4" />
-              ) : (
-                <ChevronsUpDown className="w-4 h-4" />
-              )}
+            <Button variant="toolbar" icon={allExpanded ? ChevronsDownUp : ChevronsUpDown}
+              onClick={toggleExpandAll} className="h-10! rounded-lg! px-3!"
+              title={allExpanded ? t('locker.page.collapseAllHeroes') : t('locker.page.expandAllHeroes')}>
               {allExpanded ? t('locker.page.collapseAll') : t('locker.page.expandAll')}
-            </button>
+            </Button>
           )}
-          <button
-            onClick={() => setHideEmptyHeroes((v) => !v)}
-            aria-pressed={hideEmptyHeroes}
-            className={`flex items-center gap-1.5 self-stretch rounded-sm border px-3 text-sm transition-colors cursor-pointer ${
-              hideEmptyHeroes
-                ? 'border-accent/50 bg-accent/15 text-accent hover:bg-accent/25'
-                : 'border-border bg-bg-secondary text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-            }`}
-            title={hideEmptyHeroes ? t('locker.page.showEmptyHeroes') : t('locker.page.hideEmptyHeroes')}
-          >
-            <Filter className="w-4 h-4" />
+          <Button variant={hideEmptyHeroes ? 'primary' : 'toolbar'} icon={Filter}
+            onClick={() => setHideEmptyHeroes(value => !value)} aria-pressed={hideEmptyHeroes}
+            className="h-10! rounded-lg! px-3!"
+            title={hideEmptyHeroes ? t('locker.page.showEmptyHeroes') : t('locker.page.hideEmptyHeroes')}>
             {hideEmptyHeroes ? t('locker.page.showEmpty') : t('locker.page.hideEmpty')}
-          </button>
+          </Button>
           <ViewModeToggle
             value={viewMode}
             options={[
@@ -1258,68 +1195,8 @@ export default function Locker() {
           />
         </div>
       </div>
-
-      {viewMode === 'list' && (unassignedSkins.length > 0 || unassignedSounds.length > 0) && (
-        <div className="space-y-3">
-          <SectionHeader>{t('locker.page.unassigned')}</SectionHeader>
-          <p className="text-xs text-text-secondary -mt-1">
-            {t('locker.page.unassignedDescription')}
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {[...unassignedSkins, ...unassignedSounds].map((skin) => {
-              const mod = skin.primary;
-              const subtitle =
-                skin.variants.length > 1
-                  ? t('locker.page.fileCount', { count: skin.variants.length })
-                  : mod.fileName;
-              const isSound = mod.sourceSection === 'Sound';
-
-              return (
-                <div
-                  key={skin.key}
-                  data-nsfw-hover-reveal={settings?.revealNsfwOnHover || undefined}
-                  className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3 text-left"
-                >
-                  <div className="w-14 h-14 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
-                    <ModThumbnail
-                      src={mod.thumbnailUrl}
-                      alt={mod.name}
-                      nsfw={mod.nsfw}
-                      hideNsfw={shouldBlurNsfw(settings)}
-                      className="w-full h-full"
-                      fallback={
-                        <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
-                          {t('locker.page.noPreview')}
-                        </div>
-                      }
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <div className="font-medium truncate" title={mod.name}>
-                      {mod.name}
-                    </div>
-                    <div className="text-xs text-text-secondary truncate" title={subtitle}>
-                      {isSound ? t('locker.page.sound') : ''}
-                      {subtitle}
-                    </div>
-                    <UnassignedModTagSelect
-                      name={mod.name}
-                      heroes={tagHeroOptions}
-                      onTagHero={async (hero) => {
-                        for (const variant of skin.variants) await tagModHero(variant.id, hero);
-                      }}
-                      onTagGeneral={async (type) => {
-                        for (const variant of skin.variants) await tagModGlobalType(variant.id, type);
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
+      </div>
+      <div className="p-6 space-y-6">
       {heroList.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
           <Layers className="w-12 h-12 mb-3 opacity-50" />
@@ -1423,6 +1300,8 @@ export default function Locker() {
 
       {overlayHero && (
         <div
+          ref={setHeroViewport}
+          data-locker-hero-overlay
           className={`fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary sidebar-offset-transition ${
             heroOverlay.closing ? 'animate-fade-out pointer-events-none' : 'animate-fade-in'
           }`}
@@ -1460,7 +1339,9 @@ export default function Locker() {
             shuffleArmed={shuffleOnLaunch}
           />
           {/* Outside the keyed hero view: a hero change keeps the panel and its viewer in place. */}
-          <LockerViewerPanel />
+          <FloatingPanelArea viewport={heroViewport}>
+            <LockerViewerPanel />
+          </FloatingPanelArea>
         </div>
       )}
 
@@ -1498,7 +1379,7 @@ export default function Locker() {
             hideNsfw={shouldBlurNsfw(settings)}
             onBack={() => navigate('/locker')}
             onToggle={selectGlobalMod}
-            onSetGlobalType={tagModGlobalType}
+            otherMods={otherMods}
             onRequestDelete={requestDeleteMods}
             onImportSoul={() => setSoulImportOpen(true)}
             onImportUrn={() => setUrnImportOpen(true)}
@@ -1656,9 +1537,10 @@ function GlobalGalleryCard({ count, typeCount, onNavigate, typeaheadClassName = 
 }
 
 const CURSOR_TAB = 'cursor' as const;
-type GeneralTabId = GlobalModType | typeof CURSOR_TAB;
+const OTHER_TAB = 'other' as const;
+type GeneralTabId = GlobalModType | typeof CURSOR_TAB | typeof OTHER_TAB;
 function generalTabLabel(tab: GeneralTabId, t: (key: string) => string): string {
-  return tab === CURSOR_TAB ? t('locker.cursors.tab') : globalModTypeLabel(tab, t);
+  return tab === OTHER_TAB ? t('locker.page.other') : tab === CURSOR_TAB ? t('locker.cursors.tab') : globalModTypeLabel(tab, t);
 }
 
 interface LockerGlobalViewProps {
@@ -1666,8 +1548,7 @@ interface LockerGlobalViewProps {
   hideNsfw: boolean;
   onBack: () => void;
   onToggle: (modId: string) => Promise<boolean> | void;
-  /** Reassign a mod to another global type, or null to drop it off the axis. */
-  onSetGlobalType: (modId: string, globalType: GlobalModType | null) => void | Promise<unknown>;
+  otherMods: Mod[];
   /** Request deletion of a global mod (its VPK). The page owns the confirm. */
   onRequestDelete: (modIds: string[], name: string) => void;
   /** Open the soul-container GLB import modal (shown on the soul-container tab). */
@@ -1694,7 +1575,7 @@ interface LockerGlobalViewProps {
  * frosted-glass carousel of cosmetic types (echoing the LockerHeroView shell's
  * art + blur language). Selecting a tile reveals that type's toggleable mods.
  */
-function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn, shuffleArmed, includedShuffleKeys, excludedShuffleKeys, onToggleShuffleIncluded, heroList }: LockerGlobalViewProps) {
+function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, otherMods, onRequestDelete, onImportSoul, onImportUrn, includedShuffleKeys, excludedShuffleKeys, onToggleShuffleIncluded, heroList }: LockerGlobalViewProps) {
   const { t } = useTranslation();
   const { favorites, toggleFavorite } = useModFavorites();
   const soundVolume = useAppStore((s) => s.soundVolume);
@@ -1703,18 +1584,20 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // the first populated type (or a prop container when nothing is installed),
   // so the view opens on something meaningful rather than a blank pane.
   const [selectedType, setSelectedType] = useState<GeneralTabId>(
-    () => GLOBAL_MOD_TYPE_ORDER.find((type) => groups[type].length > 0) ?? 'soul-container'
+    () => GLOBAL_MOD_TYPE_ORDER.find((type) => groups[type].length > 0) ?? (otherMods.length ? OTHER_TAB : 'soul-container')
   );
   // Keep populated built-in categories above empty categories.
   const cursorPackCount = useCursorPackStore((s) => s.packs.length);
   const countForTab = (tab: GeneralTabId) => {
     if (tab === CURSOR_TAB) return cursorPackCount;
+    if (tab === OTHER_TAB) return otherMods.length;
     return groups[tab].length;
   };
   const builtinTabIds: readonly GeneralTabId[] = [...GLOBAL_MOD_TYPE_ORDER, CURSOR_TAB];
   const fixedTabIds = [
     ...builtinTabIds.filter((tab) => countForTab(tab) > 0),
     ...builtinTabIds.filter((tab) => countForTab(tab) === 0),
+    OTHER_TAB,
   ];
   const fixedTabOrder = fixedTabIds.join();
   // Sliding active-tab highlight, mirroring the main sidebar's glide: one
@@ -1722,26 +1605,6 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // toggling its own background (which snaps). Refs feed its measured position.
   const tabRefs = useRef<Map<GeneralTabId, HTMLButtonElement | null>>(new Map());
   const [tabIndicator, setTabIndicator] = useState<{ top: number; height: number } | null>(null);
-  // Open retag menu, anchored in viewport coords (fixed-positioned) so it never
-  // clips against the scrolling card pane. Null when closed.
-  const [retagMenu, setRetagMenu] = useState<{ id: string; x: number; y: number } | null>(null);
-  // Close the menu on any scroll / resize / Escape — a fixed menu would
-  // otherwise float away from its anchor once the pane scrolls.
-  useEffect(() => {
-    if (!retagMenu) return;
-    const close = () => setRetagMenu(null);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setRetagMenu(null);
-    };
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('resize', close);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('resize', close);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [retagMenu]);
   // Any type is a valid selection now (empty tabs render their own empty
   // state), so the active tab is simply whatever the user picked.
   const activeType = selectedType;
@@ -1749,10 +1612,10 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // `?? []` on every render would recompute them for nothing.
   const activeMods: Mod[] = useMemo(() => {
     if (activeType === CURSOR_TAB) return [];
-    return sortLockerMods(groups[activeType] ?? [], {
+    return sortLockerMods(activeType === OTHER_TAB ? otherMods : groups[activeType] ?? [], {
       favorites, keyOf: modPreferenceKey, isActive: mod => mod.enabled,
     });
-  }, [activeType, groups, favorites]);
+  }, [activeType, groups, otherMods, favorites]);
   // Track the active row's box so the highlight can glide to it. Measured in a
   // layout effect (pre-paint) to avoid a one-frame jump on first mount. Also
   // re-measured when a tab fills up or empties out and changes the row order.
@@ -1760,14 +1623,14 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
     const el = tabRefs.current.get(activeType);
     if (el) setTabIndicator({ top: el.offsetTop, height: el.offsetHeight });
   }, [activeType, fixedTabOrder]);
-  // Soul containers and spirit urns share the single-select + live-3D-tile
-  // treatment (frosted glass, content-stable key, active badge, import button).
-  const isPropContainer =
-    activeType !== CURSOR_TAB &&
-    isPropContainerType(activeType);
+  // Prop categories reuse the shared 3D canvas; only urns and soul containers import GLBs.
+  const isPatronPreview = activeType === 'hidden-king' || activeType === 'archmother';
+  const isPropPreview =
+    activeType !== CURSOR_TAB && activeType !== OTHER_TAB && !!generalPropModel(activeType);
+  const canImportProp = activeType === 'soul-container' || activeType === 'spirit-urn';
   const total = new Set(
     GLOBAL_MOD_TYPE_ORDER.flatMap((type) => groups[type].map((mod) => mod.id))
-  ).size + cursorPackCount;
+  ).size + otherMods.length + cursorPackCount;
   // The scrollable card pane: the shared soul-container canvas clamps each
   // card's render rect to this element so models never bleed past the pane.
   const paneRef = useRef<HTMLDivElement>(null);
@@ -1926,7 +1789,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
       <div ref={paneRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-glass">
         <div
           key={activeType}
-          className={`flex min-h-full flex-col gap-4 p-6 ${isPropContainer ? '' : 'animate-fade-in'}`}
+          className={`flex min-h-full flex-col gap-4 p-6 ${isPropPreview ? '' : 'animate-fade-in'}`}
         >
           {activeType ? (
             <>
@@ -1938,7 +1801,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   {t('locker.page.modCount', { count: countForTab(activeType) })}
                 </span>
                 {activeType === CURSOR_TAB && <CursorImportButton />}
-                {isPropContainer && (
+                {canImportProp && (
                   <button
                     type="button"
                     onClick={activeType === 'spirit-urn' ? onImportUrn : onImportSoul}
@@ -1952,7 +1815,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
               </div>
               {activeType === CURSOR_TAB ? (
                 <CursorPackPane />
-              ) : activeMods.length === 0 && isPropContainer ? (
+              ) : activeMods.length === 0 && canImportProp ? (
                 <div className={emptyTabClass}>
                   {activeType === 'spirit-urn' ? (
                     <Box className="h-8 w-8 text-white/40" />
@@ -1985,29 +1848,39 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   </p>
                 </div>
               ) : (
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-4">
+              <div className={LOCKER_CARD_GRID_CLASS}>
                 {activeMods.map((mod, cardIndex) => {
-                  // Skipped when NSFW previews are hidden so we never bleed
-                  // hidden imagery into the glass tint, even blurred.
-                  const glassBackdropUrl =
-                    mod.thumbnailUrl && !(mod.nsfw && hideNsfw) ? mod.thumbnailUrl : null;
                   const shuffleKind = shuffleKinds.get(mod.id) ?? null;
-                  // Only a mod the planner would actually re-roll gets the
-                  // opt-in and pooled ring. Legacy priority-root mods stay out.
+                  // Only mods the planner can re-roll get shuffle controls.
+                  // Legacy priority-root mods stay out.
                   const shuffleOptIn = shuffleKind === 'hero' || shuffleKind === 'bucket';
                   // Axis-qualified: a classified mod pools under its bucket, so
                   // one click here can never arm the hero-skin sibling of the
                   // same GameBanana submission (or inherit its variant choice).
                   const shuffleKey = shufflePoolKey(mod);
                   const inShufflePool = shuffleOptIn && includedShuffleKeys.has(shuffleKey);
+                  const activateCard = async (target: HTMLElement) => {
+                    const toggled = await onToggle(mod.id);
+                    if (mod.enabled && toggled === false) shakeElement(target.closest('[data-locker-mod-card]'));
+                  };
+                  const status = { active: mod.enabled, favorite: favorites.has(modPreferenceKey(mod)), shuffled: inShufflePool };
+                  const cardActions = (<>
+                    <LockerCardAction icon={Trash2} label={t('locker.global.deleteMod', { name: mod.name })}
+                      onClick={() => onRequestDelete([mod.id], mod.name)} />
+                    <ModFavoriteButton statusInBadge favorite={status.favorite}
+                      onToggle={() => toggleFavorite(modPreferenceKey(mod))} />
+                    {shuffleOptIn && <ShuffleIncludeButton statusInBadge name={mod.name} included={inShufflePool}
+                      onToggle={() => onToggleShuffleIncluded(shuffleKey)} />}
+                  </>);
                   return (
-                    <div
+                    <LockerGeneralCard active={mod.enabled}
+                      data-locker-mod-card={mod.id}
                       // Prop containers key on the content-stable sha256: their
                       // id/metaKey change when toggled, which would otherwise
                       // remount the card and reload its 3D model on every select.
                       // Other types keep the plain id key (original behavior).
                       key={
-                        isPropContainer ? mod.sha256 ?? mod.id : mod.id
+                        isPropPreview ? mod.sha256 ?? mod.id : mod.id
                       }
                       data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
                       // Cards stagger in as the grid mounts; the delay is capped
@@ -2022,80 +1895,34 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                       // skipped on these tabs too, see above.) The model's own
                       // load-in covers their entrance instead.
                       style={
-                        isPropContainer
+                        isPropPreview
                           ? undefined
                           : {
                               animationDelay: `${Math.min(cardIndex, 12) * 35}ms`,
                               animationFillMode: 'both',
                             }
                       }
-                      className={`group/card relative flex flex-col rounded-[10px] border p-2.5 transition-[border-color,background-color,box-shadow] duration-200 ${
-                        isPropContainer ? '' : 'animate-scale-in'
-                      } ${
-                        mod.enabled
-                          ? 'border-accent bg-accent/[0.06] shadow-[0_0_0_1px_var(--color-accent)] hover:bg-accent/[0.10]'
-                          : 'border-hl/[0.08] bg-bg-sunken/55 text-text-primary/75 hover:border-hl/[0.16] hover:text-text-primary'
-                      } ${inShufflePool ? 'ring-2 ring-accent/45' : ''}`}
+                      className={isPropPreview ? '' : 'animate-scale-in'}
                     >
-                      {/* Glass backdrop: a blurred copy of the cover art bleeds
-                          behind the card so it's tinted by its own thumbnail,
-                          matching the Installed grid cards. Soul containers show
-                          a 3D model on a clear window, so they skip it. */}
-                      {glassBackdropUrl && !isPropContainer && (
-                        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[10px]">
-                          <RevealImage
-                            src={glassBackdropUrl}
-                            alt=""
-                            aria-hidden
-                            draggable={false}
-                            skeleton={false}
-                            className={`h-full w-full scale-[1.35] object-cover blur-2xl saturate-[1.4] transition-opacity duration-200 ${
-                              mod.enabled ? 'opacity-55' : 'opacity-30 grayscale-[0.4]'
-                            }`}
-                          />
-                          <div className="absolute inset-0 scrim-bottom" />
-                        </div>
-                      )}
-
-                      {/* Media: aspect-video cover. Soul containers float their
-                          3D model over a frosted-glass panel so the environment
-                          background shows through; other types keep a solid bg. */}
-                      <div
-                        className={`relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-hl/[0.08] ${
-                          isPropContainer ? '' : 'bg-bg-tertiary'
-                        }`}
-                      >
-                        {/* Frosted-glass panel for soul containers, kept as a
-                            separate inner layer rather than on the media container
-                            itself: a backdrop-filter turns its element into a
-                            stacking context, which would sink this subtree (and
-                            the retag kebab below) under the z-10 full-card toggle
-                            and swallow the kebab's clicks. */}
-                        {isPropContainer && (
-                          <div className="pointer-events-none absolute inset-0 bg-hl/[0.04] backdrop-blur-md" />
-                        )}
-                        {/* Prop containers show a live 3D model on a clear window
-                            (no 2D thumbnail behind it); other types show their
-                            GameBanana thumbnail. The urn exports its own model
-                            entry; the soul container is the tile's default. */}
-                        {isPropContainer ? (
+                      <div className={`${LOCKER_CARD_MEDIA_CLASS} ${isPatronPreview ? 'aspect-[3/4]' : 'aspect-video'}`}>
+                        {isPropPreview ? (
                           <Suspense fallback={null}>
                             <SoulContainerTile
-                              tileId={mod.sha256 ?? mod.id}
+                              tileId={`${mod.sha256 ?? mod.id}-${activeType}`}
                               modKey={mod.metaKey}
-                              entry={activeType === 'spirit-urn' ? SPIRIT_URN_MODEL : undefined}
+                              entry={generalPropModel(activeType)}
                               thumbnailUrl={mod.thumbnailUrl}
                               name={mod.name}
                               nsfw={mod.nsfw}
                               hideNsfw={hideNsfw}
+                              actions={cardActions}
+                              status={status}
+                              portrait={isPatronPreview}
+                              onActivate={target => { void activateCard(target); }}
                             />
                           </Suspense>
                         ) : (
-                          <div
-                            className={`h-full w-full transition-[filter,opacity] duration-200 ${
-                              mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
-                            }`}
-                          >
+                          <div className="h-full w-full">
                             <ModThumbnail
                               src={mod.thumbnailUrl}
                               alt={mod.name}
@@ -2111,111 +1938,13 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             />
                           </div>
                         )}
-                        <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover/card:bg-bg-primary/20" />
-                        {/* Prop containers are single-select, so mark the one
-                            active pick with a positive "Active" badge (a disabled
-                            card is simply unmarked) and fade it in so selecting
-                            animates rather than snapping. Other global types
-                            allow multiple enabled, so they keep tagging the
-                            disabled ones. */}
-                        {isPropContainer
-                          ? mod.enabled && (
-                              <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex h-5 items-start animate-fade-in">
-                                <Tag
-                                  tone="accent"
-                                  variant="overlay"
-                                  icon={Check}
-                                  title={t('locker.global.activeBadgeTitle')}
-                                >
-                                  {t('common.status.active')}
-                                </Tag>
-                              </div>
-                            )
-                          : !mod.enabled && (
-                              <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex h-5 items-start">
-                                <Tag
-                                  tone="neutral"
-                                  variant="overlay"
-                                  icon={PowerOff}
-                                  title={t('locker.global.disabledBadgeTitle')}
-                                >
-                                  {t('locker.global.disabledBadge')}
-                                </Tag>
-                              </div>
-                            )}
-                        <div className="absolute right-2 top-2 z-20 flex gap-2">
-                          {/* Retag control: sits above the full-card toggle overlay
-                              (z-20 > z-10) and stops propagation so opening it never
-                              also toggles the mod. Hidden for Killstreak Music: that
-                              type is derived from the GameBanana category, not a
-                              manual assignment, and the sound belongs to no hero, so
-                              there's nowhere meaningful to retag it. */}
-                          {activeType !== 'killstreak-music' && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const r = e.currentTarget.getBoundingClientRect();
-                                const MENU_W = 208;
-                                const MENU_H = 260;
-                                const x = Math.max(
-                                  8,
-                                  Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)
-                                );
-                                const y =
-                                  r.bottom + MENU_H > window.innerHeight
-                                    ? Math.max(8, r.top - MENU_H - 4)
-                                    : r.bottom + 4;
-                                setRetagMenu({ id: mod.id, x, y });
-                              }}
-                              aria-label={t('locker.page.changeCategoryForNamed', { name: mod.name })}
-                              title={t('locker.page.changeCategory')}
-                              className="flex h-7 w-7 items-center justify-center rounded-md border border-hl/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </button>
-                          )}
-                          {/* Delete: removes this global mod's VPK. Sits above the
-                              full-card toggle (z-20 > z-10), to the right of the
-                              retag kebab; red on hover. */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onRequestDelete([mod.id], mod.name);
-                            }}
-                            aria-label={t('locker.global.deleteMod', { name: mod.name })}
-                            title={t('locker.global.deleteMod', { name: mod.name })}
-                            className="flex h-7 w-7 items-center justify-center rounded-md border border-hl/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] hover:bg-red-500/80 hover:text-white focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                          <ModFavoriteButton favorite={favorites.has(modPreferenceKey(mod))}
-                            onToggle={() => toggleFavorite(modPreferenceKey(mod))}
-                            className="group-hover/card:opacity-100" />
-                          {/* Launch-shuffle opt-in, matching the hero skin cards. */}
-                          {/* Shown on a custom tab too: the key it writes is the
-                              same shufflePoolKey (axis-qualified for bucket
-                              mods), and the planner still re-rolls the mod in
-                              its HOME group (its hero, or its classification
-                              bucket). A category is never a shuffle group of
-                              its own. */}
-                          {shuffleOptIn ? (
-                            <ShuffleIncludeButton
-                              name={mod.name}
-                              included={inShufflePool}
-                              onToggle={() => onToggleShuffleIncluded(shuffleKey)}
-                              armed={shuffleArmed}
-                              className="group-hover/card:opacity-100"
-                            />
-                          ) : null}
-                        </div>
+                        {!isPropPreview && <LockerCardHeader {...status}>{cardActions}</LockerCardHeader>}
                       </div>
 
                       {/* Title only — the whole card is the enable/disable control. */}
                       <div className="mt-auto px-0.5">
                         <h3
-                          className="min-w-0 truncate text-[15px] font-semibold leading-[19px] text-text-primary"
+                          className={LOCKER_CARD_TITLE_CLASS}
                           title={mod.name}
                         >
                           {mod.name}
@@ -2241,11 +1970,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           button) so the heading/markup stays valid. */}
                       <button
                         type="button"
-                        onClick={async (e) => {
-                          const card = e.currentTarget.parentElement;
-                          const toggled = await onToggle(mod.id);
-                          if (mod.enabled && toggled === false) shakeElement(card);
-                        }}
+                        onClick={e => { void activateCard(e.currentTarget); }}
                         aria-pressed={mod.enabled}
                         aria-label={
                           mod.enabled
@@ -2255,7 +1980,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                         title={mod.enabled ? t('locker.page.clickToDisable') : t('locker.page.clickToEnable')}
                         className="absolute inset-0 z-10 cursor-pointer rounded-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
                       />
-                    </div>
+                    </LockerGeneralCard>
                   );
                 })}
               </div>
@@ -2290,61 +2015,6 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
         </ErrorBoundary>
       </div>
 
-      {/* Retag menu (fixed-positioned, anchored at the kebab's viewport coords so
-          it never clips against the scrolling pane). */}
-      {retagMenu && (
-        <>
-          <div
-            className="fixed inset-0 z-[79]"
-            aria-hidden
-            onClick={() => setRetagMenu(null)}
-          />
-          <div
-            role="menu"
-            aria-label={t('locker.page.changeGlobalCategory')}
-            className="fixed z-[80] w-52 rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
-            style={{ top: retagMenu.y, left: retagMenu.x }}
-          >
-            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-              {t('locker.page.moveToCategory')}
-            </div>
-            {/* Killstreak Music is derived from the GameBanana category, not a
-                manual destination, so it's not offered as a move target. */}
-            {GLOBAL_MOD_TYPE_ORDER.filter((type) => type !== 'killstreak-music').map((type) => {
-              const isCurrent = type === activeType;
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    if (!isCurrent) void onSetGlobalType(retagMenu.id, type);
-                    setRetagMenu(null);
-                  }}
-                  className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs cursor-pointer hover:bg-bg-tertiary ${
-                    isCurrent ? 'text-accent' : 'text-text-primary'
-                  }`}
-                >
-                  {globalModTypeLabel(type, t)}
-                  {isCurrent && <Check className="h-3.5 w-3.5" />}
-                </button>
-              );
-            })}
-            <div className="my-1 h-px bg-border" />
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                void onSetGlobalType(retagMenu.id, null);
-                setRetagMenu(null);
-              }}
-              className="w-full rounded px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary cursor-pointer"
-            >
-              {t('locker.page.removeFromGlobal')}
-            </button>
-          </div>
-        </>
-      )}
 
     </div>
     </SoulRegistryProvider>

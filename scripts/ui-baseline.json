@@ -189,11 +189,10 @@
   },
   "src/pages/Locker.tsx": {
     "raw-hex": 1,
-    "raw-palette": 11,
-    "em-dash": 3
+    "raw-palette": 4,
+    "em-dash": 2
   },
   "src/pages/LockerHero.tsx": {
-    "raw-palette": 3,
     "em-dash": 2
   },
   "src/pages/Profiles.tsx": {

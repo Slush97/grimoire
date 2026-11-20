@@ -250,7 +250,7 @@ describe('Maps in General', () => {
   it('respects explicit assignments and ignores other sections', () => {
     expect(getEffectiveGlobalType({ ...map, globalType: 'hud' })).toBe('hud');
     expect(getEffectiveGlobalType({ ...map, lockerHero: 'Haze' })).toBeUndefined();
-    expect(getEffectiveGlobalType({ ...map, sourceSection: 'Sound' })).toBeUndefined();
+    expect(getEffectiveGlobalType({ ...map, sourceSection: 'Sound' })).toBe('sounds');
     expect(getEffectiveGlobalType({ ...map, categoryName: 'Minimaps' })).toBeUndefined();
     expect(getEffectiveGlobalType({ ...map, categoryName: undefined, globalType: 'maps' })).toBe('maps');
   });
@@ -279,4 +279,14 @@ describe('Locker mod display order', () => {
     expect(sortLockerMods(items, options).map(item => item.id)).toEqual(['favorite', 'plain']);
     expect(sortLockerMods(items, { ...options, favorites: new Set() })).toEqual(items);
   });
+});
+
+it('shares mixed prop packs across General categories and folds legacy killstreak music into Sounds', () => {
+  const mixed = mod({ id: 'mixed', metaKey: 'mixed.vpk', priority: 1, propTypes: ['hidden-king', 'archmother', 'sinner'] });
+  const legacy = mod({ id: 'legacy', metaKey: 'legacy.vpk', priority: 2, globalType: 'killstreak-music' });
+  const heroSound = mod({ id: 'hero-sound', metaKey: 'hero.vpk', priority: 3, sourceSection: 'Sound', lockerHeroes: ['Ivy'] });
+  const groups = groupGlobalMods([mixed, legacy, heroSound]);
+  expect(groups['hidden-king']).toEqual([mixed]); expect(groups.archmother).toEqual([mixed]); expect(groups.sinner).toEqual([mixed]);
+  expect(groups.patron).toEqual([]); expect(groups.boxes).toEqual([]);
+  expect(groups.sounds).toEqual([legacy]); expect(groups['killstreak-music']).toEqual([]);
 });

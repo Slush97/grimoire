@@ -116,7 +116,7 @@ function enrichMod(mod: Mod, categoryPaths = new Map<string, CategoryPaths | und
         !(typeof metadata?.modName === 'string' && metadata.modName.trim().length > 0);
     const model = categoryModelForSection(metadata.sourceSection);
     if (!categoryPaths.has(model)) categoryPaths.set(model, readCachedCategoryPaths(model));
-    const { lockerHero, lockerHeroSource, lockerHeroes, globalType, metadataPatch, detectedTags } =
+    const { lockerHero, lockerHeroSource, lockerHeroes, globalType, propTypes, metadataPatch, detectedTags } =
         resolveModClassification(mod, metadata, categoryPaths.get(model));
     const patch: ModMetadata = { ...metadataPatch };
     // Ability-slot analysis shares the warmed VPK directory with hero
@@ -169,6 +169,7 @@ function enrichMod(mod: Mod, categoryPaths = new Map<string, CategoryPaths | und
         detectedTags,
         globalTypeSource: metadata.globalTypeSource,
         globalType: globalType ?? undefined,
+        propTypes,
         merged: metadata.merged,
         forgeInstall: metadata.forgeInstall,
         lockerCosmetics: metadata.lockerCosmetics,

@@ -239,6 +239,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ) => ipcRenderer.invoke('export-custom-hero-card', heroName, uploads, destPath),
     getAppliedCustomCard: (heroName: string) =>
         ipcRenderer.invoke('get-applied-custom-card', heroName),
+    getSoulPreviewThumbnail: (key) => ipcRenderer.invoke('get-soul-preview-thumbnail', key),
+    saveSoulPreviewThumbnail: (key, capture) => ipcRenderer.invoke('save-soul-preview-thumbnail', key, capture),
     getSoulModelInfo: (key: string) =>
         ipcRenderer.invoke('get-soul-model-info', key),
     exportSoulModel: (metaKey: string, cacheKey: string, entry?: string, options?: { animated?: boolean }) =>
@@ -280,6 +282,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-preview-cache-size'),
     clearPreviewCache: () =>
         ipcRenderer.invoke('clear-preview-cache'),
+    onPreviewCacheCleared: (callback: () => void) => {
+        const listener = () => callback();
+        ipcRenderer.on('preview-cache-cleared', listener);
+        return () => ipcRenderer.removeListener('preview-cache-cleared', listener);
+    },
     getGameBananaFileServerDiagnostics: () =>
         ipcRenderer.invoke('gamebanana-fileservers:getDiagnostics'),
     getGameBananaDownloadProxy: () => ipcRenderer.invoke('gamebanana-download-proxy:get'),

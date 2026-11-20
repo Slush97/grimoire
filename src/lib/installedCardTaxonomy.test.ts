@@ -20,7 +20,7 @@ describe('getInstalledCardTaxonomy', () => {
     const local = { globalType: 'maps' as const, lockerHeroes: [], tagOverrides: { base: ['Maps'], heroes: [] },
       detectedTags: { heroes: ['Haze'], globalType: 'soul-container' as const } };
     const defaults = getInstalledDefaultTaxonomy(local, [local], context);
-    expect(defaults.tags).toEqual(['Soul Containers']);
+    expect(defaults.tags).toEqual([]);
     expect(defaults.heroNames).toEqual(['Haze']);
     expect(getInstalledDefaultTaxonomy({ ...local, tagOverrides: { base: [], heroes: [] } }, [local], context)).toEqual(defaults);
     expect(local.globalType).toBe('maps');
@@ -227,4 +227,12 @@ describe('getInstalledGroupTaxonomy', () => {
     const duplicate = getInstalledGroupTaxonomy(representative, [representative, { categoryName: 'HUD' }]);
     expect(duplicate.tags).toEqual(['HUD']);
   });
+});
+
+it('omits Cursor Base labels from categories, saved choices and available options', () => {
+  const context = { pathsByModel: { ModCategory: buildCategoryPaths([{ id: 1, name: 'Cursors', itemCount: 1 }]) } };
+  expect(installedBaseTagOptions(context, ['Cursor', 'Cursors', 'HUD'])).not.toEqual(expect.arrayContaining(['Cursor']));
+  expect(installedBaseTagOptions(context, ['Cursor', 'Cursors', 'HUD'])).not.toContain('Cursors');
+  const mod = { sourceSection: 'Mod', categoryName: 'Cursors', tagOverrides: { base: ['Cursor', 'HUD'] } };
+  expect(getInstalledGroupTaxonomy(mod, [mod], context).tags).toEqual(['HUD']);
 });

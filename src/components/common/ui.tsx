@@ -1,4 +1,4 @@
-import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, Fragment, isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Archive, Check, Loader2, X, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Tx from '../translation/Tx';
@@ -457,15 +457,17 @@ interface IconButtonProps extends Omit<React.ComponentPropsWithRef<'button'>, 'a
     /** Accessible name + hover tooltip (icon-only, so this is mandatory). */
     label: string;
     size?: 'sm' | 'md';
-    tone?: 'default' | 'danger';
+    tone?: 'default' | 'danger' | 'ghost';
+    shape?: 'square' | 'round';
 }
 
-export function IconButton({ icon: Icon, label, size = 'md', tone = 'default', className = '', children, ...props }: IconButtonProps) {
+export function IconButton({ icon: Icon, label, size = 'md', tone = 'default', shape = 'square', className = '', children, ...props }: IconButtonProps) {
     const sizes = {
         sm: 'h-7 w-7',
         md: 'h-8 w-8',
     };
     const tones = {
+        ghost: 'bg-transparent text-text-secondary hover:text-text-primary',
         default: 'border-border text-text-secondary hover:border-hl/25 hover:bg-hl/5 hover:text-text-primary',
         danger: 'border-border text-text-secondary hover:border-state-danger/60 hover:bg-state-danger/10 hover:text-state-danger',
     };
@@ -475,7 +477,7 @@ export function IconButton({ icon: Icon, label, size = 'md', tone = 'default', c
             type="button"
             aria-label={label}
             title={label}
-            className={`flex flex-shrink-0 items-center justify-center rounded-sm border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${sizes[size]} ${tones[tone]} ${className}`}
+            className={`flex flex-shrink-0 items-center justify-center ${shape === 'round' ? 'rounded-full' : 'rounded-sm'} ${tone === 'ghost' ? 'border-0' : 'border'} transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${sizes[size]} ${tones[tone]} ${className}`}
             {...props}
         >
             <Icon className={iconSize} aria-hidden />
@@ -615,6 +617,7 @@ export function ViewOptionControl<T extends string>({
 interface SegmentOption<T extends string> {
     value: T;
     label: ReactNode;
+    disabled?: boolean;
     /** Hover tooltip for the segment. */
     title?: string;
 }
@@ -718,56 +721,81 @@ interface SegmentedControlProps<T extends string> {
     /** Disable the whole control (no clicks, no roving focus). Dimming is left to
      *  the caller so the control's label can dim alongside it. */
     disabled?: boolean;
+    variant?: 'default' | 'joined';
+    framed?: boolean;
+    size?: 'sm' | 'md';
+    panelId?: string;
 }
 
 export function SegmentedControl<T extends string>({
-    options,
-    value,
-    onChange,
-    label,
-    className = '',
-    fill = false,
-    disabled = false,
+    options, value, onChange, label, className = '', fill = false, disabled = false,
+    variant = 'default', framed = true, size = 'md', panelId,
 }: SegmentedControlProps<T>) {
     const refs = useRef<(HTMLButtonElement | null)[]>([]);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const indicatorRef = useRef<HTMLDivElement>(null);
+    const joined = variant === 'joined';
 
-    const move = (from: number, dir: -1 | 1) => {
-        if (disabled) return;
-        const next = (from + dir + options.length) % options.length;
-        onChange(options[next].value);
-        refs.current[next]?.focus();
+    useLayoutEffect(() => {
+        if (!joined) return;
+        const container = containerRef.current;
+        const indicator = indicatorRef.current;
+        if (!container || !indicator) return;
+        const update = () => {
+            const active = refs.current[options.findIndex(option => option.value === value)];
+            if (!active) { indicator.style.opacity = '0'; return; }
+            indicator.style.width = active.offsetWidth + 'px';
+            indicator.style.height = active.offsetHeight + 'px';
+            indicator.style.transform = 'translate(' + active.offsetLeft + 'px, ' + active.offsetTop + 'px)';
+            indicator.style.opacity = '1';
+        };
+        if (!indicator.dataset.ready) indicator.style.transition = 'none';
+        update();
+        const frame = requestAnimationFrame(() => { indicator.style.transition = ''; indicator.dataset.ready = 'true'; });
+        const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+        observer?.observe(container);
+        window.addEventListener('resize', update);
+        return () => { cancelAnimationFrame(frame); observer?.disconnect(); window.removeEventListener('resize', update); };
+    }, [joined, options, value]);
+
+    const select = (index: number) => {
+        if (disabled || options[index]?.disabled) return;
+        onChange(options[index].value);
+        refs.current[index]?.focus();
     };
-
+    const move = (from: number, direction: -1 | 1) => {
+        for (let step = 1; step <= options.length; step++) {
+            const next = (from + direction * step + options.length) % options.length;
+            if (!options[next].disabled) { select(next); return; }
+        }
+    };
     return (
-        <div role="tablist" aria-label={label} className={`flex gap-1.5 ${fill ? 'w-full' : 'flex-wrap'} ${className}`}>
+        <div ref={containerRef} role="tablist" aria-label={label}
+            className={`${joined ? 'relative flex rounded-lg p-1 ' + (framed ? 'border border-border bg-bg-secondary/90' : '') : 'flex gap-1.5'} ${fill ? 'w-full' : joined ? 'w-fit' : 'flex-wrap'} ${className}`}>
+            {joined && <div ref={indicatorRef} aria-hidden data-segment-indicator
+                className="pointer-events-none absolute left-0 top-0 rounded-md border border-accent/60 bg-accent/15 opacity-0 transition-[transform,width,height] duration-200 ease-out motion-reduce:transition-none" />}
             {options.map((opt, i) => {
                 const active = opt.value === value;
+                const unavailable = disabled || opt.disabled;
                 return (
-                    <button
-                        key={opt.value}
-                        ref={(el) => { refs.current[i] = el; }}
-                        type="button"
-                        role="tab"
-                        aria-selected={active}
-                        title={opt.title}
-                        tabIndex={active ? 0 : -1}
-                        disabled={disabled}
-                        onClick={() => !disabled && onChange(opt.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-                                e.preventDefault();
-                                move(i, 1);
-                            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-                                e.preventDefault();
-                                move(i, -1);
+                    <button key={opt.value} ref={el => { refs.current[i] = el; }} type="button" role="tab"
+                        id={panelId ? panelId + '-tab-' + opt.value : undefined} aria-controls={panelId}
+                        aria-selected={active} title={opt.title} tabIndex={active && !unavailable ? 0 : -1} disabled={unavailable}
+                        onClick={() => select(i)}
+                        onKeyDown={event => {
+                            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); move(i, 1); }
+                            else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); move(i, -1); }
+                            else if (event.key === 'Home' || event.key === 'End') {
+                                event.preventDefault();
+                                const indices = options.map((_, index) => index);
+                                if (event.key === 'End') indices.reverse();
+                                const next = indices.find(index => !options[index].disabled);
+                                if (next !== undefined) select(next);
                             }
                         }}
-                        className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default ${fill ? 'flex-1' : ''} ${
-                            active
-                                ? 'border-accent/70 bg-accent/15 text-text-primary'
-                                : 'border-border bg-bg-tertiary text-text-secondary hover:border-accent/40 hover:text-text-primary'
-                        }`}
-                    >
+                        className={`inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default disabled:opacity-40 ${fill ? 'flex-1' : ''} ${joined
+                            ? 'relative z-10 rounded-md ' + (size === 'sm' ? 'h-7 px-2.5 ' : 'h-10 px-3 ') + (active ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary')
+                            : 'rounded-sm border px-2.5 py-1 ' + (active ? 'border-accent/70 bg-accent/15 text-text-primary' : 'border-border bg-bg-tertiary text-text-secondary hover:border-accent/40 hover:text-text-primary')} ${unavailable ? '' : 'cursor-pointer'}`}>
                         {opt.label}
                     </button>
                 );
