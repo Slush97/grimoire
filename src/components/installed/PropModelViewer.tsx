@@ -4,7 +4,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { Loader2 } from 'lucide-react';
+import { PreviewLoader } from '../common/PreviewLoader';
 import { exportSoulModel, getSoulModelInfo } from '../../lib/api';
 import { loadGltfPreview } from '../../lib/loadGltfPreview';
 import { buildNormalizedRoot, disposeScene, meshUrlFor, zeroMetalness } from '../locker/soulModel';
@@ -97,10 +97,9 @@ export default function PropModelViewer({ metaKey, cacheKey, entry, active, turn
         {prop && <PropModel prop={prop} turn={turn} />}
         <OrbitControls makeDefault enablePan={false} enableDamping minDistance={1.2} maxDistance={6} />
       </Canvas>
-      {status !== 'ready' && <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
-        {status === 'loading'
-          ? <Loader2 className="h-6 w-6 animate-spin text-text-secondary" aria-label={t('foundry.skin.loading')} />
-          : <p className="text-center text-xs text-text-secondary">{t('installed.preview.unavailable')}</p>}
+      {status === 'loading' && <PreviewLoader label={t('foundry.skin.loading')} />}
+      {status === 'failed' && <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+        <p className="text-center text-xs text-text-secondary">{t('installed.preview.unavailable')}</p>
       </div>}
     </div>
   );

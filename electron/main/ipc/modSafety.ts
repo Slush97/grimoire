@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import { getMainWindow } from '../index';
 import { getActiveDeadlockPath } from '../services/settings';
 import { getModSafetyPrompts, respondToModSafety, approveVpkSafety, modSafetySnapshot } from '../services/modSafety';
-import { auditInstalledSafety, installedSafetyStatus, installedSafetyRunning, installedSafetyFailed, updateInstalledSafety } from '../services/modSafetyAudit';
+import { auditInstalledSafety, disallowInstalledMod, installedSafetyStatus, installedSafetyRunning, installedSafetyFailed, updateInstalledSafety } from '../services/modSafetyAudit';
 import { enableMod, scanMods } from '../services/mods';
 
 ipcMain.handle('get-mod-safety-prompts', () => getModSafetyPrompts());
@@ -29,4 +29,13 @@ ipcMain.handle('review-mod-safety', async (event, modId: string, fingerprint: st
     const safety = modSafetySnapshot(enabled.path);
     if (safety) updateInstalledSafety(modId, { modId: enabled.id, name: enabled.name, enabled: enabled.enabled, ...safety });
     return { ...enabled, safety };
+});
+ipcMain.handle('disallow-mod-safety', async (event, modId: string) => {
+    if (event.sender !== getMainWindow()?.webContents || typeof modId !== 'string') throw new Error('Invalid mod');
+    const path = getActiveDeadlockPath();
+    if (!path) throw new Error('No Deadlock path configured');
+    const disabled = await disallowInstalledMod(path, modId);
+    const safety = modSafetySnapshot(disabled.path);
+    if (safety) updateInstalledSafety(modId, { modId: disabled.id, name: disabled.name, enabled: disabled.enabled, ...safety });
+    return { ...disabled, safety };
 });

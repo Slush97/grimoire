@@ -147,7 +147,9 @@ export default function ImportCustomModsModal({
 }: ImportCustomModsModalProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const safetyReview = useAppStore(s => s.settings?.experimentalModSafety ?? false);
+  // With "Enable mods after download" on, imports that pass the review go live.
+  const importsWaitDisabled = useAppStore(s =>
+    (s.settings?.experimentalModSafety ?? false) && !(s.settings?.autoEnableDownloads ?? false));
   const reviewAfterClose = useRef(false);
   const close = () => {
     onClose();
@@ -585,8 +587,8 @@ export default function ImportCustomModsModal({
         }} onDrop={handleDrop}>
         <div className="space-y-0.5 text-xs leading-5 text-text-secondary">
           <p>{addToGroup ? t('installed.batchImport.addVariantsHelp', { name: addToGroup.modName })
-            : groupAsVariants ? safetyReview ? t('installed.batchImport.help') : t('installed.batchImport.helpEnabled')
-              : safetyReview ? t('installed.batchImport.separateHelp') : t('installed.batchImport.separateHelpEnabled')}</p>
+            : groupAsVariants ? importsWaitDisabled ? t('installed.batchImport.help') : t('installed.batchImport.helpEnabled')
+              : importsWaitDisabled ? t('installed.batchImport.separateHelp') : t('installed.batchImport.separateHelpEnabled')}</p>
           {!addToGroup && rows.length > 0 && <p>{usesSharedName ? t('installed.batchImport.variantNamesHint') : t('installed.batchImport.namesHint')}</p>}
           {sharedLocked && groupAsVariants && <p>{t('installed.batchImport.retrySharedLocked')}</p>}
         </div>

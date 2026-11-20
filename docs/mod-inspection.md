@@ -102,9 +102,20 @@ dismissible library notice returns for new versions needing review and disappear
 when none remain. An optional visual explainer illustrates legitimate uses and
 why unexpected access deserves scrutiny.
 
+An allowed mod's row offers **Disallow**, which takes the approval back. The mod
+is disabled first, under the mod lock, and its row returns to review with the
+usual two choices. A mod the running game holds cannot be disabled, so it keeps
+its approval until the game is closed. Other copies of the same bytes return to
+review with it, and an enabled copy is handled like any other unapproved active
+file: the launch gate asks about it and the startup check disables it. A merge
+or imprint that inherited the approval keeps it, because it is a different
+archive with its own row.
+
 Local imports are staged and inspected, then committed to the disabled library.
 The batch finishes and its dialog closes before navigation to Mod safety. Passive
-and previously approved imports also remain disabled until enabled by the user.
+and previously approved imports also remain disabled until enabled by the user,
+unless "Enable mods after download" is on: then they are enabled once the source
+has imported, and only the files that still need a decision stay disabled.
 Partial failures retain successful disabled imports and leave failed sources
 available to retry in a closable import dialog.
 

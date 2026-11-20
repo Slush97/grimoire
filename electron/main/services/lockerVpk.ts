@@ -34,6 +34,27 @@ export const LOCKER_SOUNDS_KEY = 'locker:sounds';
 export const LOCKER_COLORS_KEY = 'locker:colors';
 export const LOCKER_TRIPPY_SKINS_KEY = 'locker:trippyskins';
 
+/**
+ * Whether two per-hero selection sets describe the same picks, ignoring order
+ * and when each was added. Lets a profile switch skip the rebuild when the
+ * Locker already matches.
+ */
+export function sameLockerSelections<T extends { heroCodename: string; addedAt: string }>(
+    a: T[],
+    b: T[],
+): boolean {
+    const canonical = (list: T[]): string =>
+        list
+            .map((sel) => {
+                const picks: Record<string, unknown> = { ...sel };
+                delete picks.addedAt;
+                return JSON.stringify(Object.entries(picks).sort(([x], [y]) => x.localeCompare(y)));
+            })
+            .sort()
+            .join('\n');
+    return canonical(a) === canonical(b);
+}
+
 /** Fixed filenames inside citadel/grimoire. */
 const GRIMOIRE_CARDS_FILE = 'pak01_dir.vpk';
 const GRIMOIRE_SOUNDS_FILE = 'pak02_dir.vpk';

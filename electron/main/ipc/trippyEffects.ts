@@ -7,6 +7,7 @@ import {
     revertTrippySkin,
 } from '../services/trippyEffects';
 import { applyHeroTrippyVfx } from '../services/heroColors';
+import { saveLockerToActiveProfile } from '../services/profileLocker';
 import type {
     ActiveTrippySkin,
     ApplyTrippySkinResult,
@@ -35,7 +36,9 @@ ipcMain.handle(
     ): Promise<ApplyTrippySkinResult> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return applyTrippySkin(deadlockPath, heroName, paint);
+        const result = await applyTrippySkin(deadlockPath, heroName, paint);
+        saveLockerToActiveProfile();
+        return result;
     },
 );
 
@@ -44,7 +47,9 @@ ipcMain.handle(
     async (_, heroName: string): Promise<ApplyTrippySkinResult> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return revertTrippySkin(deadlockPath, heroName);
+        const result = await revertTrippySkin(deadlockPath, heroName);
+        saveLockerToActiveProfile();
+        return result;
     },
 );
 
@@ -62,6 +67,8 @@ ipcMain.handle(
     ): Promise<ApplyTrippyVfxResult> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return applyHeroTrippyVfx(deadlockPath, heroName, choice);
+        const result = await applyHeroTrippyVfx(deadlockPath, heroName, choice);
+        saveLockerToActiveProfile();
+        return result;
     },
 );

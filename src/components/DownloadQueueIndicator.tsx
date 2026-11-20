@@ -8,6 +8,7 @@ import type {
     DownloadServerStatusData,
 } from '../types/electron';
 import { formatBytes } from '../lib/formatBytes';
+import { SLOW_DOWNLOAD_BYTES_PER_SECOND, trackDownloadSpeed, type SlowDownloadTracker } from '../lib/slowDownload';
 import { rollPreparingSuffix } from '../lib/easterEggs';
 import { showToast } from '../stores/toastStore';
 import { useModUpdatesStore } from '../stores/modUpdatesStore';
@@ -18,6 +19,9 @@ import {
     getVisibleDownloadQueue,
     useDownloadActivity,
 } from '../lib/downloadActivity';
+
+// Once per app session: a slow queue shouldn't repeat the same toast per mod.
+let slowDownloadNoticeShown = false;
 
 interface DownloadQueueIndicatorProps {
     className?: string;
@@ -151,6 +155,14 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
         };
     }, [currentTarget, currentJob]);
     const currentSpeed = speedState.job === currentJob && speedState.target === currentJob ? speedState.value : 0;
+
+    const slowTrackerRef = useRef<SlowDownloadTracker>({ job: null, slowSince: null, lastReadingAt: null });
+    useEffect(() => {
+        if (slowDownloadNoticeShown || !currentJob) return;
+        if (!trackDownloadSpeed(slowTrackerRef.current, currentJob, currentSpeed, Date.now())) return;
+        slowDownloadNoticeShown = true;
+        showToast(t('downloadQueue.slowDownload', { speed: formatSpeed(SLOW_DOWNLOAD_BYTES_PER_SECOND) }), { tone: 'warning', duration: 12_000 });
+    }, [currentJob, currentSpeed, t]);
 
     const handleCancelQueued = useCallback(async (modId: number, fileId: number, jobId?: string) => {
         cancelDownloadRequest(modId, fileId);

@@ -153,6 +153,7 @@ export default function Settings() {
       <div className="flex flex-col gap-6 md:flex-row md:gap-8">
         <SettingsNav
           groups={filteredGroups}
+          fullGroups={navGroups}
           active={displayedSection}
           onSelect={(id) => navigate(`/settings/${id}`, { replace: true })}
           label={t('settings.nav.label')}

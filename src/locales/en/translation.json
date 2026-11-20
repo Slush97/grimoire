@@ -48,6 +48,7 @@
     "movedDisabled": "This mod is disabled.",
     "closeGame": "This mod may still be running. Close Deadlock, then check installed mods again to disable it.",
     "trustVersion": "Allow this version",
+    "disallow": "Disallow",
     "cancel": "Keep disabled",
     "reasons": {
       "localFile": "Local or network file access",
@@ -737,7 +738,8 @@
     "reorderFailed": "Could not change the download order.",
     "serverAutomatic": "Automatic · {{server}}",
     "serverSwitching": "Switching from {{server}}…",
-    "showDetails": "Show download details"
+    "showDetails": "Show download details",
+    "slowDownload": "Downloads are running slowly (under {{speed}}). This is most likely GameBanana's servers under heavy load or your internet provider."
   },
   "stats": {
     "title": "Deadlock Stats",
@@ -2624,8 +2626,7 @@
       "wireframe": "Wireframe",
       "hideoutLoading": "Loading hideout. First load takes a few minutes.",
       "hideoutBuilding": "Building hideout",
-      "hideoutFailed": "Could not load the hideout. Choose another scene.",
-      "hideoutWarming": "Loading hideout"
+      "hideoutFailed": "Could not load the hideout. Choose another scene."
     },
     "downloadSkins": {
       "browseMore": "Browse more skins"
@@ -2756,7 +2757,8 @@
       "deleteSnapshotFailed": "Failed to delete snapshot: {{error}}",
       "bulkDeleteSnapshotsFailed": "Failed to delete {{failed}} of {{total}} snapshots: {{error}}",
       "applyPartial_one": "Profile applied, but 1 mod couldn't be toggled (it may be locked by the running game).",
-      "applyPartial_other": "Profile applied, but {{count}} mods couldn't be toggled (they may be locked by the running game)."
+      "applyPartial_other": "Profile applied, but {{count}} mods couldn't be toggled (they may be locked by the running game).",
+      "applyLockerFailed": "Profile applied, but its Locker effects couldn't be rebuilt: {{error}}"
     },
     "create": {
       "title": "Create New Profile",
@@ -3597,6 +3599,9 @@
     "hideUntilNextLaunch": "Hide until next launch"
   },
   "layout": {
+    "newsComputer": "News computer",
+    "newsComputerMute": "Mute the computer",
+    "newsComputerUnmute": "Unmute the computer",
     "rateLimited": "GameBanana is rate-limiting Grimoire. Pause a moment before retrying.",
     "fixNow": "Fix now",
     "perfRestored": "Performance config restored.",

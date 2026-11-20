@@ -367,7 +367,7 @@ export default function Profiles() {
   const handleApplyProfile = async (profileId: string) => {
     setApplyingId(profileId);
     try {
-      const { profile, failures } = await applyProfile(profileId);
+      const { profile, failures, lockerError } = await applyProfile(profileId);
 
       // Update local crosshair store if profile has settings
       if (profile.crosshair) {
@@ -383,9 +383,11 @@ export default function Profiles() {
       // complete (typically a VPK locked by the running game) are counted, not
       // thrown. Surface that count so the profile doesn't silently launch with
       // missing mods.
-      if (failures.length > 0) {
-        setError(t('profiles.errors.applyPartial', { count: failures.length }));
-      }
+      const problems = [
+        failures.length > 0 && t('profiles.errors.applyPartial', { count: failures.length }),
+        lockerError && t('profiles.errors.applyLockerFailed', { error: lockerError }),
+      ].filter(Boolean);
+      if (problems.length > 0) setError(problems.join(' '));
     } catch (err) {
       setError(String(err));
     } finally {

@@ -5,6 +5,7 @@ import { hydrateDownloadedLocales } from './i18n'
 import App from './App.tsx'
 import { initAutoHideScrollbars } from './lib/autoHideScrollbars'
 import { applyTheme } from './lib/applyTheme'
+import { preloadPreviewLoader } from './components/common/previewLoaderArt'
 
 initAutoHideScrollbars()
 
@@ -23,3 +24,7 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+
+// The 3D previews' loader is fetched and decoded once the app has drawn, so it is on hand before
+// the first preview asks for it.
+setTimeout(preloadPreviewLoader, 1500)

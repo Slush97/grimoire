@@ -6,6 +6,7 @@ import { UploadCloud } from 'lucide-react';
 import Layout from './components/Layout';
 import Installed from './pages/Installed';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { LoaderToyHost } from './components/common/LoaderToy';
 import { useSocialStore } from './stores/socialStore';
 import { useAppStore } from './stores/appStore';
 import { getAssetPath } from './lib/assetPath';
@@ -97,6 +98,7 @@ export default function App() {
           </Routes>
         </ErrorBoundary>
       </HashRouter>
+      <LoaderToyHost />
       {/* Shows for any external file drag: the extension is only knowable at
           drop time, so the copy offers the import rather than promising it. */}
       {fileDragOver && (

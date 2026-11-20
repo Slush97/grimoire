@@ -122,7 +122,7 @@ export function InstalledProfilesMenu({ onApplied, className = '' }: InstalledPr
     setApplyingId(profileId);
     setOpen(false);
     try {
-      const { profile, failures } = await applyProfile(profileId);
+      const { profile, failures, lockerError } = await applyProfile(profileId);
 
       if (profile.crosshair) {
         // We cast to any to satisfy the Preset type since loadSettingsFromPreset only uses the .settings property
@@ -139,7 +139,11 @@ export function InstalledProfilesMenu({ onApplied, className = '' }: InstalledPr
       // thrown, so the partial case gets its own warning instead of a success.
       if (failures.length > 0) {
         showToast(t('profiles.errors.applyPartial', { count: failures.length }), { tone: 'warning' });
-      } else {
+      }
+      if (lockerError) {
+        showToast(t('profiles.errors.applyLockerFailed', { error: lockerError }), { tone: 'warning' });
+      }
+      if (failures.length === 0 && !lockerError) {
         showToast(t('installed.profiles.appliedToast', { name: profile.name }), { tone: 'success' });
       }
     } catch (err) {

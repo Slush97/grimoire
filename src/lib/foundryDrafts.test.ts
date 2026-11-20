@@ -1,9 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { foundryDraftKey, readFoundryDraft, restoreMovementFxDraft, writeFoundryDraft } from './foundryDrafts';
+import { clearEffectDrafts, foundryDraftKey, readFoundryDraft, restoreMovementFxDraft, writeFoundryDraft } from './foundryDrafts';
 import { movementFxSchema } from './movementFx';
 
 describe('local Door Stuck drafts', () => {
+  it('forgets the Effects picks of one install and nothing else', () => {
+    const data = new Map<string, string>();
+    const storage = {
+      get length() { return data.size; },
+      key: (index: number) => [...data.keys()][index] ?? null,
+      removeItem: (key: string) => { data.delete(key); },
+    };
+    const kept = [
+      foundryDraftKey('game-a', 'effects:Lady Geist:surface'),
+      foundryDraftKey('game-a', 'movement:kind'),
+      foundryDraftKey('game-b', 'effects:Lady Geist:abilities'),
+      'accentColor',
+    ];
+    for (const key of [...kept, foundryDraftKey('game-a', 'effects:Lady Geist:abilities'), foundryDraftKey('game-a', 'effects:Mo & Krill:skin')]) data.set(key, '{}');
+    clearEffectDrafts(storage, 'game-a');
+    expect([...data.keys()]).toEqual(kept);
+  });
   it('restores the selected movement recipe and mode without replacing another effect or hero', () => {
     const data = new Map<string, string>();
     const storage = { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => { data.set(key, value); } };

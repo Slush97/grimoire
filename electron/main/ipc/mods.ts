@@ -1321,6 +1321,7 @@ async function importCustomModSource(
     const finalMetaKeys: string[] = [];
     const thumbnailStart = thumbnailFetchTargets.length;
     let needsReview = false;
+    const passedReview = new Set<string>();
 
     try {
         const plan = planLocalImport(
@@ -1349,7 +1350,9 @@ async function importCustomModSource(
             const destMetaKey = metaKeyFor(destPath);
             // Record only committed files owned by this import for rollback.
             importWrites.push({ destPath, metaKey: destMetaKey });
-            needsReview ||= modSafetySnapshot(destPath)?.trusted === false;
+            const trusted = modSafetySnapshot(destPath)?.trusted;
+            needsReview ||= trusted === false;
+            if (trusted) passedReview.add(destPath);
 
             // Scrub any orphan metadata at this slot before writing.
             // setModMetadata merges into the existing entry, so stale fields
@@ -1475,9 +1478,17 @@ async function importCustomModSource(
 
     // Imports land disabled to wait for the safety review. With the review off
     // they go live like any install; one that can't get a slot stays disabled.
-    if (!loadSettings().experimentalModSafety) {
+    // With it on, "Enable mods after download" turns on the files that already
+    // passed. One that needs a decision stays disabled for the Mod safety page:
+    // enabling it here would raise the prompt under the mutation lock, behind
+    // the still-open import dialog.
+    const settings = loadSettings();
+    const goesLive = (destPath: string): boolean => !settings.experimentalModSafety
+        || (settings.autoEnableDownloads === true && passedReview.has(destPath));
+    if (importWrites.some(({ destPath }) => goesLive(destPath))) {
         const mods = await scanMods(deadlockPath);
         for (const { destPath, metaKey } of importWrites) {
+            if (!goesLive(destPath)) continue;
             try {
                 const enabled = await enableModUnlocked(deadlockPath, mods.find((m) => m.path === destPath)!.id);
                 const keyIndex = finalMetaKeys.indexOf(metaKey);

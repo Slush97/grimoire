@@ -35,6 +35,19 @@ export function writeFoundryDraft(storage: Pick<Storage, 'setItem'>, key: string
   catch { return false; }
 }
 
+/**
+ * Forget every hero's last Effects picks (ability colors and trippy skin) for
+ * one install. The pickers show a remembered pick over what is applied, so after
+ * a profile switch changes the applied effects they would show the old profile's.
+ */
+export function clearEffectDrafts(storage: Pick<Storage, 'length' | 'key' | 'removeItem'>, scope: string): void {
+  const storageKeys = Array.from({ length: storage.length }, (_, index) => storage.key(index));
+  for (const storageKey of storageKeys) {
+    const draft = storageKey ? parseFoundryDraftKey(storageKey) : null;
+    if (draft?.scope === scope && /^effects:.+:(abilities|skin)$/.test(draft.key)) storage.removeItem(storageKey!);
+  }
+}
+
 /** An explicit Installed action restores only this effect's draft and editor mode. */
 export function restoreMovementFxDraft(storage: Pick<Storage, 'setItem'>, scope: string, choice: MovementFxChoice): boolean {
   const entries: Array<[string, unknown]> = [

@@ -8,7 +8,8 @@ import { buildCategoryPaths } from '../../../src/lib/categoryPaths';
 
 const h = vi.hoisted(() => ({
     handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(),
-    path: '/normal', devMode: false, locked: false, safety: false,
+    path: '/normal', devMode: false, locked: false, safety: false, autoEnable: false,
+    trusted: new Map<string, boolean>(),
     lockGate: null as Promise<void> | null,
     metadata: new Map<string, ModMetadata>(),
     ignoredConflicts: [] as string[],
@@ -22,7 +23,8 @@ vi.mock('electron', () => ({
 }));
 vi.mock('../index', () => ({ getMainWindow: () => null }));
 vi.mock('../services/settings', () => ({
-    loadSettings: () => ({ devMode: h.devMode, ignoredConflicts: h.ignoredConflicts, experimentalModSafety: h.safety }),
+    loadSettings: () => ({ devMode: h.devMode, ignoredConflicts: h.ignoredConflicts, experimentalModSafety: h.safety,
+        autoEnableDownloads: h.autoEnable }),
     getActiveDeadlockPath: () => h.path,
     saveSettings: h.saveSettings,
 }));
@@ -64,7 +66,9 @@ vi.mock('../services/gamebanana', () => ({
     fetchCategoryTreeCached: async () => [],
     observeCategoryTreeChanges: () => () => {},
 }));
-vi.mock('../services/modSafety', () => ({ modSafetySnapshot: () => undefined }));
+vi.mock('../services/modSafety', () => ({
+    modSafetySnapshot: (path: string) => h.trusted.has(path) ? { trusted: h.trusted.get(path) } : undefined,
+}));
 vi.mock('../services/vdataCheck', () => ({ outdatedVdataSnapshot: () => undefined, staleModelsSnapshot: () => undefined,
     checkOutdatedVdata: () => {} }));
 vi.mock('../services/attachmentHeal', () => ({}));
@@ -199,6 +203,8 @@ beforeEach(() => {
     h.devMode = false;
     h.locked = false;
     h.safety = false;
+    h.autoEnable = false;
+    h.trusted.clear();
     h.importVpk.mockReset();
     h.adoption.mockReset().mockReturnValue({});
     h.prepare.mockReset(); h.prepared.mockReset(); h.release.mockReset().mockResolvedValue(undefined);
@@ -370,6 +376,44 @@ describe('importing into a mixed local variant group', () => {
         } finally {
             await rm(directory, { recursive: true, force: true });
         }
+    });
+});
+
+describe('enabling local imports under the safety review', () => {
+    async function importClean(trusted: boolean) {
+        const directory = await mkdtemp(join(tmpdir(), 'grimoire-import-enable-'));
+        try {
+            const file = join(directory, 'skin.vpk');
+            await writeFile(file, 'fixture');
+            const imported = { ...source, id: 'imported', metaKey: 'skin.vpk', path: file, fileName: 'skin.vpk', enabled: false };
+            h.safety = true;
+            h.trusted.set(file, trusted);
+            h.scan.mockResolvedValue([source, imported]);
+            h.importVpk.mockResolvedValue(file);
+            const result = await h.handlers.get('import-custom-mods')!({ sender: { isDestroyed: () => false, send: vi.fn() } }, {
+                items: [{ vpkPath: file, name: 'Skin' }],
+            }) as { results: Array<{ ok: boolean; needsReview: boolean }> };
+            expect(result.results).toMatchObject([{ ok: true, needsReview: !trusted }]);
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+        }
+    }
+
+    it('leaves a reviewed import disabled while "Enable mods after download" is off', async () => {
+        await importClean(true);
+        expect(h.enable).not.toHaveBeenCalled();
+    });
+
+    it('enables a reviewed import when "Enable mods after download" is on', async () => {
+        h.autoEnable = true;
+        await importClean(true);
+        expect(h.enable).toHaveBeenCalledWith('/normal', 'imported');
+    });
+
+    it('keeps an import that needs a decision disabled either way', async () => {
+        h.autoEnable = true;
+        await importClean(false);
+        expect(h.enable).not.toHaveBeenCalled();
     });
 });
 
