@@ -48,6 +48,10 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
   reuses toolbar/primary buttons with rounded-lg corners and a matching joined
   Gallery/List control. Its sticky toolbar matches Browse/Installed padding
   (`px-4 py-3 sm:px-6`), 8px control gaps and bottom divider.
+  Browse creator headers use the same 40px controls and joined section selector,
+  with 40px avatars, brand-colored social/Ko-fi links and a borderless, transparent
+  back button. Either side mouse button returns to the main Browse view;
+  an open mod details window handles those buttons first.
 - **z-index:** pick from the ladder at the top of `index.css`. Never invent one.
 
 ## Components

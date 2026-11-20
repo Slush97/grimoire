@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { ComponentType } from 'react';
-import { ArrowLeft, ExternalLink, EyeOff, Globe } from 'lucide-react';
+import { ArrowLeft, Construction, ExternalLink, EyeOff, Globe, Music, Package } from 'lucide-react';
 import {
   BlueskyIcon,
   CarrdIcon,
@@ -24,7 +24,7 @@ import {
   XIcon,
   YoutubeIcon,
 } from '../common/BrandIcons';
-import { IconButton } from '../common/ui';
+import { Button, MultiSelectSegments } from '../common/ui';
 import type { GameBananaArtistLink } from '../../types/gamebanana';
 import type { BrowseArtistRef } from '../../stores/appStore';
 import type { HiddenCreator } from '../../types/mod';
@@ -62,8 +62,6 @@ function browseSocialIcon(platform: string): SocialIconComponent {
   return BROWSE_SOCIAL_ICONS[platform] ?? Globe;
 }
 
-// Brand colors so the social symbols read as the real platforms. All chosen to
-// contrast with a white glyph; unknown platforms fall back to the accent.
 const BROWSE_SOCIAL_COLORS: Record<string, string> = {
   youtube: '#FF0000',
   twitter: '#111111',
@@ -89,9 +87,7 @@ const BROWSE_SOCIAL_COLORS: Record<string, string> = {
   threads: '#111111',
 };
 
-function browseSocialColor(platform: string): string {
-  return BROWSE_SOCIAL_COLORS[platform] ?? '#f97316';
-}
+const ARTIST_LINK_CLASS = 'inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-border text-sm font-medium text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent';
 
 export function BrowseArtistBanner({
   submitter,
@@ -117,22 +113,25 @@ export function BrowseArtistBanner({
   const { t } = useTranslation();
 
   return (
-    <div className="flex items-center gap-3">
-      <IconButton
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="ghost"
         icon={ArrowLeft}
-        label={t('browse.artist.backToBrowse')}
+        title={t('browse.artist.backToBrowse')}
+        aria-label={t('browse.artist.backToBrowse')}
         onClick={clearArtist}
-        className="flex-shrink-0"
+        className="h-10! w-10 shrink-0 rounded-lg! border-0! bg-transparent! px-0! [&>svg]:size-5"
       />
       {submitter.avatarUrl && !artistAvatarFailed ? (
         <img
           src={submitter.avatarUrl}
           alt={submitter.name}
-          className="h-11 w-11 flex-shrink-0 rounded-full border border-border object-cover"
+          className="h-10 w-10 flex-shrink-0 rounded-full border border-border object-cover"
           onError={() => setArtistAvatarFailed(true)}
         />
       ) : (
-        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-lg font-bold uppercase text-accent">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-lg font-bold uppercase text-accent">
           {submitter.name.charAt(0)}
         </div>
       )}
@@ -160,13 +159,12 @@ export function BrowseArtistBanner({
         </div>
       </div>
       {/* Social symbols + Ko-fi grouped on the right. Ko-fi is filtered out
-          of the symbol row since it gets its own labelled brand button. */}
-      <div className="flex flex-shrink-0 items-center gap-1.5">
+          of the symbol row since it gets its own labelled button. */}
+      <div className="flex flex-shrink-0 items-center gap-2">
         {artistSocials
           .filter((link) => !(submitter.kofiUrl && link.platform === 'kofi'))
           .map((link) => {
             const Icon = browseSocialIcon(link.platform);
-            const color = browseSocialColor(link.platform);
             return (
               <a
                 key={link.url}
@@ -175,10 +173,10 @@ export function BrowseArtistBanner({
                 rel="noopener noreferrer"
                 title={link.label}
                 aria-label={link.label}
-                style={{ backgroundColor: color }}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm ring-1 ring-hl/10 transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-hl/60"
+                style={{ backgroundColor: BROWSE_SOCIAL_COLORS[link.platform] ?? 'var(--color-accent)' }}
+                className={`${ARTIST_LINK_CLASS} w-10`}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-5 w-5" />
               </a>
             );
           })}
@@ -188,36 +186,39 @@ export function BrowseArtistBanner({
             target="_blank"
             rel="noopener noreferrer"
             title={t('browse.artist.supportOnKofi', { name: submitter.name })}
-            className="inline-flex items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover"
+            className={`${ARTIST_LINK_CLASS} bg-brand-kofi px-3 hover:bg-brand-kofi-hover`}
           >
             <KofiIcon className="h-4 w-4" />
             {t('browse.artist.kofi')}
           </a>
         )}
-        <IconButton
+        <Button
+          type="button"
+          variant="toolbar"
           icon={EyeOff}
-          label={t('hiddenCreators.hideNamedCreator', { name: submitter.name })}
+          title={t('hiddenCreators.hideNamedCreator', { name: submitter.name })}
+          aria-label={t('hiddenCreators.hideNamedCreator', { name: submitter.name })}
           onClick={() => requestHideCreator({ id: submitter.id, name: submitter.name })}
+          className="h-10! w-10 shrink-0 rounded-lg! px-0! [&>svg]:size-5"
         />
       </div>
-      <div className="hidden flex-shrink-0 items-center gap-1 rounded-lg border border-border bg-bg-secondary p-0.5 sm:flex">
-        {(['Mod', 'Sound', 'Wip'] as const).map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setSection(s)}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-              section === s ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {s === 'Mod'
+      <MultiSelectSegments
+        label={t('browse.section.label')}
+        multiselectable={false}
+        selected={[section]}
+        onToggle={setSection}
+        className="hidden h-10 flex-shrink-0 sm:flex"
+        itemClassName="h-8 px-3"
+        options={(['Mod', 'Sound', 'Wip'] as const).map((s) => ({
+          value: s,
+          icon: s === 'Sound' ? Music : s === 'Wip' ? Construction : Package,
+          label: <span className="text-sm">{s === 'Mod'
               ? t('profiles.mods.label')
               : s === 'Sound'
                 ? t('browse.section.sounds')
-                : t('browse.section.wips')}
-          </button>
-        ))}
-      </div>
+                : t('browse.section.wips')}</span>,
+        }))}
+      />
     </div>
   );
 }

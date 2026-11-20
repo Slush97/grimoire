@@ -261,7 +261,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
         currentSpeed > 0 ? formatSpeed(currentSpeed) : '',
         totalItems > 1 ? t('downloadQueue.remainingQueued', { count: totalItems - 1 }) : '',
     ].filter(Boolean).join(' · ');
-    const layerClasses = 'absolute bottom-0 right-0 transition-opacity duration-200 ease-in-out motion-reduce:transition-none';
+    const layerClasses = 'absolute bottom-0 left-0 transition-opacity duration-200 ease-in-out motion-reduce:transition-none';
     const contentLimit = 'max-w-[min(20rem,calc(100vw-2rem))]';
 
     return (

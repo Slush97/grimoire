@@ -12,6 +12,7 @@ vi.mock('../i18n', () => ({ default: { t: (key: string) => key }, applyLanguageP
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }) }));
 vi.mock('../lib/api', async original => ({ ...await original<typeof import('../lib/api')>(),
   browseMods: vi.fn(), getModDetails: vi.fn(), getGamebananaSections: vi.fn(), getGamebananaCategories: vi.fn(),
+  getSubmitterLinks: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../lib/downloadActivity', async original => {
   const activity = { current: null, queue: [], requested: [] };
@@ -195,6 +196,37 @@ describe('Browse navigation and refresh', () => {
       .mockResolvedValueOnce(response([mod(2)]));
     await render(); expect(gridNames()).toEqual([]); expect(more().disabled).toBe(false);
     await click(more()); expect(gridNames()).toEqual(['Mod 2']);
+  });
+
+  it.each([3, 4])('leaves creator view with side mouse button %i and keeps Browse filters', async (button) => {
+    useAppStore.getState().setBrowseUi({ submitter: { id: 42, name: 'Artist' }, search: 'ivy' });
+    await render();
+    const sideEvent = (type: string) => new MouseEvent(type, { button, bubbles: true, cancelable: true });
+    for (const type of ['mousedown', 'auxclick']) {
+      const event = sideEvent(type);
+      await act(async () => window.dispatchEvent(event));
+      expect(event.defaultPrevented).toBe(true);
+      expect(useAppStore.getState().browseUi.submitter?.id).toBe(42);
+    }
+    const up = sideEvent('mouseup');
+    await act(async () => window.dispatchEvent(up));
+    expect(up.defaultPrevented).toBe(true);
+    expect(useAppStore.getState().browseUi).toMatchObject({ submitter: undefined, search: 'ivy' });
+    const outsideCreator = sideEvent('mousedown');
+    await act(async () => window.dispatchEvent(outsideCreator));
+    expect(outsideCreator.defaultPrevented).toBe(false);
+  });
+
+  it('leaves side mouse buttons to mod details while viewing a creator', async () => {
+    useAppStore.getState().setBrowseUi({ submitter: { id: 42, name: 'Artist' } });
+    vi.mocked(getModDetails).mockResolvedValue({ id: 1, name: 'Details', nsfw: false });
+    await render();
+    await click(host.querySelector<HTMLButtonElement>('[data-grid] button')!);
+    expect(host.querySelector('[role="dialog"]')).not.toBeNull();
+    const event = new MouseEvent('mouseup', { button: 3, bubbles: true, cancelable: true });
+    await act(async () => window.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
+    expect(useAppStore.getState().browseUi.submitter?.id).toBe(42);
   });
 
   it('saves the completed search identity when leaving during debounce', async () => {

@@ -2181,7 +2181,30 @@ export default function Browse() {
     setBrowseUi({ submitter: artist, section: selectedDetailsSection });
     scrollContainerRef.current?.scrollTo({ top: 0 });
   });
-  const clearArtist = () => setBrowseUi({ submitter: undefined });
+  const clearArtist = useStableCallback(() => setBrowseUi({ submitter: undefined }));
+
+  // Like mod details, creator view consumes either side mouse button before
+  // Chromium can navigate away to a different app tab. Details keep priority.
+  useEffect(() => {
+    if (!artistMode || selectedMod) return;
+    const isSideButton = (event: MouseEvent) => event.button === 3 || event.button === 4;
+    const suppressNavigation = (event: MouseEvent) => {
+      if (isSideButton(event)) event.preventDefault();
+    };
+    const leaveArtist = (event: MouseEvent) => {
+      if (!isSideButton(event)) return;
+      event.preventDefault();
+      clearArtist();
+    };
+    window.addEventListener('mousedown', suppressNavigation);
+    window.addEventListener('auxclick', suppressNavigation);
+    window.addEventListener('mouseup', leaveArtist);
+    return () => {
+      window.removeEventListener('mousedown', suppressNavigation);
+      window.removeEventListener('auxclick', suppressNavigation);
+      window.removeEventListener('mouseup', leaveArtist);
+    };
+  }, [artistMode, selectedMod, clearArtist]);
 
   const updateHiddenCreators = useStableCallback(async (
     updater: (current: HiddenCreator[]) => HiddenCreator[]
@@ -2654,7 +2677,7 @@ export default function Browse() {
                               onClick={() => setBrowseUi({ extendedHeroMatching: !extendedHeroMatching })}
                               disabled={!hasLocalCache || localSearchFailed || !!submitter}
                               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-hl/5 hover:text-text-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50">
-                              <CheckboxMark checked={extendedHeroMatching} variant="menu" />
+                              <CheckboxMark checked={extendedHeroMatching} variant="menu" tone="white" />
                               <span className="flex-1 truncate">{t('browse.filters.extendedHeroMatching')}</span>
                             </button>
                             </div>
