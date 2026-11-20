@@ -338,7 +338,7 @@ export default function Layout() {
         <AppUpdateBanner />
         <ModSafetyBanner />
         <Suspense fallback={null}>
-          <div key={outletKey} className="min-h-0 flex-1 overflow-auto animate-fade-in [scrollbar-gutter:stable]">
+          <div key={outletKey} className={`min-h-0 flex-1 animate-fade-in ${outletKey === 'sex' ? 'overflow-hidden' : 'overflow-auto [scrollbar-gutter:stable]'}`}>
             <Outlet />
           </div>
         </Suspense>
