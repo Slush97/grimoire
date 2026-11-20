@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" stroke="black" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+  <g transform="rotate(-32 16 16)">
+    <path fill="ivory" d="M16 13C12 4 5 3 5 8c0 4 6 6 11 7m0-2c4-9 11-10 11-5 0 4-6 6-11 7"/>
+    <path fill="none" d="m12 14-4 3m12-3 4 3m-12 3-4 4m12-4 4 4m-10-14-2-4m6 4 2-4"/>
+    <path fill="black" d="m14.5 27.5 1.5 3.5 1.5-3.5Z"/>
+    <path fill="goldenrod" d="M16 11c4 0 6 3 6 7 0 5-3 9-6 11-3-2-6-6-6-11 0-4 2-7 6-7Z"/>
+    <path fill="black" d="M10 17q6 3 12 0v3q-6 3-12 0Zm2 7q4 2 8 0l-2 3h-4Z"/>
+    <ellipse cx="16" cy="12" rx="4" ry="3" fill="goldenrod"/>
+    <path stroke="none" fill="black" d="M13 11h1.5v1.5H13zm4.5 0H19v1.5h-1.5z"/>
+  </g>
+</svg>

@@ -44,6 +44,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     experimentalVpkImprinting: false,
     experimentalModSafety: false,
     experimentalHideoutDefault: false,
+    experimentalSexMode: true,
     hasCompletedSetup: false,
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,

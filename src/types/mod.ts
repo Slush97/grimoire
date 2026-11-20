@@ -1249,6 +1249,7 @@ export interface AppSettings {
    *  for the current game, and the cache builds in the background for every
    *  player. A hero's own scene choice still wins. Off by default. */
   experimentalHideoutDefault: boolean;
+  experimentalSexMode: boolean;
   /** First-run setup completed. */
   hasCompletedSetup: boolean;
   /** Mod pairs the user has dismissed in the Conflicts page. New entries use

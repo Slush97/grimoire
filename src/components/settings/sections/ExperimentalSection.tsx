@@ -134,6 +134,15 @@ export default function ExperimentalSection() {
 
           <FilterDivider className="h-px bg-hl/5" />
 
+          <Toggle id="settings-experimental-settings-experimental-sexMode-toggle"
+            checked={settings?.experimentalSexMode ?? true}
+            disabled={!settings}
+            onChange={(checked) => update({ experimentalSexMode: checked })}
+            label={<Tx k="settings.experimental.sexMode" fallback="Sex" />}
+          />
+
+          <FilterDivider className="h-px bg-hl/5" />
+
           <Toggle id="settings-experimental-settings-experimental-hideoutDefault-toggle"
             checked={settings?.experimentalHideoutDefault ?? false}
             onChange={(checked) => update({ experimentalHideoutDefault: checked })}

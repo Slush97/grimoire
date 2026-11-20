@@ -13,6 +13,7 @@ import {
   Activity,
   Blend,
   BookMarked,
+  createLucideIcon,
   Settings2,
   AlertTriangle,
   ArrowRight,
@@ -60,6 +61,11 @@ const DISCOVER_LAST_SEEN_KEY = 'grimoire:discover:last-seen-created-at';
 const DISCOVER_BADGE_POLL_MS = 2 * 60 * 1000;
 const PREVIEW_VOLUME_HIDE_DELAY_MS = 60 * 1000;
 const GRIMOIRE_TITLE_ICON = getAssetPath('/grimoire-title-icon.svg');
+const SexIcon = createLucideIcon('sex-tab', [
+  ['circle', { cx: 9, cy: 12, r: 4.75, key: 'venus' }],
+  ['circle', { cx: 14, cy: 9, r: 4.75, key: 'mars' }],
+  ['path', { d: 'M9 16.75V22m-2.5-2.5h5m5.86-13.86L21 2m-5 0h5v5', key: 'marks' }],
+]);
 const LAUNCH_MODDED_BG = getAssetPath('/locker/launch-modded-bg.webp');
 const LAUNCH_VANILLA_BG = getAssetPath('/locker/launch-vanilla-bg.jpg');
 const PREVIEW_VOLUME_BG = getAssetPath('/sidebar/preview-volume-bg.jpg');
@@ -495,7 +501,7 @@ export default function Sidebar() {
       labelKey: string;
       label: string;
       tooltip: string;
-      experimental?: 'crosshair' | 'stats' | 'social' | 'servers' | 'foundry';
+      experimental?: 'crosshair' | 'stats' | 'social' | 'servers' | 'foundry' | 'sex';
       tone?: 'test';
       badge?: number;
       badgeTone?: BadgeTone;
@@ -523,6 +529,7 @@ export default function Sidebar() {
       { to: '/stats', icon: Activity, labelKey: 'nav.stats', label: t('nav.stats'), tooltip: t('sidebar.tooltip.stats'), experimental: 'stats' },
       { to: '/overlap', icon: Blend, labelKey: 'nav.overlap', label: t('nav.overlap'), tooltip: t('sidebar.tooltip.overlap'), badge: conflictCount, badgeTone: 'muted' },
       { to: '/profiles', icon: BookMarked, labelKey: 'nav.profiles', label: t('nav.profiles'), tooltip: t('sidebar.tooltip.profiles') },
+      { to: '/sex', icon: SexIcon, labelKey: 'nav.sex', label: t('nav.sex'), tooltip: t('sidebar.tooltip.sex'), experimental: 'sex' },
     ];
 
     return items.filter((item) => {
@@ -531,9 +538,10 @@ export default function Sidebar() {
       if (item.experimental === 'social') return settings?.experimentalSocial;
       if (item.experimental === 'servers') return settings?.experimentalDeadworksServers;
       if (item.experimental === 'foundry') return settings?.experimentalFoundry;
+      if (item.experimental === 'sex') return settings?.experimentalSexMode ?? true;
       return true;
     });
-  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, settings?.experimentalDeadworksServers, settings?.experimentalFoundry, conflictCount, discoverNotificationCount, installedCount]);
+  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, settings?.experimentalDeadworksServers, settings?.experimentalFoundry, settings?.experimentalSexMode, conflictCount, discoverNotificationCount, installedCount]);
 
   // Optimistic nav highlight. The router wraps navigation in startTransition,
   // so location.pathname (and any highlight derived from it) only updates

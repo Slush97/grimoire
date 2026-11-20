@@ -1,7 +1,7 @@
 import { lazy, useEffect } from 'react';
 import { listenForModBackupChanges } from './stores/modBackupsStore';
 import { useTranslation } from 'react-i18next';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { UploadCloud } from 'lucide-react';
 import Layout from './components/Layout';
 import Installed from './pages/Installed';
@@ -26,6 +26,7 @@ const Locker = lazy(() => import('./pages/Locker'));
 const Foundry = lazy(() => import('./pages/Foundry'));
 const Overlap = lazy(() => import('./pages/Overlap'));
 const Profiles = lazy(() => import('./pages/Profiles'));
+const FlowerField = lazy(() => import('./components/sex-mode/FlowerField'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Crosshair = lazy(() => import('./pages/Crosshair'));
 const Autoexec = lazy(() => import('./pages/Autoexec'));
@@ -35,6 +36,7 @@ const GASSY_SOUND = getAssetPath('/sounds/gassy.mp3');
 
 export default function App() {
   const { t } = useTranslation();
+  const sexModeEnabled = useAppStore((state) => state.settings?.experimentalSexMode ?? true);
   // Owns every external file drop: claims VPKs and archives for the batch
   // importer, and swallows the rest so Electron never navigates the window to
   // a dropped file:// URL. Registered zones still handle their own file types.
@@ -90,6 +92,7 @@ export default function App() {
               <Route path="foundry" element={<Foundry />} />
               <Route path="overlap" element={<Overlap />} />
               <Route path="profiles" element={<Profiles />} />
+              <Route path="sex" element={sexModeEnabled ? <FlowerField /> : <Navigate to="/" replace />} />
               <Route path="crosshair" element={<Crosshair />} />
               <Route path="autoexec" element={<Autoexec />} />
               <Route path="stats" element={<Stats />} />

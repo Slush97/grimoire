@@ -1,0 +1,27 @@
+.sex-bee-active,
+.sex-bee-active * {
+  cursor: var(--sex-bee-cursor) !important;
+}
+
+.sex-bee-particle {
+  position: absolute;
+  top: -1.5px;
+  left: -1.5px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 3px white, 0 0 1px 1px var(--color-text-tertiary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sex-flower-sway {
+    transform-origin: 50% 94%;
+    animation: sex-flower-sway 6s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes sex-flower-sway {
+  from { transform: rotate(-2.4deg); }
+  to { transform: rotate(2.4deg); }
+}
