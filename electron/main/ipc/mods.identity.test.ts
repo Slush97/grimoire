@@ -487,7 +487,8 @@ describe('library enrichment installation isolation', () => {
         { globalType: 'hud' as const, globalTypeSource: 'manual' as const, lockerHero: 'Ivy', lockerHeroSource: 'manual' as const },
         { globalType: 'hud' as const, lockerHero: 'Ivy', lockerHeroSource: 'vpk' as const },
     ])('uses the same manual/legacy precedence for display and local groups (%j)', async metadata => {
-        h.metadata.set(source.metaKey, { ...metadata, modName: 'Local mod', abilitySounds: null });
+        h.metadata.set(source.metaKey, { ...metadata, modName: 'Local mod', abilitySounds: null,
+            bodyModelDetection: { version: 1, size: source.size, modifiedAt: source.installedAt, heroes: [] } });
         const mods = await h.handlers.get('get-mods')!({}) as Array<Mod & { lockerHeroes: string[]; globalType?: string }>;
         const member = toLocalVariantGroupMember(source);
         expect(member.resolvedHeroes).toEqual(mods[0].lockerHeroes);
@@ -505,6 +506,29 @@ describe('library enrichment installation isolation', () => {
         const mods = await h.handlers.get('get-mods')!({}) as Array<Mod & { lockerHeroes: string[] }>;
         expect(mods.map(mod => mod.lockerHeroes)).toEqual([['Ivy'], ['Ivy']]);
         expect(h.categoryPaths).toHaveBeenCalledTimes(1);
+    });
+
+    it('detects body models once from the worker-warmed file list', async () => {
+        h.metadata.set(source.metaKey, { gameBananaId: 7, modName: 'Ivy HUD', categoryName: 'Skins > Ivy', abilitySounds: null });
+        h.paths.mockReturnValue(['models/heroes_wip/ivy/materials/ivy_body_color.vtex_c', 'panorama/layout/hud.vxml_c']);
+        const [mod] = await h.handlers.get('get-mods')!({}) as Array<Mod & { bodyModelHeroes?: string[] }>;
+        expect(h.parse).toHaveBeenCalledWith([source.path]);
+        expect(mod.bodyModelHeroes).toEqual(['Ivy']);
+        expect(h.metadata.get(source.metaKey)?.bodyModelDetection).toEqual({
+            version: 1, size: source.size, modifiedAt: source.installedAt, sha256: undefined, heroes: ['Ivy'] });
+
+        h.parse.mockClear();
+        h.paths.mockClear();
+        await h.handlers.get('get-mods')!({});
+        expect(h.parse).not.toHaveBeenCalled();
+        expect(h.paths).not.toHaveBeenCalled();
+
+        h.scan.mockResolvedValue([{ ...source, size: 200 }]);
+        h.paths.mockReturnValue(null);
+        const [changed] = await h.handlers.get('get-mods')!({}) as Array<Mod & { bodyModelHeroes?: string[] }>;
+        expect(h.parse).toHaveBeenCalledWith([source.path]);
+        expect(changed.bodyModelHeroes).toBeUndefined();
+        expect(h.metadata.get(source.metaKey)?.bodyModelDetection?.size).toBe(source.size);
     });
 
     it('captures developer mode before the initial inventory scan', async () => {

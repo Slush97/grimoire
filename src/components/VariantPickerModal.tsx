@@ -812,6 +812,10 @@ export default function VariantPickerModal({
                                         : t('variantPicker.updateCount', { count: variantsWithUpdate.size })}
                                 </Button>
                             )}
+                            {localMod && onRenameMod && onOpenModDetails && (
+                                <IconButton icon={ExternalLink} label={t('variantPicker.openModPage')}
+                                    onClick={onOpenModDetails} disabled={isUpdating || !!pending} />
+                            )}
                             {localMod && (onNsfwChange || onAddVariant || onGalleryChange) && <MenuRoot kind="dropdown">
                                 <MenuTrigger asChild>
                                     <IconButton icon={Ellipsis} label={t('installed.card.moreActions')} disabled={isUpdating || !!pending} />

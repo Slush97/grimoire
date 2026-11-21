@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import type { Mod } from '../types/mod';
-import { installedDoorStuckTarget, installedSkinPreviewTarget, installedSkinTarget } from './installedSkinTarget';
+import { installedDoorStuckTarget, installedHeroPreviewTarget, installedSkinPreviewTarget, installedSkinTarget } from './installedSkinTarget';
 import { movementFxSchema } from './movementFx';
 
 const base: Mod = { id: 'base', name: 'Blackmore Academy Mina', metaKey: 'pak13_dir.vpk',
@@ -11,7 +11,8 @@ const overlay: Mod = { ...base, id: 'overlay', name: 'Mina custom', metaKey: 'pa
 
 it('previews categorized skins whose titles do not name their hero', () => {
   const mod: Mod = { ...base, id: 'tetodox', name: 'Tetodox', metaKey: 'pak39_dir.vpk', priority: 39,
-    lockerHero: undefined, sourceSection: 'Mod', categoryId: 33320, categoryName: 'Paradox', gameBananaId: 699448 };
+    lockerHero: undefined, sourceSection: 'Mod', categoryId: 33320, categoryName: 'Paradox', gameBananaId: 699448,
+    bodyModelHeroes: ['Paradox'] };
   const target = { heroName: 'Paradox', skinSources: [{ metaKey: 'pak39_dir.vpk', priority: 39 }] };
   expect(installedSkinTarget(mod)).toEqual(target);
   expect(installedSkinPreviewTarget(mod, [mod])).toEqual(target);
@@ -20,7 +21,7 @@ it('previews categorized skins whose titles do not name their hero', () => {
 
 it('resolves hero subcategories before ambiguous title matches', () => {
   const mod: Mod = { ...base, name: 'Mina cosplay', lockerHero: undefined, sourceSection: 'Mod',
-    categoryId: 50570, categoryName: 'Faithful/Vanilla+' };
+    categoryId: 50570, categoryName: 'Faithful/Vanilla+', bodyModelHeroes: ['Viscous'] };
   const categories = { heroByCategoryId: new Map([[50570, 'Viscous']]) };
   expect(installedSkinPreviewTarget(mod, [mod], categories)?.heroName).toBe('Viscous');
   expect(installedDoorStuckTarget(mod, categories)).toMatchObject({ heroName: 'Viscous' });
@@ -34,6 +35,25 @@ it('rejects unrelated categories and sound sections without guessing a hero', ()
   expect(installedSkinTarget(mod)).toBeNull();
   expect(installedSkinTarget({ ...mod, categoryName: 'Definitely Paradox-like props' })).toBeNull();
   expect(installedSkinTarget({ ...mod, sourceSection: 'Sound', categoryName: 'Paradox' }, { heroByCategoryId: new Map([[50570, 'Viscous']]) })).toBeNull();
+});
+
+it('previews a hero only when the file changes that hero\'s body', () => {
+  const hud: Mod = { ...base, name: 'Mina HUD', bodyModelHeroes: [] };
+  expect(installedSkinTarget(hud)?.heroName).toBe('Mina');
+  expect(installedHeroPreviewTarget(hud)).toBeNull();
+  expect(installedSkinPreviewTarget(hud, [hud])).toBeNull();
+  expect(installedHeroPreviewTarget({ ...hud, bodyModelHeroes: undefined })).toBeNull();
+  expect(installedHeroPreviewTarget({ ...hud, bodyModelHeroes: ['Vindicta'] })).toBeNull();
+  expect(installedSkinPreviewTarget({ ...hud, bodyModelHeroes: ['Mina', 'Vindicta'] }, [hud])?.heroName).toBe('Mina');
+
+  const titled: Mod = { ...base, name: 'Haze rework', lockerHero: undefined, sourceSection: 'Mod' };
+  expect(installedHeroPreviewTarget(titled)).toBeNull();
+  expect(installedHeroPreviewTarget({ ...titled, bodyModelHeroes: ['Haze'] })?.heroName).toBe('Haze');
+});
+
+it('previews a saved overlay through its sources, whatever its own files are', () => {
+  expect(overlay.bodyModelHeroes).toBeUndefined();
+  expect(installedHeroPreviewTarget(overlay)?.heroName).toBe('Mina');
 });
 
 it('opens enabled or disabled global movement effects without requiring a hero tag', () => {

@@ -31,7 +31,8 @@ import {
 } from '../services/mods';
 import { metaKeyFor } from '../services/deadlock';
 import { getModMetadata, loadMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, type ModMetadata } from '../services/metadata';
-import { parseVpkDirectory, parseVpkDirectoriesAsync } from '../services/vpk';
+import { parseVpkDirectory, parseVpkDirectoryCached, parseVpkDirectoriesAsync } from '../services/vpk';
+import { bodyModelHeroes } from '../services/heroPoseModels';
 import { resolveModClassification, needsModHeroDetection } from '../services/modHeroDetection';
 import { fetchCategoryTreeCached, readCachedCategoryPaths, observeCategoryTreeChanges } from '../services/gamebanana';
 import { baseTagGlobalType, categoryModelForSection, GLOBAL_MOD_TYPE_LABELS, normalizeCategoryLabel, resolveCategoryPath, type CategoryPaths } from '../../../src/lib/categoryPaths';
@@ -105,6 +106,14 @@ interface UnknownCacheBulkRequest {
     requestId?: string;
 }
 
+const BODY_MODEL_DETECTION_VERSION = 1;
+
+function hasBodyModelDetection(mod: Mod, metadata: ModMetadata | undefined): boolean {
+    const previous = metadata?.bodyModelDetection;
+    return previous?.version === BODY_MODEL_DETECTION_VERSION && previous.size === mod.size
+        && previous.modifiedAt === mod.installedAt && previous.sha256 === metadata?.sha256;
+}
+
 function enrichMod(mod: Mod, categoryPaths = new Map<string, CategoryPaths | undefined>(), sharedNsfw?: ReadonlySet<string>): WireMod {
     const metadata = getModMetadata(mod.metaKey) ?? {};
     const galleryOwned = isLocalMod(metadata) && !!metadata.localGroupId && hasLocalModGallery(metadata.localGroupId);
@@ -134,6 +143,13 @@ function enrichMod(mod: Mod, categoryPaths = new Map<string, CategoryPaths | und
         }
         patch.abilitySounds = classified;
         abilitySounds = classified;
+    }
+    let bodyModels = metadata.bodyModelDetection;
+    if (!hasBodyModelDetection(mod, metadata)) {
+        const paths = parseVpkDirectoryCached(mod.path);
+        bodyModels = paths ? { version: BODY_MODEL_DETECTION_VERSION, size: mod.size, modifiedAt: mod.installedAt,
+            sha256: metadata.sha256, heroes: bodyModelHeroes(paths) } : undefined;
+        if (bodyModels) patch.bodyModelDetection = bodyModels;
     }
     if (Object.keys(patch).length > 0) setModMetadata(mod.metaKey, patch);
     return {
@@ -170,6 +186,7 @@ function enrichMod(mod: Mod, categoryPaths = new Map<string, CategoryPaths | und
         globalTypeSource: metadata.globalTypeSource,
         globalType: globalType ?? undefined,
         propTypes,
+        bodyModelHeroes: bodyModels?.heroes,
         merged: metadata.merged,
         forgeInstall: metadata.forgeInstall,
         lockerCosmetics: metadata.lockerCosmetics,
@@ -193,14 +210,14 @@ function enrichMods(mods: readonly Mod[], categoryPaths = new Map<string, Catego
 
 /**
  * Will enrichMod crack open this mod's VPK? Mirrors (conservatively
- * over-approximates) the detection predicates above: ability sounds never
- * checked, Sound/WiP/HUD hero detection missing or stale, or a local mod whose
- * tree has not been hero-checked. The worker pool keeps cold parsing off the
- * main thread.
+ * over-approximates) the detection predicates above: ability sounds or body
+ * models never checked (or stale), Sound/WiP/HUD hero detection missing or
+ * stale, or a local mod whose tree has not been hero-checked. The worker pool
+ * keeps cold parsing off the main thread.
  */
 function needsVpkParseForEnrich(mod: Mod, categoryPaths: Map<string, CategoryPaths | undefined>): boolean {
     const metadata = getModMetadata(mod.metaKey);
-    if (metadata?.abilitySounds === undefined) return true;
+    if (metadata?.abilitySounds === undefined || !hasBodyModelDetection(mod, metadata)) return true;
     const model = categoryModelForSection(metadata.sourceSection);
     if (!categoryPaths.has(model)) categoryPaths.set(model, readCachedCategoryPaths(model));
     return needsModHeroDetection(mod, metadata, categoryPaths.get(model));

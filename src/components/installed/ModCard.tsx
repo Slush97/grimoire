@@ -104,6 +104,8 @@ interface ModCardProps {
   onOpenDetails?: () => void;
   /** The card opens local files rather than a GameBanana page. */
   opensPicker?: boolean;
+  /** A local import that carries a GameBanana id: its page stays reachable from the menu. */
+  onViewModPage?: () => void;
   onOpenDoorStuck?: () => void;
   /** Pins this card in the 3D preview panel. */
   onPinPreview?: () => void;
@@ -399,6 +401,7 @@ export function ModCard({
   updatableSourceCount = 0,
   onOpenDetails,
   opensPicker = false,
+  onViewModPage,
   onOpenDoorStuck,
   onPinPreview,
   previewMetaKey,
@@ -640,7 +643,7 @@ export function ModCard({
   const localGroup = !!group && localMod;
   const viewDetails = localMod ? group?.onOpenPicker ?? onOpenDetails : group ? group.onViewDetails : onOpenDetails;
   const hasTopActions =
-    !!(onAddVariant && localMod) || !!onOpenDetails || !!onViewAuthor
+    !!(onAddVariant && localMod) || !!onOpenDetails || !!onViewAuthor || !!(onViewModPage && localMod)
     || !!cardImageSource || !!group;
   const hasSecondaryActions =
     !!onSoloLaunch || !!onFixUnknown
@@ -655,6 +658,11 @@ export function ModCard({
       {viewDetails && (
         <MenuItem icon={Info} onSelect={viewDetails}>
           {localMod ? t('installed.card.chooseFiles') : t('installed.card.viewDetails')}
+        </MenuItem>
+      )}
+      {localMod && onViewModPage && (
+        <MenuItem icon={ExternalLink} onSelect={onViewModPage}>
+          {t('installed.card.viewDetails')}
         </MenuItem>
       )}
       {group && !localGroup && (

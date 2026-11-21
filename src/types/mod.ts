@@ -468,6 +468,15 @@ export interface InstalledPropDetection {
   sha256?: string;
   types: GlobalModType[];
 }
+
+/** Asset-only result: heroes whose previewed body model the payload changes. */
+export interface InstalledBodyModelDetection {
+  version: number;
+  size: number;
+  modifiedAt: string;
+  sha256?: string;
+  heroes: string[];
+}
 export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
 
 /** Cached automatic hero matches for one installed payload. */
@@ -708,6 +717,8 @@ export interface Mod {
    *  or a preserved legacy local classification. */
   globalType?: GlobalModType;
   propTypes?: GlobalModType[];
+  /** Heroes whose body model this file's own assets change. Gates the hero 3D preview. */
+  bodyModelHeroes?: string[];
   /** Explicit user classification, retained independently of automatic tags. */
   globalTypeSource?: 'manual';
   /** Set when this mod was produced by mergeMods. Carries the unroll payload

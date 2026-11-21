@@ -5,7 +5,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
 import { FloatingPanelArea } from '../components/common/FloatingPanelArea';
-import { installedDoorStuckTarget, installedSkinTarget } from '../lib/installedSkinTarget';
+import { installedDoorStuckTarget, installedHeroPreviewTarget } from '../lib/installedSkinTarget';
 import { pinInstalledPreview } from '../lib/installedPreviewPin';
 import { installedPropTarget } from '../lib/installedPropPreview';
 import { installedMotionTarget } from '../lib/installedMotionPreview';
@@ -385,7 +385,7 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
   const target = installedDoorStuckTarget(previewMod, taxonomyContext);
   // Every file the Alt preview can show, in picker order. Alt+wheel steps through them.
   const previewKeys = useMemo(() => (entry.kind === 'single' ? [entry.mod] : entry.variants)
-    .filter(variant => installedMotionTarget(variant) || installedSkinTarget(variant, taxonomyContext) || installedPropTarget(variant))
+    .filter(variant => installedMotionTarget(variant) || installedHeroPreviewTarget(variant, taxonomyContext) || installedPropTarget(variant))
     .map(variant => variant.metaKey), [entry, taxonomyContext]);
   const previewKey = previewKeys.includes(previewMod.metaKey) ? previewMod.metaKey : previewKeys[0] ?? previewMod.metaKey;
   const pinPreview = previewKeys.length ? () => pinInstalledPreview(previewKeys, previewKey) : undefined;
@@ -418,6 +418,7 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
         entryKey={entry.key}
         onOpenDetails={() => onOpenDetails(mod)}
         opensPicker={canJoinLocalVariantGroup(mod)}
+        onViewModPage={canJoinLocalVariantGroup(mod) && mod.gameBananaId ? () => onOpenGroupDetails(entry) : undefined}
         onViewAuthor={mod.gameBananaId ? () => onViewAuthor(mod) : undefined}
         onToggle={() => onToggle(entry)}
         swapTargets={swapTargets}
@@ -505,6 +506,7 @@ export const InstalledEntryCard = memo(function InstalledEntryCard({
       updateAvailable={updateAvailable}
       entryKey={entry.key}
       onOpenDetails={groupOpensPicker ? () => onOpenPicker(entry.groupKey) : () => onOpenGroupDetails(entry)}
+      onViewModPage={entryIsLocal(entry) && entry.gameBananaId ? () => onOpenGroupDetails(entry) : undefined}
       onViewAuthor={entry.gameBananaId ? () => onViewAuthor(entry.primary) : undefined}
       // Imprints are per file; a group card shows the primary's imprint.
       onViewImprint={entry.primary.imprinted ? () => onViewImprint(entry.primary) : undefined}

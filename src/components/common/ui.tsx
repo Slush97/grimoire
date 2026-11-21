@@ -134,7 +134,7 @@ export function Tag({
 
 export function ArchivedTag({ className = '' }: { className?: string }) {
     return (
-        <Tag variant="overlay" icon={Archive} className={`flex-shrink-0 uppercase tracking-wide ${className}`}>
+        <Tag icon={Archive} className={`flex-shrink-0 uppercase tracking-wide ${className}`}>
             <Tx k="common.status.archived" fallback="Archived" />
         </Tag>
     );
@@ -153,15 +153,14 @@ export function CheckboxMark({
     indeterminate?: boolean;
     disabled?: boolean;
     className?: string;
-    tone?: 'accent' | 'success' | 'danger' | 'neutral' | 'white';
+    tone?: 'accent' | 'success' | 'danger' | 'white';
     icon?: LucideIcon;
     variant?: 'default' | 'menu';
 }) {
     const active = checked || indeterminate;
     const selectedStyles = tone === 'success' ? 'border-state-success bg-state-success'
         : tone === 'danger' ? 'border-state-danger bg-state-danger'
-        : tone === 'white' ? 'border-white bg-white'
-        : tone === 'neutral' ? 'border-text-secondary bg-text-secondary' : 'border-accent bg-accent';
+        : tone === 'white' ? 'border-white bg-white' : 'border-accent bg-accent';
     return (
         <span
             aria-hidden
@@ -719,8 +718,9 @@ interface SegmentedControlProps<T extends string> {
      *  default content-width chips. Use for full-width pickers (e.g. a settings
      *  popover row) where the segments should split the available width. */
     fill?: boolean;
-    /** Disable the whole control (no clicks, no roving focus). Dimming is left to
-     *  the caller so the control's label can dim alongside it. */
+    /** Disable the whole control (no clicks, no roving focus). The default variant
+     *  leaves dimming to the caller so the control's label can dim alongside it;
+     *  `joined` dims its own segments. */
     disabled?: boolean;
     variant?: 'default' | 'joined';
     framed?: boolean;
@@ -736,6 +736,8 @@ export function SegmentedControl<T extends string>({
     const containerRef = useRef<HTMLDivElement>(null);
     const indicatorRef = useRef<HTMLDivElement>(null);
     const joined = variant === 'joined';
+    const activeIndex = options.findIndex(option => option.value === value);
+    const optionKey = options.map(option => option.value).join('|');
 
     useLayoutEffect(() => {
         if (!joined) return;
@@ -743,7 +745,7 @@ export function SegmentedControl<T extends string>({
         const indicator = indicatorRef.current;
         if (!container || !indicator) return;
         const update = () => {
-            const active = refs.current[options.findIndex(option => option.value === value)];
+            const active = refs.current[activeIndex];
             if (!active) { indicator.style.opacity = '0'; return; }
             indicator.style.width = active.offsetWidth + 'px';
             indicator.style.height = active.offsetHeight + 'px';
@@ -757,7 +759,7 @@ export function SegmentedControl<T extends string>({
         observer?.observe(container);
         window.addEventListener('resize', update);
         return () => { cancelAnimationFrame(frame); observer?.disconnect(); window.removeEventListener('resize', update); };
-    }, [joined, options, value]);
+    }, [joined, optionKey, activeIndex]);
 
     const select = (index: number) => {
         if (disabled || options[index]?.disabled) return;
@@ -794,8 +796,8 @@ export function SegmentedControl<T extends string>({
                                 if (next !== undefined) select(next);
                             }
                         }}
-                        className={`inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default disabled:opacity-40 ${fill ? 'flex-1' : ''} ${joined
-                            ? 'relative z-10 rounded-md ' + (size === 'sm' ? 'h-7 px-2.5 ' : 'h-10 px-3 ') + (active ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary')
+                        className={`inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default ${fill ? 'flex-1' : ''} ${joined
+                            ? 'relative z-10 rounded-md disabled:opacity-40 ' + (size === 'sm' ? 'h-7 px-2.5 ' : 'h-10 px-3 ') + (active ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary')
                             : 'rounded-sm border px-2.5 py-1 ' + (active ? 'border-accent/70 bg-accent/15 text-text-primary' : 'border-border bg-bg-tertiary text-text-secondary hover:border-accent/40 hover:text-text-primary')} ${unavailable ? '' : 'cursor-pointer'}`}>
                         {opt.label}
                     </button>
