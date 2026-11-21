@@ -1,8 +1,8 @@
 # Viewer development and validation
 
-Follow `AGENTS.md` for Node/pnpm versions, the sibling `grimoire-social` package
-layout, native-module rebuilds and repository gates. Production builds require
-the `GRIMOIRE_SOCIAL_BASE_URL` HTTPS endpoint used by the release configuration.
+Follow `AGENTS.md` for Node/pnpm versions, native-module rebuilds and repository
+gates. Production builds require the `GRIMOIRE_SOCIAL_BASE_URL` HTTPS endpoint
+used by the release configuration.
 No deployment or administration credentials are required to build the viewer.
 
 ## Local asset preview

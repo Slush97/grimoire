@@ -1,21 +1,5 @@
 {
   "nodes": {
-    "grimoire-social": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1790726909,
-        "narHash": "sha256-D69CEBrGshmGTyoYA8d0CYTdTtmY0xIrpFHDnI2vNdY=",
-        "owner": "Slush97",
-        "repo": "grimoire-social",
-        "rev": "b5811d361450ebe8d863276392ad387a31d8295b",
-        "type": "github"
-      },
-      "original": {
-        "owner": "Slush97",
-        "repo": "grimoire-social",
-        "type": "github"
-      }
-    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1791956154,
@@ -34,7 +18,6 @@
     },
     "root": {
       "inputs": {
-        "grimoire-social": "grimoire-social",
         "nixpkgs": "nixpkgs",
         "vpkmerge": "vpkmerge"
       }

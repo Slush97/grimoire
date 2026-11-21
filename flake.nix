@@ -3,12 +3,6 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    # Sibling repo: pnpm-lock links @grimoire/social-types from
-    # ../grimoire-social; the package build materializes this input there.
-    grimoire-social = {
-      url = "github:Slush97/grimoire-social";
-      flake = false;
-    };
     # Rust CLI the app shells out to for VPK merge/split. Keep the ref in
     # sync with VPKMERGE_VERSION in scripts/fetch-vpkmerge.mjs.
     vpkmerge = {
@@ -21,7 +15,6 @@
     {
       self,
       nixpkgs,
-      grimoire-social,
       vpkmerge,
     }:
     let
@@ -93,7 +86,6 @@
       vpkmergePkg = pkgs.callPackage ./nix/vpkmerge.nix { src = vpkmerge; };
       grimoirePkg = pkgs.callPackage ./nix/grimoire.nix {
         grimoire-src = self;
-        social-src = grimoire-social;
         vpkmerge = vpkmergePkg;
         # Match the npm Electron major used by development and release builds.
         electron = pkgs.electron_44;
@@ -113,7 +105,6 @@
         vpkmerge = final.callPackage ./nix/vpkmerge.nix { src = vpkmerge; };
         grimoire = final.callPackage ./nix/grimoire.nix {
           grimoire-src = self;
-          social-src = grimoire-social;
           vpkmerge = final.vpkmerge;
           # Keep the overlay on the same Electron major as the package.
           electron = final.electron_44;
@@ -161,17 +152,9 @@
             echo "         The Electron sandbox needs this. Never pass --no-sandbox as a workaround."
           fi
 
-          if [ ! -d "../grimoire-social/packages/social-types" ]; then
-            echo "  [warn] ../grimoire-social/packages/social-types not found."
-            echo "         Clone grimoire-social as a sibling checkout and install it FIRST"
-            echo "         (grimoire's zod resolution and @grimoire/social-types both come from there)."
-          fi
-
           echo ""
-          echo "First-run commands (run in this order, after grimoire-social's own"
-          echo "'pnpm install --ignore-scripts' has completed):"
+          echo "First-run commands:"
           echo "  pnpm install --frozen-lockfile"
-          echo "  pnpm exec electron-rebuild -f -w better-sqlite3"
           echo "  pnpm dev"
         '';
       };

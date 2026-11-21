@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HERO_NAMES } from '../node_modules/@grimoire/social-types/src/heroes.ts';
+import { HERO_NAMES } from '@grimoire/social-types/heroes';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repoRoot = resolve(here, '..');

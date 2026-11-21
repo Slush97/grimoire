@@ -10,47 +10,19 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout grimoire
+      - name: Checkout
         uses: actions/checkout@v7
-        with:
-          path: grimoire
-
-      # pnpm-workspace.yaml resolves @grimoire/social-types from
-      # ../grimoire-social/packages/*. Local dev works because both repos sit
-      # side-by-side; CI has to mirror that or every social import becomes an
-      # implicit-any and the build fails on the workspace dep.
-      - name: Checkout grimoire-social (sibling for shared types)
-        uses: actions/checkout@v7
-        with:
-          repository: Slush97/grimoire-social
-          path: grimoire-social
-          ref: main
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
-        with:
-          # The checkout lives in grimoire/, so the action can't find the
-          # devEngines.packageManager pin on its own.
-          package_json_file: grimoire/package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: grimoire/pnpm-lock.yaml
-
-      # @grimoire/social-types declares zod as a peer dependency. Locally that
-      # resolves via grimoire-social/node_modules/zod (each repo runs its own
-      # pnpm install). In CI we have to mirror that — installing only in
-      # grimoire leaves the workspace-shared package unable to resolve zod
-      # when typecheck follows the symlink.
-      - name: Install grimoire-social deps (for the shared workspace package)
-        working-directory: grimoire-social
-        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Install dependencies
-        working-directory: grimoire
         run: pnpm install --frozen-lockfile
 
       # pnpm adds a second YAML document to the lockfile unless
@@ -58,32 +30,26 @@ jobs:
       # reads only the first one, so Dependabot would lose every dependency and
       # mark open alerts fixed, with no error anywhere.
       - name: Lockfile stays a single YAML document
-        working-directory: grimoire
         run: test "$(grep -c '^---$' pnpm-lock.yaml)" = 0
 
       # allowBuilds keeps this off for installs, because a failed build deletes
       # the binary on a Node newer than its prebuilds. Vitest needs it built
       # for CI's Node, and pnpm rebuild honors allowBuilds, so run its script.
       - name: Build better-sqlite3 for the test run
-        working-directory: grimoire/node_modules/better-sqlite3
-        run: npm run install
+        run: pnpm rebuild:node
 
       - name: Lint
-        working-directory: grimoire
         run: pnpm lint
 
       # Design-system ratchet: files may not gain raw hex, raw palette colors,
       # focus:ring, white/N tints or em-dashes beyond scripts/ui-baseline.json.
       - name: UI conventions
-        working-directory: grimoire
         run: pnpm ui:check
 
       - name: Typecheck
-        working-directory: grimoire
         run: pnpm exec tsc -b --noEmit
 
       - name: Locker artwork covers the full roster
-        working-directory: grimoire
         run: pnpm locker-art:check
 
       # Vitest covers the FeModel parser, cloth fit math + solver stability,
@@ -91,7 +57,6 @@ jobs:
       # the profiles vpkIndex resolver. Nothing gated these until now, so a PR
       # could break every one of them and still go green.
       - name: Test
-        working-directory: grimoire
         run: |
           pnpm exec vitest run
           node --test scripts/nightly-version.test.mjs
@@ -100,7 +65,6 @@ jobs:
       # committed locale manifest (what the app fetches from `main` to populate
       # the language picker) must match the catalogs on disk.
       - name: i18n catalog + manifest
-        working-directory: grimoire
         run: |
           pnpm i18n:check
           node scripts/gen-locale-manifest.mjs --check
@@ -109,7 +73,8 @@ jobs:
       # set to an https URL. CI uses a placeholder to exercise the build
       # pipeline; the value is meaningless at runtime (CI doesn't run the app).
       - name: Build
-        working-directory: grimoire
         env:
           GRIMOIRE_SOCIAL_BASE_URL: https://grimoire-social.ci.workers.dev
-        run: pnpm exec electron-vite build
+        run: |
+          pnpm exec electron-vite build
+          test "$(grep -c 'Could not resolve "' dist/main/index.js)" = 0

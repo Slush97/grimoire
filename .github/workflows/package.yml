@@ -14,10 +14,6 @@ on:
       channel:
         type: string
         default: latest
-      social-ref:
-        description: Shared types revision, pinned across nightly platforms
-        type: string
-        default: main
 
 jobs:
   build:
@@ -45,48 +41,24 @@ jobs:
       attestations: write
 
     steps:
-      - name: Checkout grimoire
+      - name: Checkout
         uses: actions/checkout@v7
         with:
-          path: grimoire
           ref: ${{ inputs.ref }}
-
-      # pnpm-workspace.yaml resolves @grimoire/social-types from
-      # ../grimoire-social/packages/*. Without this sibling checkout the
-      # workspace dep fails to resolve and pnpm install bails out.
-      - name: Checkout grimoire-social (sibling for shared types)
-        uses: actions/checkout@v7
-        with:
-          repository: Slush97/grimoire-social
-          path: grimoire-social
-          ref: ${{ inputs.social-ref }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
-        with:
-          # See ci.yml: the checkout lives in grimoire/.
-          package_json_file: grimoire/package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: grimoire/pnpm-lock.yaml
-
-      # @grimoire/social-types declares zod as a peer dependency; the symlinked
-      # workspace package needs its own node_modules so the import resolves
-      # from the Electron build.
-      - name: Install grimoire-social deps (for the shared workspace package)
-        working-directory: grimoire-social
-        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Install dependencies
-        working-directory: grimoire
         run: pnpm install --frozen-lockfile
 
       - name: Clean previous builds
-        working-directory: grimoire
         shell: bash
         run: |
           rm -rf dist release
@@ -100,7 +72,6 @@ jobs:
 
       - name: Build and package
         id: build
-        working-directory: grimoire
         shell: bash
         env:
           BUILD_VERSION: ${{ inputs.version }}
@@ -179,7 +150,6 @@ jobs:
       # AZURE_SIGNING_PUBLISHER.
       - name: Verify Windows signatures
         if: matrix.platform == 'win' && vars.AZURE_SIGNING_ACCOUNT != ''
-        working-directory: grimoire
         shell: pwsh
         run: |
           $sigs = Get-ChildItem release -Recurse -File -Include *.exe, *.dll, *.node | Get-AuthenticodeSignature
@@ -187,7 +157,6 @@ jobs:
           if ($sigs | Where-Object Status -ne 'Valid') { exit 1 }
 
       - name: Smoke test packaged app
-        working-directory: grimoire
         shell: bash
         timeout-minutes: 10
         run: |
@@ -199,7 +168,6 @@ jobs:
 
       - name: List release directory
         if: always()
-        working-directory: grimoire
         shell: bash
         run: |
           echo "=== Release directory contents ==="
@@ -213,7 +181,6 @@ jobs:
           fi
 
       - name: Generate SHA256 checksums
-        working-directory: grimoire
         shell: bash
         run: |
           cd release
@@ -239,27 +206,27 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
-            grimoire/release/*.exe
-            grimoire/release/*.AppImage
-            grimoire/release/*.deb
-            grimoire/release/*.rpm
-            grimoire/release/*.dmg
-            grimoire/release/*.zip
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.dmg
+            release/*.zip
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.platform }}-build
           path: |
-            grimoire/release/*.exe
-            grimoire/release/*.AppImage
-            grimoire/release/*.deb
-            grimoire/release/*.rpm
-            grimoire/release/*.dmg
-            grimoire/release/*.zip
-            grimoire/release/*.blockmap
-            grimoire/release/latest*.yml
-            grimoire/release/nightly*.yml
-            grimoire/release/SHA256SUMS-*.txt
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.dmg
+            release/*.zip
+            release/*.blockmap
+            release/latest*.yml
+            release/nightly*.yml
+            release/SHA256SUMS-*.txt
           if-no-files-found: error
           retention-days: 1
