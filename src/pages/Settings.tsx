@@ -25,6 +25,7 @@ import SocialAccountSection from '../components/social/SocialAccountSection';
 import SettingsSearch from '../components/settings/SettingsSearch';
 import { searchSettings, settingsContentFilter, settingsSearchEntries } from '../components/settings/settingsSearchIndex';
 import SettingsNav, { type SettingsNavGroup } from '../components/settings/SettingsNav';
+import { useSettingsHighlight } from '../components/settings/settingsHighlight';
 import GameSection from '../components/settings/sections/GameSection';
 import UpdatesSection from '../components/settings/sections/UpdatesSection';
 import AppearanceSection from '../components/settings/sections/AppearanceSection';
@@ -137,8 +138,11 @@ export default function Settings() {
     : section;
   const filter = searching ? settingsContentFilter(matches) : null;
   const matchCount = [...counts.values()].reduce((sum, targets) => sum + targets.size, 0);
+  const ready = !(settingsLoading && !settings);
 
-  if (settingsLoading && !settings) {
+  useSettingsHighlight({ ready, activeSection: displayedSection, searching });
+
+  if (!ready) {
     return <LoadingState />;
   }
 
