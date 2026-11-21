@@ -17,16 +17,16 @@ function filter(
 }
 
 describe('applyCategoryFilter hero scoping', () => {
-  it('matches Mod skins on the hero category ids, never the title', () => {
+  it('supports category-only scoping when no hero name is available', () => {
     const { conditions, params } = filter(42671, undefined, undefined, [42671]);
-    expect(conditions).toEqual(['mods.sub_category_id IN (@hero_category_0)']);
-    expect(params).toEqual({ hero_category_0: 42671 });
+    expect(conditions).toEqual(['COALESCE(mods.sub_category_id, mods.category_id) IN (@hero_category_42671)']);
+    expect(params).toEqual({ hero_category_42671: 42671 });
   });
 
   it('includes nested categories so a Rat King skin filed under its flag category still matches', () => {
     const { conditions, params } = filter(49629, undefined, undefined, [49629, 49852]);
-    expect(conditions).toEqual(['mods.sub_category_id IN (@hero_category_0, @hero_category_1)']);
-    expect(params).toEqual({ hero_category_0: 49629, hero_category_1: 49852 });
+    expect(conditions).toEqual(['COALESCE(mods.sub_category_id, mods.category_id) IN (@hero_category_49629, @hero_category_49852)']);
+    expect(params).toEqual({ hero_category_49629: 49629, hero_category_49852: 49852 });
   });
 
   it('matches Sound and Wip by whole-word hero name through the registered function', () => {
@@ -36,14 +36,15 @@ describe('applyCategoryFilter hero scoping', () => {
     expect(conditions.join(' ')).not.toMatch(/LIKE/i);
   });
 
-  it('prefers the category ids when both are given', () => {
-    const { conditions } = filter(42671, undefined, 'Silver', [42671]);
-    expect(conditions).toEqual(['mods.sub_category_id IN (@hero_category_0)']);
+  it('includes either assigned categories or a matching title when both are given', () => {
+    const { conditions, params } = filter(42671, undefined, 'Silver', [42671]);
+    expect(conditions).toEqual(['(COALESCE(mods.sub_category_id, mods.category_id) IN (@hero_category_42671) OR hero_name_match(mods.name, @heroName))']);
+    expect(params).toEqual({ hero_category_42671: 42671, heroName: 'Silver' });
   });
 
   it('lets a hero scope without a category id', () => {
     expect(filter(undefined, undefined, undefined, [33306]).conditions)
-      .toEqual(['mods.sub_category_id IN (@hero_category_0)']);
+      .toEqual(['COALESCE(mods.sub_category_id, mods.category_id) IN (@hero_category_33306)']);
   });
 
   it('leaves non-hero category scoping alone', () => {

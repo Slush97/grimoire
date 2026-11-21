@@ -30,11 +30,13 @@ import {
     AlertTriangle,
     Download,
     ExternalLink,
+    Ellipsis,
     FilePlus,
+    ImagePlus,
     Unlink,
 } from 'lucide-react';
 import type { Mod } from '../types/mod';
-import { ArchivedTag, Button, CheckboxMark, ModalHeader, Tag } from './common/ui';
+import { ArchivedTag, Button, CheckboxMark, IconButton, ModalHeader, Tag } from './common/ui';
 import { Input } from './common/forms';
 import { Modal } from './common/Modal';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
@@ -46,7 +48,14 @@ import { useCategoryStore } from '../stores/categoryStore';
 import { getInstalledCardTaxonomy } from '../lib/installedCardTaxonomy';
 import { canonicalHeroName } from '../lib/lockerUtils';
 import { isModLoadedInGame, isReorderBlocked } from '../lib/modLocks';
-import { HeroTagLabel } from './installed/chips';
+import { HeroIconStack } from './installed/chips';
+import { getLocalModGallery, readImageDataUrl, showOpenDialogMulti } from '../lib/api';
+import { IMAGE_EXTS, localImportErrorMessage, VPK_IMPORT_EXTS } from '../lib/customModImport';
+import { shouldBlurNsfw } from '../lib/appSettings';
+import { ModImageGallery, ModImageLightbox } from './common/RevealImage';
+import { MenuCheckboxItem, MenuContent, MenuItem, MenuRoot, MenuSeparator, MenuTrigger } from './common/menu';
+import { useStableCallback } from '../lib/useStableCallback';
+import { canJoinLocalVariantGroup } from '../lib/localVariantEligibility';
 
 type DropPosition = 'before' | 'after';
 type VariantSection = 'enabled' | 'disabled';
@@ -55,6 +64,7 @@ type VariantDraftOrder = { section: VariantSection; ids: string[] } | null;
 interface Props {
     /** Display name shared by the variants (use primary.name). */
     modName: string;
+    onRenameMod?: (name: string) => Promise<void>;
     variants: Mod[];
     /** Toggle a single variant's enabled state. Variants are independent. */
     onToggle: (target: Mod, session?: RequirementToggleSession) => Promise<boolean> | void;
@@ -72,7 +82,11 @@ interface Props {
     onOpenModDetails?: () => void;
     /** Optional - import more local VPKs as variants of this mod. Passed only
      *  for local groups (a GameBanana group's files come from its submission). */
-    onAddVariant?: () => void;
+    onAddVariant?: (paths?: string[]) => void;
+    /** Local artwork is shared by the group, including single-file local mods. */
+    onGalleryChange?: (images: string[]) => Promise<void>;
+    /** Apply the existing NSFW flag to every file in this mod. */
+    onNsfwChange?: (nsfw: boolean) => Promise<void>;
     /** Optional - take one file back out of the group. It stays installed and
      *  enabled, it just stops being a variant of this mod. Local groups only. */
     onDetachVariant?: (variant: Mod) => Promise<void> | void;
@@ -145,6 +159,7 @@ function SortableVariantRow({
  */
 export default function VariantPickerModal({
     modName,
+    onRenameMod,
     variants,
     onToggle,
     onMoveVariant,
@@ -154,6 +169,8 @@ export default function VariantPickerModal({
     onRenameVariant,
     onOpenModDetails,
     onAddVariant,
+    onGalleryChange,
+    onNsfwChange,
     onDetachVariant,
     variantsWithUpdate,
     onUpdateGroup,
@@ -161,6 +178,46 @@ export default function VariantPickerModal({
     onClose,
 }: Props) {
     const { t } = useTranslation();
+    const localMod = variants.length > 0 && variants.every(canJoinLocalVariantGroup);
+    const galleryGroupId = localMod ? variants.find(variant => variant.localGroupId)?.localGroupId : undefined;
+    const [gallery, setGallery] = useState<{ groupId?: string; images: string[] } | null>(null);
+    const thumbnailSources = JSON.stringify(localMod && (galleryGroupId || onGalleryChange)
+        ? [...new Set(variants.map(variant => variant.thumbnailUrl).filter((image): image is string => !!image))] : []);
+    const fallbackImages = useMemo<string[]>(() => JSON.parse(thumbnailSources), [thumbnailSources]);
+    const galleryWork = useRef(false);
+    const galleryRevision = useRef(0);
+    const mounted = useRef(true);
+    const [error, setError] = useState<string | null>(null);
+    const [imageIndex, setImageIndex] = useState<number | null>(null);
+    const settings = useAppStore(state => state.settings);
+    const galleryBlurred = variants.some(variant => variant.nsfw) && shouldBlurNsfw(settings);
+    const revealGalleryOnHover = settings?.revealNsfwOnHover ?? false;
+    const galleryPolicy = `${galleryBlurred}:${revealGalleryOnHover}`;
+    const [previousPolicy, setPreviousPolicy] = useState(galleryPolicy);
+    if (previousPolicy !== galleryPolicy) {
+        setPreviousPolicy(galleryPolicy);
+        if (imageIndex !== null) setImageIndex(null);
+    }
+    const galleryImages = gallery && gallery.groupId === galleryGroupId ? gallery.images : fallbackImages;
+    const galleryLoading = !!galleryGroupId && gallery?.groupId !== galleryGroupId;
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
+    useEffect(() => {
+        if (!galleryGroupId) return;
+        let live = true;
+        const revision = ++galleryRevision.current;
+        void getLocalModGallery(galleryGroupId).then(images => {
+            if (live && revision === galleryRevision.current) setGallery({ groupId: galleryGroupId, images: images.length ? images : fallbackImages });
+        }).catch(reason => {
+            if (live && revision === galleryRevision.current) {
+                setError(localImportErrorMessage(reason));
+                setGallery({ groupId: galleryGroupId, images: fallbackImages });
+            }
+        });
+        return () => { live = false; };
+    }, [galleryGroupId, fallbackImages]);
     const loadedGameModIds = useAppStore((state) => state.loadedGameModIds);
     const heroByCategoryId = useCategoryStore((state) => state.heroByCategoryId);
     const heroNames = useCategoryStore((state) => state.heroNames);
@@ -179,6 +236,87 @@ export default function VariantPickerModal({
     const isOrderLocked = (mod?: Mod) => isModLoadedInGame(mod, loadedGameModIds);
     const titleId = useId();
     const [pending, setPending] = useState<string | null>(null);
+    const [titleDraft, setTitleDraft] = useState<string | null>(null);
+    const titleEditor = useRef<HTMLSpanElement>(null);
+    const titleEditing = titleDraft !== null;
+    useEffect(() => {
+        if (!titleEditing || !titleEditor.current) return;
+        titleEditor.current.focus();
+        const range = document.createRange();
+        range.selectNodeContents(titleEditor.current);
+        range.collapse(false);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+    }, [titleEditing]);
+    const titleSaving = useRef(false);
+    const commitTitle = async () => {
+        if (!localMod || !onRenameMod || titleDraft === null || titleSaving.current || pending) return;
+        const name = titleDraft.replace(/[\r\n]+/g, ' ').trim();
+        if (!name || name === modName) { setTitleDraft(null); return; }
+        titleSaving.current = true;
+        setPending('title');
+        setError(null);
+        try {
+            await onRenameMod(name);
+            if (mounted.current) setTitleDraft(null);
+        } catch (reason) {
+            if (mounted.current) setError(localImportErrorMessage(reason));
+        } finally {
+            titleSaving.current = false;
+            if (mounted.current) setPending(null);
+        }
+    };
+    const acceptArtwork = useStableCallback((images: string[]) => {
+        galleryRevision.current++;
+        setGallery({ groupId: galleryGroupId, images });
+    });
+    const changeNsfw = async (nsfw: boolean) => {
+        if (!onNsfwChange || pending || isUpdating) return;
+        setPending('nsfw');
+        setError(null);
+        try { await onNsfwChange(nsfw); }
+        catch (reason) { if (mounted.current) setError(localImportErrorMessage(reason)); }
+        finally { if (mounted.current) setPending(null); }
+    };
+    const editArtwork = async (change: () => Promise<string[]>) => {
+        if (!onGalleryChange || galleryWork.current || galleryLoading || isUpdating || pending) return;
+        galleryWork.current = true;
+        galleryRevision.current++;
+        setPending('gallery');
+        setError(null);
+        try {
+            const images = await change();
+            if (!mounted.current) return;
+            await onGalleryChange(images);
+            if (mounted.current) acceptArtwork(images);
+        } catch (reason) {
+            if (mounted.current) setError(localImportErrorMessage(reason));
+        } finally {
+            galleryWork.current = false;
+            if (mounted.current) setPending(null);
+        }
+    };
+    const addImages = (paths: string[]) => editArtwork(async () =>
+        [...new Set([...galleryImages, ...await Promise.all(paths.map(readImageDataUrl))])]);
+    const pickImages = async () => {
+        try {
+            const paths = await showOpenDialogMulti({ title: t('installed.imageField.selectImage'),
+                filters: [{ name: t('common.fileTypes.images'), extensions: IMAGE_EXTS }] });
+            if (mounted.current && paths.length) await addImages(paths);
+        } catch (reason) {
+            if (mounted.current) setError(localImportErrorMessage(reason));
+        }
+    };
+    const pickVariants = async () => {
+        try {
+            const paths = await showOpenDialogMulti({ title: t('installed.batchImport.selectFiles'),
+                filters: [{ name: t('common.fileTypes.vpkOrArchive'), extensions: VPK_IMPORT_EXTS }] });
+            if (mounted.current && paths.length) onAddVariant?.(paths);
+        } catch (reason) {
+            if (mounted.current) setError(localImportErrorMessage(reason));
+        }
+    };
     const requirementsSession = useRef<RequirementToggleSession>({});
     const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null);
     const editInputRef = useRef<HTMLInputElement | null>(null);
@@ -373,15 +511,9 @@ export default function VariantPickerModal({
                     <div className="flex items-center gap-3">
                         <CheckboxMark checked={isActive} />
                         <div className="min-w-0 flex-1">
-                            <div className="flex min-w-0 items-start gap-2">
+                            <div className="flex min-w-0 items-center gap-1">
                             {showVariantHeroes && heroes.length > 0 && (
-                                <span className="inline-flex max-w-[50%] flex-shrink-0 flex-wrap items-center gap-1 pt-0.5">
-                                    {heroes.map(hero => (
-                                        <span key={hero} title={hero}>
-                                            <HeroTagLabel heroName={hero} iconOnly iconClassName="h-4 w-4" />
-                                        </span>
-                                    ))}
-                                </span>
+                                <HeroIconStack heroes={heroes} maxVisible={4} iconSize={16} maxWidth={32} />
                             )}
                             {isEditing ? (
                                 <Input
@@ -415,6 +547,7 @@ export default function VariantPickerModal({
                                     {hasUpdate && (
                                         <Tag
                                             tone="update"
+                                            variant="overlay"
                                             icon={Download}
                                             title={t('variantPicker.updateAvailable')}
                                             className="flex-shrink-0 uppercase tracking-wide"
@@ -529,7 +662,7 @@ export default function VariantPickerModal({
                         >
                             <Pencil className="w-4 h-4" />
                         </button>
-                        {onDetachVariant && (
+                        {onDetachVariant && canJoinLocalVariantGroup(v) && (
                             <button
                                 type="button"
                                 onClick={() => handleDetach(v)}
@@ -622,7 +755,22 @@ export default function VariantPickerModal({
                 <ModalHeader
                     titleId={titleId}
                     title={
-                        onOpenModDetails ? (
+                        localMod && onRenameMod ? (
+                            titleEditing ? <span ref={titleEditor} contentEditable={pending === 'title' ? false : 'plaintext-only'}
+                                suppressContentEditableWarning role="textbox" tabIndex={0} aria-multiline={false}
+                                onInput={event => setTitleDraft(event.currentTarget.textContent ?? '')}
+                                aria-label={t('variantPicker.renameMod')} aria-disabled={pending === 'title'}
+                                className="block min-w-0 whitespace-nowrap outline-none"
+                                onBlur={() => void commitTitle()}
+                                onKeyDown={event => {
+                                    if (event.key === 'Enter' || event.key === 'Escape') {
+                                        event.preventDefault(); event.stopPropagation();
+                                        if (event.key === 'Enter') void commitTitle(); else setTitleDraft(null);
+                                    }
+                                }}>{modName}</span> : <button type="button" disabled={isUpdating || !!pending}
+                                onClick={() => setTitleDraft(modName)} title={t('variantPicker.renameMod')}
+                                className="max-w-full cursor-text truncate text-left disabled:opacity-60">{modName}</button>
+                        ) : onOpenModDetails ? (
                             <button
                                 type="button"
                                 onClick={onOpenModDetails}
@@ -643,18 +791,6 @@ export default function VariantPickerModal({
                     className="pb-3"
                     actions={
                         <>
-                            {onAddVariant && (
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    icon={FilePlus}
-                                    onClick={onAddVariant}
-                                    disabled={isUpdating || !!pending}
-                                    title={t('variantPicker.addVariantHint')}
-                                >
-                                    {t('variantPicker.addVariant')}
-                                </Button>
-                            )}
                             {onUpdateGroup && variantsWithUpdate && variantsWithUpdate.size > 0 && (
                                 <Button
                                     variant="primary"
@@ -676,14 +812,49 @@ export default function VariantPickerModal({
                                         : t('variantPicker.updateCount', { count: variantsWithUpdate.size })}
                                 </Button>
                             )}
+                            {localMod && onRenameMod && onOpenModDetails && (
+                                <IconButton icon={ExternalLink} label={t('variantPicker.openModPage')}
+                                    onClick={onOpenModDetails} disabled={isUpdating || !!pending} />
+                            )}
+                            {localMod && (onNsfwChange || onAddVariant || onGalleryChange) && <MenuRoot kind="dropdown">
+                                <MenuTrigger asChild>
+                                    <IconButton icon={Ellipsis} label={t('installed.card.moreActions')} disabled={isUpdating || !!pending} />
+                                </MenuTrigger>
+                                <MenuContent>
+                                    {onNsfwChange && <MenuCheckboxItem checked={variants.some(variant => !!variant.nsfw)}
+                                        disabled={isUpdating || !!pending} onCheckedChange={nsfw => void changeNsfw(nsfw)}>
+                                        {t('installed.imageField.nsfw')}
+                                    </MenuCheckboxItem>}
+                                    {onNsfwChange && (onAddVariant || onGalleryChange) && <MenuSeparator />}
+                                    {onAddVariant && <MenuItem icon={FilePlus} disabled={isUpdating || !!pending}
+                                        onSelect={() => void pickVariants()}>{t('variantPicker.addFiles')}</MenuItem>}
+                                    {onGalleryChange && <MenuItem icon={ImagePlus} disabled={isUpdating || !!pending || galleryLoading}
+                                        onSelect={() => void pickImages()}>{t('variantPicker.addImages')}</MenuItem>}
+                                </MenuContent>
+                            </MenuRoot>}
                         </>
                     }
                 />
 
                 <div className="max-h-[60vh] min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3">
+                    {galleryImages.length > 0 && <ModImageGallery
+                        images={galleryImages} modName={modName} blurred={galleryBlurred} revealOnHover={revealGalleryOnHover}
+                        disabled={isUpdating || !!pending || galleryLoading} loading={pending === 'gallery' || galleryLoading}
+                        onImageClick={setImageIndex}
+                        actionsInContextMenu={!!onGalleryChange}
+                        onMakeThumbnail={onGalleryChange ? index => void editArtwork(async () => [galleryImages[index], ...galleryImages.filter((_, current) => current !== index)]) : undefined}
+                        onRemove={onGalleryChange ? index => void editArtwork(async () => galleryImages.filter((_, current) => current !== index)) : undefined}
+                    />}
                     {renderSortableVariantSection('enabled')}
                     {renderSortableVariantSection('disabled')}
+                    {error && <p role="alert" className="text-xs text-state-danger">{error}</p>}
                 </div>
+                {imageIndex !== null && galleryImages[imageIndex] && <ModImageLightbox
+                    src={galleryImages[imageIndex]} modName={modName}
+                    index={imageIndex} count={galleryImages.length} onClose={() => setImageIndex(null)}
+                    onPrevious={() => setImageIndex((imageIndex + galleryImages.length - 1) % galleryImages.length)}
+                    onNext={() => setImageIndex((imageIndex + 1) % galleryImages.length)} />}
+
         </Modal>
     );
 }

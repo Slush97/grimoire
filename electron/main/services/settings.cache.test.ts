@@ -28,6 +28,14 @@ afterEach(() => {
 });
 
 describe('settings cache', () => {
+    it('defaults tag filter cycling off for existing settings and persists the preference', () => {
+        writeFileSync(settingsPath(), JSON.stringify({ language: 'en' }));
+        expect(loadSettings().cycleTagFilters).toBe(false);
+        saveSettings({ ...loadSettings(), cycleTagFilters: true });
+        expect(JSON.parse(readFileSync(settingsPath(), 'utf8')).cycleTagFilters).toBe(true);
+        expect(loadSettings().cycleTagFilters).toBe(true);
+    });
+
     it('reads settings once across a thousand warm metadata lookups', () => {
         writeFileSync(settingsPath(), JSON.stringify({ devMode: false }));
         writeFileSync(join(harness.userData, 'mod-metadata.json'), JSON.stringify({ 'skin_dir.vpk': { modName: 'Skin' } }));

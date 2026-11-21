@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Mod } from '../types/mod';
+import type { AppSettings, Mod } from '../types/mod';
 import * as api from '../lib/api';
 import { DISABLED_FAVORITES_KEY } from '../lib/disabledModPrefs';
 import { MOD_LISTS_KEY } from '../lib/modLists';
@@ -14,6 +14,8 @@ vi.mock('../i18n', () => ({
 vi.mock('../lib/api', () => ({
   getMods: vi.fn(async () => []),
   setLocalVariantGroup: vi.fn(),
+  setLocalModGallery: vi.fn(),
+  setModsNsfw: vi.fn(),
   getLockerModImages: vi.fn(async () => ({})),
   getLockerModImageFlags: vi.fn(async () => ({})),
   setLockerModImage: vi.fn(),
@@ -121,6 +123,82 @@ describe('appStore local variant preference migration', () => {
     expect(JSON.parse(storage.get(MOD_LISTS_KEY) ?? 'null')[0].keys).toEqual([
       'localgroup:group-1',
     ]);
+  });
+
+  it('gives standalone artwork an existing group identity and updates every card', async () => {
+    const original = mod('solo', { sha256: 'solo', thumbnailUrl: 'old' });
+    const grouped = { ...original, localGroupId: 'artwork' };
+    const updated = { ...grouped, thumbnailUrl: 'new', hasLocalGallery: true };
+    useAppStore.setState({ mods: [original] });
+    vi.mocked(api.setLocalVariantGroup).mockResolvedValue({ groupId: 'artwork', mods: [grouped] });
+    vi.mocked(api.setLocalModGallery).mockResolvedValue([updated]);
+    await useAppStore.getState().setLocalModGallery(original.id, ['new', 'second']);
+    expect(api.setLocalVariantGroup).toHaveBeenCalledExactlyOnceWith([original.id], { mode: 'mint' });
+    expect(api.setLocalModGallery).toHaveBeenCalledExactlyOnceWith('artwork', ['new', 'second']);
+    expect(useAppStore.getState().mods).toEqual([updated]);
+    await useAppStore.getState().setLocalModGallery(updated.id, []);
+    expect(api.setLocalVariantGroup).toHaveBeenCalledOnce();
+  });
+
+  it('does not apply an old grouping response or migrate preferences after an installation switch', async () => {
+    let finish!: (value: { groupId: string; mods: Mod[] }) => void;
+    vi.mocked(api.setLocalVariantGroup).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const original = mod('original'); const current = mod('current');
+    storage.set(DISABLED_FAVORITES_KEY, JSON.stringify(['sha256:original']));
+    useAppStore.setState({ settings: { deadlockPath: '/original' } as AppSettings, mods: [original] });
+    const pending = useAppStore.getState().setLocalVariantGroup([original.id], { mode: 'mint' });
+    useAppStore.setState({ settings: { deadlockPath: '/current' } as AppSettings, mods: [current] });
+    finish({ groupId: 'old-group', mods: [{ ...original, localGroupId: 'old-group' }] }); await pending;
+    expect(useAppStore.getState().mods).toEqual([current]);
+    expect(JSON.parse(storage.get(DISABLED_FAVORITES_KEY)!)).toEqual(['sha256:original']);
+  });
+
+  it('undoes a newly minted group when saving its first artwork fails', async () => {
+    const original = mod('solo', { sha256: 'solo' });
+    const grouped = { ...original, localGroupId: 'temporary' };
+    useAppStore.setState({ mods: [original] });
+    vi.mocked(api.setLocalVariantGroup).mockResolvedValueOnce({ groupId: 'temporary', mods: [grouped] })
+      .mockResolvedValueOnce({ groupId: null, mods: [original] });
+    vi.mocked(api.setLocalModGallery).mockRejectedValueOnce(new Error('Disk full'));
+    await expect(useAppStore.getState().setLocalModGallery(original.id, ['image'])).rejects.toThrow('Disk full');
+    expect(api.setLocalVariantGroup).toHaveBeenLastCalledWith([original.id], { mode: 'clear' });
+    expect(useAppStore.getState().mods).toEqual([original]);
+  });
+
+  it('adopts NSFW flags from main for every variant', async () => {
+    const before = [mod('a'), mod('b')];
+    const updated = before.map(item => ({ ...item, nsfw: true }));
+    useAppStore.setState({ mods: before });
+    vi.mocked(api.setModsNsfw).mockResolvedValue(updated);
+    await useAppStore.getState().setModsNsfw(['a', 'b'], true);
+    expect(api.setModsNsfw).toHaveBeenCalledExactlyOnceWith(['a', 'b'], true);
+    expect(useAppStore.getState().mods).toEqual(updated);
+  });
+
+  it('keeps the active installation when an older NSFW write finishes', async () => {
+    let finish!: (mods: Mod[]) => void;
+    vi.mocked(api.setModsNsfw).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const original = mod('original'); const current = mod('current');
+    useAppStore.setState({ settings: { deadlockPath: '/original' } as AppSettings, mods: [original] });
+    const pending = useAppStore.getState().setModsNsfw([original.id], true);
+    useAppStore.setState({ settings: { deadlockPath: '/current' } as AppSettings, mods: [current] });
+    finish([{ ...original, nsfw: true }]);
+    await pending;
+    expect(useAppStore.getState().mods).toEqual([current]);
+  });
+
+  it('does not invalidate a new installation scan when an older NSFW write finishes', async () => {
+    let finishWrite!: (mods: Mod[]) => void; let finishScan!: (mods: Mod[]) => void;
+    vi.mocked(api.setModsNsfw).mockReturnValueOnce(new Promise(resolve => { finishWrite = resolve; }));
+    vi.mocked(api.getMods).mockReturnValueOnce(new Promise(resolve => { finishScan = resolve; }));
+    useAppStore.setState({ settings: { deadlockPath: '/old' } as AppSettings, mods: [mod('old')] });
+    const write = useAppStore.getState().setModsNsfw(['old'], true);
+    useAppStore.setState({ settings: { deadlockPath: '/new' } as AppSettings, mods: [], modsLoaded: false });
+    const scan = useAppStore.getState().loadMods({ force: true });
+    finishWrite([mod('old', { nsfw: true })]); await write;
+    finishScan([mod('new')]); await scan;
+    expect(useAppStore.getState().mods.map(mod => mod.id)).toEqual(['new']);
+    expect(useAppStore.getState().modsLoading).toBe(false);
   });
 
   it('moves Locker art, editable crop sources, and flags to the new group key', async () => {

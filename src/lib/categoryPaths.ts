@@ -4,6 +4,26 @@ import { categoryIdFromProfileUrl } from './heroFilter';
 
 export type CategoryPaths = ReadonlyMap<number, readonly GameBananaCategory[]>;
 
+/** Stable labels shared by stored Base selections and Locker destinations. */
+export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
+  patron: 'Patrons',
+  'hidden-king': 'Hidden King',
+  archmother: 'Archmother',
+  sinner: 'Sinners',
+  boxes: 'Boxes',
+  sounds: 'Sounds',
+  'soul-container': 'Soul Containers',
+  'spirit-urn': 'Spirit Urns',
+  hideout: 'Hideout',
+  icons: 'Icon Packs',
+  hud: 'HUD',
+  effects: 'Effects',
+  animations: 'Animations',
+  maps: 'Maps',
+  announcer: 'Announcer / SFX',
+  'killstreak-music': 'Killstreak Music',
+};
+
 /** Correct known upstream labels without changing category identities. */
 export function normalizeCategoryLabel(label: string): string {
   const cleaned = label.replace(/\s+/g, ' ').trim();
@@ -90,9 +110,19 @@ export function categoryGeneralType(path: readonly GameBananaCategory[]): Global
       case 'soul containers': return 'soul-container';
       case 'spirit urn':
       case 'spirit urns': return 'spirit-urn';
+      case 'patron':
+      case 'patrons': return 'patron';
+      case 'hidden king': return 'hidden-king';
+      case 'archmother': return 'archmother';
+      case 'sinners':
+      case "sinner's sacrifice":
+      case 'sinner?s sacrifice': return 'sinner';
+      case 'boxes':
+      case 'crates': return 'boxes';
+      case 'sounds': return 'sounds';
       case 'hideout': return 'hideout';
       case 'hud': return 'hud';
-      case 'killstreak music': return 'killstreak-music';
+      case 'killstreak music': return 'sounds';
       case 'animations': return 'animations';
       case 'maps': return 'maps';
     }
@@ -111,6 +141,15 @@ interface InstalledGeneralTypeInput {
   sourceSection?: string;
 }
 
+/** Only labels with a Locker destination get the informational Locker icon. */
+export function baseTagGlobalType(label: string): GlobalModType | undefined {
+  return categoryGeneralType([{ name: label }]);
+}
+
+export function baseTagHasLockerDestination(label: string): boolean {
+  return !!baseTagGlobalType(label) || ['skins', 'sounds'].includes(normalizeCategoryLabel(label).toLowerCase());
+}
+
 /** Resolve runtime classification without persisting category-derived tags. */
 export function resolveInstalledGeneralType(
   mod: InstalledGeneralTypeInput,
@@ -121,6 +160,7 @@ export function resolveInstalledGeneralType(
   if (mod.lockerHeroSource === 'manual' && mod.lockerHero?.trim()) return undefined;
   const linked = typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0;
   if (!linked && mod.globalType) return mod.globalType;
+  if (mod.sourceSection === 'Sound' && resolvedHeroes.length === 0) return 'sounds';
   const generalType = categoryGeneralType(resolveCategoryPath(paths, {
     id: mod.categoryId,
     name: mod.categoryName ?? '',
@@ -129,4 +169,44 @@ export function resolveInstalledGeneralType(
   if (generalType === 'animations') return generalType;
   if (!linked && generalType !== 'maps') return undefined;
   return resolvedHeroes.length > 0 ? undefined : generalType;
+}
+
+/** Canonical entries verified against the game's VPK directory. */
+export const GENERAL_PROP_MODELS: Partial<Record<GlobalModType, string>> = {
+  'soul-container': 'models/props_gameplay/soul_container/soul_container.vmdl_c',
+  'spirit-urn': 'models/props_gameplay/idol_urn/idol_urn.vmdl_c',
+  'hidden-king': 'models/npc/patron_amber/patron_amber.vmdl_c',
+  archmother: 'models/npc/patron_sapphire/patron_sapphire.vmdl_c',
+  sinner: 'models/props_gameplay/sinners_sacrifice_vault/sinners_sacrifice.vmdl_c',
+};
+
+/** Old routing values remain readable but cannot establish a preview destination. */
+export function isGeneralPropType(type: GlobalModType): boolean {
+  return !!GENERAL_PROP_MODELS[type] || type === 'patron' || type === 'boxes';
+}
+
+export function baseTagHasDetectedProp(label: string, types: ReadonlySet<GlobalModType>): boolean {
+  const type = baseTagGlobalType(label);
+  if (type === 'patron') return types.has('hidden-king') || types.has('archmother');
+  return !!type && !!GENERAL_PROP_MODELS[type] && types.has(type);
+}
+
+/** Inspect resource paths, including texture-only overrides, without reading asset bytes. */
+export function detectGeneralPropTypes(paths: readonly string[]): GlobalModType[] {
+  const types = new Set<GlobalModType>();
+  for (const path of paths) {
+    const normalized = path.replace(/\\/g, '/').toLowerCase();
+    if (normalized.includes('/soul_container/')) types.add('soul-container');
+    if (normalized.includes('/idol_urn/')) types.add('spirit-urn');
+    if (/\/patron_amber(?:\/|[_.])/.test(normalized)) types.add('hidden-king');
+    if (/\/patron_sapphire(?:\/|[_.])/.test(normalized)) types.add('archmother');
+    if (normalized.includes('/sinners_sacrifice')) types.add('sinner');
+  }
+  // Stable slot order also gives mixed VPKs one consistent shuffle home.
+  return Object.keys(GENERAL_PROP_MODELS).filter(type => types.has(type as GlobalModType)) as GlobalModType[];
+}
+
+/** Each preview destination has one exact model, including texture-only overrides. */
+export function generalPropModel(type: GlobalModType): string | undefined {
+  return GENERAL_PROP_MODELS[type];
 }

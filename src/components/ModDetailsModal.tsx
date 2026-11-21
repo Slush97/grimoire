@@ -1,8 +1,8 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useBackdropDismiss } from './common/useBackdropDismiss';
 import { gameBananaCategoryLabel } from '../lib/gameBananaCategories';
 import { useTranslation, Trans } from 'react-i18next';
 import { createPortal } from 'react-dom';
-import { useBackdropDismiss } from './common/useBackdropDismiss';
 import {
   Volume2,
   Loader2,
@@ -45,7 +45,7 @@ import { getModComments, getModUpdates } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import AudioPreviewPlayer from './AudioPreviewPlayer';
 import { Skeleton } from './common/Skeleton';
-import { RevealImage } from './common/RevealImage';
+import { ModImageLightbox, RevealImage } from './common/RevealImage';
 import { ArchivedTag, Button, CheckboxMark, IconButton, Tag } from './common/ui';
 import { ConfirmModal } from './common/PageComponents';
 import ImageContextMenu from './ImageContextMenu';
@@ -148,142 +148,6 @@ interface ModDetailsModalProps {
   onOpenGameBananaItem?: (item: GameBananaItemRef) => void;
 }
 
-type LightboxView = { scale: number; x: number; y: number };
-
-/** Each image opening owns its zoom, bounded pan, and control visibility. */
-function ModImageLightbox({ src, modName, caption, index, count, onClose, onPrevious, onNext }: {
-  src: string;
-  modName: string;
-  caption?: string;
-  index: number;
-  count: number;
-  onClose: () => void;
-  onPrevious: () => void;
-  onNext: () => void;
-}) {
-  const { t } = useTranslation();
-  const backdropRef = useBackdropDismiss<HTMLDivElement>(onClose);
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
-  const [view, setView] = useState<LightboxView>({ scale: 1, x: 0, y: 0 });
-  const viewRef = useRef(view);
-  const [controlsVisible, setControlsVisible] = useState(true);
-  const [dragging, setDragging] = useState(false);
-  const drag = useRef<{ pointerId: number; startX: number; startY: number; x: number; y: number } | null>(null);
-
-  const applyView = useCallback((next: LightboxView) => {
-    const viewport = viewportRef.current;
-    const image = imageRef.current;
-    if (!viewport || !image) return;
-    // Keep smaller axes centered; larger ones can pan only as far as their edges.
-    const maxX = Math.max(0, (image.offsetWidth * next.scale - viewport.clientWidth) / 2);
-    const maxY = Math.max(0, (image.offsetHeight * next.scale - viewport.clientHeight) / 2);
-    const clamped = { scale: next.scale, x: Math.max(-maxX, Math.min(maxX, next.x)), y: Math.max(-maxY, Math.min(maxY, next.y)) };
-    const current = viewRef.current;
-    if (current.scale === clamped.scale && current.x === clamped.x && current.y === clamped.y) return;
-    viewRef.current = clamped;
-    setView(clamped);
-  }, []);
-
-  useEffect(() => {
-    const backdrop = backdropRef.current;
-    if (!backdrop) return;
-    const onWheel = (event: WheelEvent) => {
-      const target = event.target as Element;
-      if (target.closest('figcaption, [data-lightbox-controls]')) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const viewport = viewportRef.current;
-      const image = imageRef.current;
-      if (!viewport || !image?.naturalWidth || !event.deltaY || drag.current) return;
-      const current = viewRef.current;
-      const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1);
-      const scale = Math.max(1, Math.min(8, current.scale * Math.exp(-Math.max(-240, Math.min(240, pixels)) * 0.002)));
-      if (scale === current.scale) return;
-      const rect = viewport.getBoundingClientRect();
-      const x = event.clientX - rect.left - rect.width / 2;
-      const y = event.clientY - rect.top - rect.height / 2;
-      const ratio = scale / current.scale;
-      applyView({ scale, x: x - (x - current.x) * ratio, y: y - (y - current.y) * ratio });
-      setControlsVisible(scale === 1);
-    };
-    // React wheel handlers are passive in Chromium; prevent page/browser zoom here.
-    backdrop.addEventListener('wheel', onWheel, { passive: false });
-    return () => backdrop.removeEventListener('wheel', onWheel);
-  }, [applyView, backdropRef]);
-
-  useLayoutEffect(() => {
-    const clamp = () => applyView(viewRef.current);
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(clamp);
-    if (viewportRef.current) observer?.observe(viewportRef.current);
-    if (imageRef.current) observer?.observe(imageRef.current);
-    window.addEventListener('resize', clamp);
-    return () => { observer?.disconnect(); window.removeEventListener('resize', clamp); };
-  }, [applyView]);
-
-  const endDrag = (event: ReactPointerEvent<HTMLImageElement>) => {
-    if (drag.current?.pointerId !== event.pointerId) return;
-    drag.current = null;
-    setDragging(false);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-  };
-  const alt = t('modDetails.images.altFullSize', { name: modName, index: index + 1 });
-
-  return (
-    <div ref={backdropRef} className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black/95 p-4"
-      role="dialog" aria-modal="true" aria-label={t('modDetails.images.fullSizeAria', { name: modName })}>
-      <div data-lightbox-controls inert={!controlsVisible} aria-hidden={!controlsVisible}
-        className={`pointer-events-none absolute inset-0 z-10 transition-opacity duration-150 motion-reduce:transition-none ${controlsVisible ? 'opacity-100' : 'opacity-0'}`}>
-        <button type="button" onClick={event => { event.stopPropagation(); onClose(); }} aria-label={t('modDetails.aria.closeFullSizeView')}
-          className="pointer-events-auto absolute top-4 right-4 rounded-full border border-hl/15 bg-black/60 p-2 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-white cursor-pointer">
-          <X className="h-5 w-5" />
-        </button>
-        {count > 1 && <>
-          <button type="button" onClick={event => { event.stopPropagation(); onPrevious(); }} aria-label={t('modDetails.aria.previousImage')}
-            className="pointer-events-auto absolute left-4 top-1/2 -translate-y-1/2 rounded-full border border-hl/15 bg-black/60 p-2 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-white cursor-pointer">
-            <ChevronLeft className="h-6 w-6" />
-          </button>
-          <button type="button" onClick={event => { event.stopPropagation(); onNext(); }} aria-label={t('modDetails.aria.nextImage')}
-            className="pointer-events-auto absolute right-4 top-1/2 -translate-y-1/2 rounded-full border border-hl/15 bg-black/60 p-2 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-white cursor-pointer">
-            <ChevronRight className="h-6 w-6" />
-          </button>
-          <div className="absolute top-4 left-4 rounded-md border border-hl/15 bg-black/60 px-2.5 py-1 text-xs text-white/90 backdrop-blur-sm">{index + 1} / {count}</div>
-        </>}
-      </div>
-      <figure className="pointer-events-none flex h-full w-full min-h-0 flex-col items-center gap-3" onClick={event => event.stopPropagation()}>
-        <div ref={viewportRef} data-lightbox-viewport className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden">
-          <ImageContextMenu src={src} alt={alt}>
-            <img ref={imageRef} src={src} alt={alt} draggable={false}
-              className={`pointer-events-auto max-h-full max-w-full touch-none select-none object-contain ${view.scale > 1 ? dragging ? 'cursor-grabbing' : 'cursor-grab' : 'cursor-default'}`}
-              style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
-              onLoad={() => applyView(viewRef.current)}
-              onClick={event => {
-                event.stopPropagation();
-                if (viewRef.current.scale === 1) setControlsVisible(visible => !visible);
-              }}
-              onPointerDown={event => {
-                if (event.button !== 0 || viewRef.current.scale === 1) return;
-                event.preventDefault();
-                event.currentTarget.setPointerCapture(event.pointerId);
-                drag.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: viewRef.current.x, y: viewRef.current.y };
-                setDragging(true);
-              }}
-              onPointerMove={event => {
-                const active = drag.current;
-                if (!active || active.pointerId !== event.pointerId) return;
-                const dx = event.clientX - active.startX;
-                const dy = event.clientY - active.startY;
-                applyView({ scale: viewRef.current.scale, x: active.x + dx, y: active.y + dy });
-              }}
-              onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
-            />
-          </ImageContextMenu>
-        </div>
-        {caption && <figcaption className="pointer-events-auto max-h-32 w-full max-w-3xl shrink-0 overflow-y-auto whitespace-pre-wrap break-words text-center text-sm text-text-secondary select-text">{caption}</figcaption>}
-      </figure>
-    </div>
-  );
-}
 
 function ModDetailsModal({
   onBack,
@@ -555,7 +419,7 @@ function ModDetailsModal({
     const handleKeyDown = (e: KeyboardEvent) => {
       const requirements = useRequirementsStore.getState();
       if (!requirementsLayer && (requirements.review || requirements.targets.length)) return;
-      if (e.defaultPrevented) return;
+      if (e.defaultPrevented || lightboxOpen) return;
       if (e.key === 'Escape') {
         if (deleteCandidate) {
           if (!deleteInProgress) setDeleteCandidate(null);
@@ -563,20 +427,10 @@ function ModDetailsModal({
         }
         // The confirmation dialog closes itself on Escape; this overlay stays.
         if (replaceCandidate) return;
-        // Lightbox eats ESC before the modal does, so users can dismiss the
-        // zoomed view without losing their place on the detail card.
-        if (lightboxOpen) {
-          setLightboxOpen(false);
-        } else {
-          onClose();
-        }
+        onClose();
       }
-      // Arrow keys only navigate while the lightbox is open - otherwise
-      // they step between mods when the caller provides modal navigation.
-      if (lightboxOpen && images.length > 1) {
-        if (e.key === 'ArrowLeft') goToPrevious();
-        if (e.key === 'ArrowRight') goToNext();
-      } else if (!deleteCandidate && !replaceCandidate && !isNavigating) {
+      // The shared image viewer owns keys while open. These arrows navigate mods.
+      if (!deleteCandidate && !replaceCandidate && !isNavigating) {
         const target = e.target as HTMLElement | null;
         const tag = target?.tagName?.toLowerCase();
         const editing =
@@ -626,7 +480,6 @@ function ModDetailsModal({
       window.removeEventListener('auxclick', suppressNav);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     onClose,
     requirementsLayer,
@@ -2078,13 +1931,11 @@ function ModDetailsModal({
         </div>
       </div>
 
-      {/* Keyed per image so navigation and reopening reset zoom and controls. */}
+      {/* The shared viewer resets image state as the gallery advances. */}
       {lightboxOpen && currentImageFullUrl && (
-        <div className="fixed inset-0 z-[60] animate-fade-in">
-          <ModImageLightbox key={`${mod.id}:${currentImageIndex}`} src={currentImageFullUrl}
-            modName={mod.name} caption={currentImage.caption} index={currentImageIndex} count={images.length}
-            onClose={() => setLightboxOpen(false)} onPrevious={goToPrevious} onNext={goToNext} />
-        </div>
+        <ModImageLightbox src={currentImageFullUrl}
+          modName={mod.name} caption={currentImage.caption} index={currentImageIndex} count={images.length}
+          onClose={() => setLightboxOpen(false)} onPrevious={goToPrevious} onNext={goToNext} />
       )}
     </div>
   );

@@ -1,3 +1,4 @@
+import { isAttachedLocalVariant } from './localVariantEligibility';
 import type { Mod } from '../types/mod';
 import {
   isUpdateFlagged,
@@ -40,13 +41,13 @@ export function summarizeUpdateScope(
 }
 
 /** All installed variants of the submission shown by a mod page or update row. */
-export function modUpdateGroup<T extends { gameBananaId?: number; sourceSection?: string }>(
+export function modUpdateGroup<T extends { gameBananaId?: number; sourceSection?: string; localImport?: boolean; localGroupId?: string }>(
   mods: readonly T[],
   gameBananaId: number | null,
   section = 'Mod',
 ): T[] {
   if (gameBananaId === null) return [];
-  return mods.filter(mod => mod.gameBananaId === gameBananaId && (mod.sourceSection ?? 'Mod') === section);
+  return mods.filter(mod => !isAttachedLocalVariant(mod, mods) && mod.gameBananaId === gameBananaId && (mod.sourceSection ?? 'Mod') === section);
 }
 
 /** The update workflow groups by submission and section, independently of local cards. */

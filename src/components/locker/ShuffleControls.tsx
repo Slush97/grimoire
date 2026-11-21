@@ -1,5 +1,53 @@
-import { Pin, Shuffle } from 'lucide-react';
+import { Check, Shuffle, Star } from 'lucide-react';
+import type { ComponentProps, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { IconButton } from '../common/ui';
+
+export function LockerGeneralCard({ active, className = '', ...props }: ComponentProps<'div'> & { active: boolean }) {
+  return <div {...props} className={`group/card relative flex flex-col rounded-xl border bg-bg-secondary/80 p-2.5 text-text-primary transition-[border-color,background-color] duration-200 ${active
+    ? 'border-accent' : 'border-border hover:border-hl/25'} ${className}`} />;
+}
+
+export const LOCKER_CARD_GRID_CLASS = 'grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3 min-[140rem]:grid-cols-4';
+
+export const LOCKER_CARD_MEDIA_CLASS = 'relative mb-2 w-full overflow-hidden rounded-lg border border-hl/10 bg-bg-sunken/60';
+export const LOCKER_CARD_TITLE_CLASS = 'min-w-0 truncate text-sm font-semibold leading-5 text-text-primary';
+
+/** General cards share one round control, including the model-only actions. */
+export function LockerCardAction({ className = '', onClick, ...props }: Omit<ComponentProps<typeof IconButton>, 'size' | 'shape' | 'tone'>) {
+  return <IconButton {...props} size="sm" shape="round"
+    className={`bg-bg-secondary/95 opacity-0 backdrop-blur-sm transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 aria-pressed:text-accent [&_svg]:size-4 ${className}`}
+    onClick={event => { event.stopPropagation(); onClick?.(event); }} />;
+}
+
+/** Persistent status stays separate from the controls revealed on hover. */
+export function LockerCardHeader({ active = false, favorite = false, shuffled = false, children }: {
+  active?: boolean;
+  favorite?: boolean;
+  shuffled?: boolean;
+  children?: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const status = [active ? t('common.status.active') : '', shuffled ? t('locker.randomize.inPool') : '',
+    favorite ? t('installed.card.favorite') : ''].filter(Boolean).join(' • ');
+  return <div className="pointer-events-none absolute left-2 right-2 top-2 z-20 flex flex-wrap items-start justify-between gap-2 [&_button]:pointer-events-auto"
+    onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
+    {status && <span role="img" aria-label={status} title={status} data-locker-card-status
+      className="flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-bg-sunken/95 px-2 text-text-primary ring-1 ring-inset ring-hl/10 backdrop-blur-sm">
+      {active && <Check className="h-4 w-4 text-accent" aria-hidden />}
+      {shuffled && <Shuffle className="h-4 w-4" aria-hidden />}
+      {favorite && <Star className="h-4 w-4 fill-current" aria-hidden />}
+    </span>}
+    <div className="ml-auto flex max-w-full flex-wrap justify-end gap-1">{children}</div>
+  </div>;
+}
+
+const CARD_CONTROL_SURFACE = 'bg-black/65 text-white/90';
+const SELECTED_CARD_CONTROL = `opacity-100 bg-transparent text-accent
+          group-hover/card:bg-accent group-hover/card:text-accent-foreground
+          group-hover/row:bg-accent group-hover/row:text-accent-foreground
+          group-hover/sound:bg-accent group-hover/sound:text-accent-foreground
+          focus-visible:bg-accent focus-visible:text-accent-foreground`;
 
 /**
  * The corner controls that curate the launch-shuffle pool. Shared by every
@@ -9,7 +57,7 @@ import { useTranslation } from 'react-i18next';
  * hover or whenever the master switch is armed.
  *
  * The host card owns the placement (and its own `group/...` name for the hover
- * reveal), so both controls take those utilities through `className`.
+ * reveal), so the control takes those utilities through `className`.
  */
 interface ShuffleIncludeButtonProps {
   /** Mod / skin name, used to build the accessible label. */
@@ -23,6 +71,7 @@ interface ShuffleIncludeButtonProps {
   className?: string;
   /** Resting background, matched to the host card's other overlay buttons. */
   restingClassName?: string;
+  statusInBadge?: boolean;
 }
 
 export function ShuffleIncludeButton({
@@ -31,12 +80,15 @@ export function ShuffleIncludeButton({
   onToggle,
   armed,
   className = '',
-  restingClassName = 'bg-black/65 text-white/90',
+  restingClassName = CARD_CONTROL_SURFACE,
+  statusInBadge = false,
 }: ShuffleIncludeButtonProps) {
   const { t } = useTranslation();
   const label = included
     ? t('locker.randomize.removeFromShuffle', { name })
     : t('locker.randomize.addToShuffle', { name });
+  if (statusInBadge) return <LockerCardAction icon={Shuffle} label={label} aria-pressed={included}
+    onClick={onToggle} className={className} />;
   return (
     <button
       type="button"
@@ -47,10 +99,10 @@ export function ShuffleIncludeButton({
       aria-pressed={included}
       aria-label={label}
       title={label}
-      className={`flex h-7 w-7 items-center justify-center rounded-full backdrop-blur-sm transition-[opacity,background-color,color] duration-150 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent ${
+      className={`flex h-7 w-7 items-center justify-center rounded-full transition-[opacity,background-color,color] duration-150 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent ${
         included
-          ? 'opacity-100 bg-accent text-accent-foreground hover:bg-accent/80'
-          : `${armed ? 'opacity-100' : 'opacity-0'} ${restingClassName} hover:bg-accent/70 hover:text-accent-foreground`
+          ? SELECTED_CARD_CONTROL
+          : `${armed ? 'opacity-100' : 'opacity-0'} ${restingClassName} backdrop-blur-sm hover:bg-accent/70 hover:text-accent-foreground`
       } ${className}`}
     >
       <Shuffle className="h-3.5 w-3.5" />
@@ -58,77 +110,22 @@ export function ShuffleIncludeButton({
   );
 }
 
-interface ShuffleBulkButtonProps {
-  /** Every eligible card here is already pooled, so the button removes them. */
-  allIncluded: boolean;
-  /** How many distinct mods the action covers, for the tooltip. */
-  count: number;
-  onClick: () => void;
-}
-
-/**
- * Header-row bulk control for a card set that is not itself a shuffle group
- * (today: one user category). It pools or un-pools every member the planner can
- * actually re-roll, leaving Global pins and non-shuffleable mods alone, so it
- * never writes a key the planner would ignore.
- *
- * Styled as the other header-row actions ("Add mods", "Make Global") rather
- * than as a card overlay: it acts on the tab, not on one card.
- */
-export function ShuffleBulkButton({ allIncluded, count, onClick }: ShuffleBulkButtonProps) {
-  const { t } = useTranslation();
-  const label = allIncluded
-    ? t('locker.randomize.bulk.remove')
-    : t('locker.randomize.bulk.add');
-  const title = allIncluded
-    ? t('locker.randomize.bulk.removeHint', { count })
-    : t('locker.randomize.bulk.addHint', { count });
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      aria-label={title}
-      className={`inline-flex items-center gap-1.5 self-center rounded-lg border px-3 py-1.5 text-xs font-medium text-text-primary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-        allIncluded
-          ? 'border-accent bg-accent/20 hover:bg-accent/30'
-          : 'border-accent/40 bg-accent/10 hover:border-accent/60 hover:bg-accent/20'
-      }`}
-    >
-      <Shuffle className="h-3.5 w-3.5" />
-      {label}
-    </button>
-  );
-}
-
-interface ShuffleAlwaysOnBadgeProps {
-  name: string;
-  /** Master switch armed: the pin only means something once shuffling is on. */
-  armed?: boolean;
+/** Favorite stars share the Locker corner controls and stay visible when selected. */
+export function ModFavoriteButton({ favorite, onToggle, className = '', statusInBadge = false }: {
+  favorite: boolean;
+  onToggle: () => void;
   className?: string;
-}
-
-/**
- * The always-on marker for a Global (priority root) mod. It replaces the opt-in
- * button rather than sitting next to it: a Global mod is pinned by construction,
- * so the planner never picks it and never turns it off. Offering "add to
- * shuffle" here used to be a silent lie (the opt-in persisted, the planner
- * dropped it, and a hero whose only pooled skin was Global just stopped
- * shuffling), so the control is deliberately not interactive.
- */
-export function ShuffleAlwaysOnBadge({ name, armed, className = '' }: ShuffleAlwaysOnBadgeProps) {
+  statusInBadge?: boolean;
+}) {
   const { t } = useTranslation();
-  const label = t('locker.randomize.alwaysOn', { name });
-  return (
-    <span
-      role="img"
-      aria-label={label}
-      title={label}
-      className={`flex h-7 w-7 cursor-default items-center justify-center rounded-full border border-accent/45 bg-black/65 text-accent backdrop-blur-sm transition-opacity duration-150 ${
-        armed ? 'opacity-100' : 'opacity-0'
-      } ${className}`}
-    >
-      <Pin className="h-3.5 w-3.5" />
-    </span>
-  );
+  const label = favorite ? t('installed.card.unfavorite') : t('installed.card.favorite');
+  if (statusInBadge) return <LockerCardAction icon={Star} label={label} aria-pressed={favorite}
+    onClick={onToggle} className={`${favorite ? '[&_svg]:fill-current' : ''} ${className}`} />;
+  return <button type="button" aria-label={label} title={label} aria-pressed={favorite}
+    onClick={event => { event.stopPropagation(); onToggle(); }}
+    className={`flex h-7 w-7 items-center justify-center rounded-full transition-[opacity,background-color,color] duration-150 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent ${favorite
+      ? SELECTED_CARD_CONTROL
+      : `opacity-0 ${CARD_CONTROL_SURFACE} backdrop-blur-sm hover:bg-accent/70 hover:text-accent-foreground`} ${className}`}>
+    <Star className={`h-4 w-4 ${favorite ? 'fill-current' : ''}`} aria-hidden />
+  </button>;
 }

@@ -147,8 +147,9 @@ Deadlock Mod categories are hierarchical. Skins contains hero categories, which 
 
 - Use `/Util/{categoryModel}/NestedStructure?_idGameRow=20948` for the dynamic tree.
 - Remote listings can filter by category using `_aFilters[Generic_Category]`; a hero category includes its descendants.
-- The local catalog stores the deepest `sub_category_id`. Filter it against the selected hero's full subtree rather than matching the title of Mod skins.
-- Sound and Wip currently use title matching when their category trees provide no corresponding hero category.
+- The local catalog stores the deepest `sub_category_id`. Standard hero filtering uses Mod Skins branches and Sound/Wip titles. The optional **Extended hero matching** checkbox adds Mod titles across every category and hero branches anywhere in each selected section's cached tree. Category IDs remain section-specific, falling back to the root ID for a root-only submission.
+- These local checks add no API requests. Extended matching is off by default and is a matching preference, independent of the active-filter indicator and Clear all.
+- The live API fallback retains the existing Mod hero-category filter. Combining category matches and title matches there would require separate requests.
 - Category paths and hero icons use explicit category metadata. A title mentioning a hero does not change the submission's assigned categories.
 
 See [Category Discovery](#4-category-discovery) for field shapes and cache reuse.

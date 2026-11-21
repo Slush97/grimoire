@@ -1,13 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ClipboardList, Fingerprint, Grid2x2, Grid3x3, LayoutGrid, List, SlidersHorizontal, SquareDashedX, Wand2, type LucideIcon } from 'lucide-react';
+import { ChevronDown, ClipboardList, Fingerprint, Grid2x2, Grid3x3, SlidersHorizontal, SquareDashedX, Wand2, type LucideIcon } from 'lucide-react';
 import { AnchoredPopover } from '../common/AnchoredPopover';
-import { Button, ViewOptionControl } from '../common/ui';
+import { Button } from '../common/ui';
 import { InterchangeImportHost, InterchangeTransferActions } from '../interchange/ImportSourceMenu';
 
 export interface InstalledOptionsMenuProps {
-  layout: 'grid' | 'list';
-  onLayoutChange: (layout: 'grid' | 'list') => void;
   cardSizeMultiplier: number;
   cardSizeRange: { min: number; max: number; step: number };
   onCardSizeChange: (value: number) => void;
@@ -39,7 +37,7 @@ function OptionsAction({ icon, label, hint, disabled, count, onClick }: {
 }
 
 export function InstalledOptionsMenu({
-  layout, onLayoutChange, cardSizeMultiplier, cardSizeRange, onCardSizeChange,
+  cardSizeMultiplier, cardSizeRange, onCardSizeChange,
   lockerOverrideCount, onLockerOverrides, showImprint, onImprint, canFixOrder,
   onFixOrder, canCopyEnabled, onCopyEnabled, onImported, onExport,
 }: InstalledOptionsMenuProps) {
@@ -62,25 +60,15 @@ export function InstalledOptionsMenu({
       <div className="space-y-3 [&>div:not(:last-child)]:border-b [&>div:not(:last-child)]:border-border [&>div:not(:last-child)]:pb-3">
         <div className="space-y-3">
           <div>
-            <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('common.view')}</div>
-            <ViewOptionControl<'grid' | 'list'> label={t('common.view')} value={layout}
-              onChange={onLayoutChange}
-              options={[
-                { value: 'grid', label: t('browse.viewOptions.grid'), icon: LayoutGrid },
-                { value: 'list', label: t('browse.viewOptions.list'), icon: List },
-              ]} />
-          </div>
-          <div className={layout === 'list' ? 'opacity-45' : undefined}>
             <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('installed.view.cardSize')}</div>
             <div className="flex items-center gap-2" title={t('installed.view.cardSizeHint')}>
               <Grid3x3 className="h-5 w-5 shrink-0 text-text-secondary" aria-hidden />
               <input type="range" min={cardSizeRange.min} max={cardSizeRange.max} step={cardSizeRange.step}
-                value={cardSizeMultiplier} disabled={layout === 'list'} onChange={event => onCardSizeChange(Number(event.currentTarget.value))}
+                value={cardSizeMultiplier} onChange={event => onCardSizeChange(Number(event.currentTarget.value))}
                 aria-label={t('installed.view.cardSize')} aria-valuetext={`${cardSizeMultiplier.toFixed(2)}x`}
                 className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-default" />
               <Grid2x2 className="h-5 w-5 shrink-0 text-text-secondary" aria-hidden />
             </div>
-            {layout === 'list' && <p className="mt-1.5 text-2xs text-text-secondary">{t('installed.view.cardSizeGridOnly')}</p>}
           </div>
         </div>
         <div>

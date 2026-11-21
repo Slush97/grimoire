@@ -40,7 +40,7 @@ vi.mock('./vpk', async importOriginal => {
     vpkHasEntry: (path: string, entry: string) => h.resources.has(entry) || original.vpkHasEntry(path, entry),
   };
 });
-import { choosePreviewClips, exportHeroEffect, getHeroEffectInfo, exportRiggedHeroPose, getRiggedHeroPose, registerHeroPoseProtocol, sweepHeroPoseCache } from './heroPoseModels';
+import { MODEL_ENTRY_OVERRIDES, bodyModelHeroes, choosePreviewClips, exportHeroEffect, getHeroEffectInfo, exportRiggedHeroPose, getRiggedHeroPose, registerHeroPoseProtocol, sweepHeroPoseCache } from './heroPoseModels';
 
 const container = resolve('.codex-run', 'hero-preview-tests');
 const clips = JSON.stringify([{ name: 'primary_stand_idle', frameCount: 31, fps: 30, durationSeconds: 1, looping: true, default: true }]);
@@ -64,6 +64,34 @@ async function skinFixture() {
   await fs.writeFile(join(dir, 'skin_dir.vpk'), 'selected skin');
   return [{ metaKey: 'skin_dir.vpk', priority: 0 }];
 }
+
+describe('body model detection', () => {
+  it('maps every previewed body back to its own hero', () => {
+    for (const [hero, entry] of Object.entries(MODEL_ENTRY_OVERRIDES)) expect(bodyModelHeroes([entry])).toEqual([hero]);
+  });
+
+  it('counts meshes and textures in the folder the preview exports', () => {
+    expect(bodyModelHeroes([
+      'materials/models/heroes_staging/hornet_v3/hornet_body.vmat_c',
+      'models/heroes_staging/hornet/materials/hornet_color_png.vtex_c',
+      'MODELS\\HEROES_WIP\\VAMPIREBAT\\MATERIALS\\BODY_COLOR.VTEX_C',
+      'materials/heroes_wip/geist/geist_body.vmat_c',
+    ])).toEqual(['Lady Geist', 'Mina', 'Vindicta']);
+  });
+
+  it('ignores hero files the preview does not draw', () => {
+    expect(bodyModelHeroes([
+      'particles/abilities/hornet/a1_cast.vpcf_c',
+      'sounds/vo/hornet/line.vsnd_c',
+      'soundevents/hero/hornet.vsndevts_c',
+      'panorama/images/heroes/hornet_card_psd.vtex_c',
+      'panorama/layout/hud/hud_hero.vxml_c',
+      'scripts/heroes/hero_hornet.vdata_c',
+      'models/heroes_staging/atlas_detective_v2/atlas_detective.vmdl_c',
+      'models/props_gameplay/soul_container/soul_container.vmdl_c',
+    ])).toEqual([]);
+  });
+});
 
 describe('animation menu exports', () => {
   const clip = (name: string, frames = 100) => ({ name, frameCount: frames, fps: 30, durationSeconds: frames / 30, looping: true, default: false });

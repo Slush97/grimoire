@@ -17,7 +17,7 @@ interface GridProps {
   gridClassName: string;
   gridStyle?: CSSProperties;
   scrollRef: RefObject<HTMLDivElement | null>;
-  viewMode: 'grid' | 'compact' | 'list';
+  viewMode: 'grid' | 'compact';
   revealEntryKey?: string | null;
   renderEntry: (entry: ModEntry, occurrenceKey: string) => ReactNode;
 }
@@ -57,7 +57,7 @@ function pointerPosition(groupId: string, point: { x: number; y: number }, curre
     return current?.groupId === groupId ? current : append;
   }
   const cards = [...grid.querySelectorAll<HTMLElement>('[data-list-member-key]:not([data-list-drag-source])')];
-  const index = listPointerIndex(cards.map(box), { x, y }, grid.dataset.listRows === 'true');
+  const index = listPointerIndex(cards.map(box), { x, y });
   return { groupId, beforeKey: cards[index]?.dataset.listMemberKey ?? null };
 }
 
@@ -153,7 +153,7 @@ function ListSection({ group, collapsed, onToggle, onManage, dragDisabled, activ
     <div id={contentId} hidden={collapsed}>
       {!collapsed && <div className="pb-4">
         {items.length > 0 || isList ? <SortableContext items={sortableItems} strategy={projectedSortingStrategy}>
-          {group.entries.length > 0 ? <div ref={gridRef} data-list-grid data-list-rows={viewMode === 'list'}>
+          {group.entries.length > 0 ? <div ref={gridRef} data-list-grid>
             <InstalledVirtualGrid
               entries={items}
               scrollRef={scrollRef}
@@ -165,7 +165,7 @@ function ListSection({ group, collapsed, onToggle, onManage, dragDisabled, activ
               getEntryKey={itemKey}
               renderEntry={renderItem}
             />
-          </div> : <div ref={gridRef} data-list-grid data-list-rows={viewMode === 'list'} className={gridClassName} style={gridStyle}>
+          </div> : <div ref={gridRef} data-list-grid className={gridClassName} style={gridStyle}>
             {items.length > 0 ? renderItem(items[0], true)
               : <InstalledListAddCard label={t('installed.lists.addMods')} disabled={dragDisabled} onClick={() => onManage(group.id)} />}
           </div>}

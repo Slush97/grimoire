@@ -11,6 +11,9 @@ import {
 import { useAppStore } from '../../stores/appStore';
 import { shakeElement } from '../../lib/shakeElement';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
+import { ModFavoriteButton } from './ShuffleControls';
+import { modPreferenceKey, useModFavorites } from '../../lib/disabledModPrefs';
+import { sortLockerMods } from '../../lib/lockerUtils';
 import type { Mod, HeroAbilitySlot, AbilitySlot, AbilitySoundParams } from '../../types/mod';
 
 interface HeroSoundPickerProps {
@@ -145,6 +148,8 @@ function ParamSliders({
  *  it also exposes the volume/pitch sliders. */
 function SoundSourceRow({
   mod,
+  favorite,
+  onToggleFavorite,
   heroName,
   slot,
   isActive,
@@ -157,6 +162,8 @@ function SoundSourceRow({
   onParamChange,
 }: {
   mod: Mod;
+  favorite: boolean;
+  onToggleFavorite: () => void;
   heroName: string;
   slot: AbilitySlot;
   isActive: boolean;
@@ -172,18 +179,20 @@ function SoundSourceRow({
   const otherSlots = slotsForMod(mod, heroName).filter((s) => s !== slot);
   return (
     <div
-      className={`overflow-hidden rounded border backdrop-blur-sm transition-colors ${
+      className={`group/sound relative overflow-hidden rounded border backdrop-blur-sm transition-colors ${
         isActive
           ? 'border-accent/60 bg-accent/10'
           : 'border-border bg-bg-secondary/70 hover:border-accent/50'
       } ${anyBusy && !isBusy ? 'opacity-60' : ''}`}
     >
+      <ModFavoriteButton favorite={favorite} onToggle={onToggleFavorite}
+        className="absolute right-1 top-0 z-10 group-hover/sound:opacity-100" />
       <button
         type="button"
         onClick={onPick}
         disabled={anyBusy}
         title={mod.fileName}
-        className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs disabled:cursor-not-allowed ${
+        className={`flex w-full items-center justify-between gap-2 py-1.5 pl-2.5 pr-10 text-left text-xs disabled:cursor-not-allowed ${
           isActive ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'
         } ${anyBusy ? '' : 'cursor-pointer'}`}
       >
@@ -228,11 +237,15 @@ function SoundSourceRow({
  *  that aren't tied to a single ability and so can't be sliced per-slot). */
 function SoundToggleRow({
   mod,
+  favorite,
+  onToggleFavorite,
   heroName,
   soundVolume,
   onSelect,
 }: {
   mod: Mod;
+  favorite: boolean;
+  onToggleFavorite: () => void;
   heroName: string;
   soundVolume: number;
   onSelect: HeroSoundPickerProps['onSelect'];
@@ -241,12 +254,14 @@ function SoundToggleRow({
   const otherSlots = slotsForMod(mod, heroName);
   return (
     <div
-      className={`overflow-hidden rounded border backdrop-blur-sm transition-colors ${
+      className={`group/sound relative overflow-hidden rounded border backdrop-blur-sm transition-colors ${
         mod.enabled
           ? 'border-accent/60 bg-accent/10'
           : 'border-border bg-bg-secondary/70 hover:border-accent/50'
       }`}
     >
+      <ModFavoriteButton favorite={favorite} onToggle={onToggleFavorite}
+        className="absolute right-1 top-0 z-10 group-hover/sound:opacity-100" />
       <button
         type="button"
         onClick={async (e) => {
@@ -255,7 +270,7 @@ function SoundToggleRow({
           if (mod.enabled && toggled === false) shakeElement(row);
         }}
         title={mod.fileName}
-        className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs cursor-pointer ${
+        className={`flex w-full items-center justify-between gap-2 py-1.5 pl-2.5 pr-10 text-left text-xs cursor-pointer ${
           mod.enabled ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'
         }`}
       >
@@ -301,6 +316,7 @@ function SoundToggleRow({
  */
 export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroSoundPickerProps) {
   const { t } = useTranslation();
+  const { favorites, toggleFavorite } = useModFavorites();
   const loadMods = useAppStore((s) => s.loadMods);
   const soundVolume = useAppStore((s) => s.soundVolume);
   // The parent LockerHeroView is keyed by hero.id, so this component remounts
@@ -532,8 +548,10 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
       {!loading && !error && (
         <div className="space-y-2.5">
           {slots.map((slot) => {
-            const mods = bySlot.get(slot.slot) ?? [];
             const activeSource = activeBySlot.get(slot.slot);
+            const mods = sortLockerMods(bySlot.get(slot.slot) ?? [], {
+              favorites, keyOf: modPreferenceKey, isActive: mod => activeSource === mod.metaKey,
+            });
             return (
               <div
                 key={slot.slot}
@@ -563,6 +581,8 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
                       <SoundSourceRow
                         key={mod.id}
                         mod={mod}
+                        favorite={favorites.has(modPreferenceKey(mod))}
+                        onToggleFavorite={() => toggleFavorite(modPreferenceKey(mod))}
                         heroName={heroName}
                         slot={slot.slot}
                         isActive={activeSource === mod.metaKey}
@@ -590,10 +610,12 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
                 {t('locker.sounds.otherSoundsDescription')}
               </p>
               <div className="space-y-1.5">
-                {other.map((mod) => (
+                {sortLockerMods(other, { favorites, keyOf: modPreferenceKey, isActive: mod => mod.enabled }).map((mod) => (
                   <SoundToggleRow
                     key={mod.id}
                     mod={mod}
+                    favorite={favorites.has(modPreferenceKey(mod))}
+                    onToggleFavorite={() => toggleFavorite(modPreferenceKey(mod))}
                     heroName={heroName}
                     soundVolume={soundVolume}
                     onSelect={onSelect}

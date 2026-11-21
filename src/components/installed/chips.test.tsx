@@ -83,9 +83,9 @@ describe('hero icon stacks', () => {
     const images = [...stack.querySelectorAll('img')];
     const heroImages = images.filter(image => image.getAttribute('src') !== soulUrn);
     const overflowImages = images.filter(image => image.getAttribute('src') === soulUrn);
-    const shown = count > 5 ? 4 : count;
+    const shown = count > 6 ? 5 : count;
     expect(heroImages).toHaveLength(shown);
-    expect(overflowImages).toHaveLength(count > 5 ? 1 : 0);
+    expect(overflowImages).toHaveLength(count > 6 ? 1 : 0);
     expect(stack.style.width).toBe(`${Math.min(66, count * 22)}px`);
     expect(stack.title).toBe(selected.join(', '));
     expect(stack.getAttribute('aria-label')).toBe(selected.join(', '));
@@ -96,7 +96,7 @@ describe('hero icon stacks', () => {
     }
     expect(heroImages.map(image => image.parentElement?.textContent)).toEqual(selected.slice(0, shown).reverse());
     expect(stack.textContent).not.toMatch(/\+\d+/);
-    if (count > 5) {
+    if (count > 6) {
       const overflowImage = overflowImages[0];
       expect(overflowImage.classList.contains('object-contain')).toBe(true);
       expect(overflowImage.classList.contains('grayscale')).toBe(true);

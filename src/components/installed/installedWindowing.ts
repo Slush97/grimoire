@@ -1,14 +1,12 @@
-export type InstalledWindowView = 'grid' | 'compact' | 'list';
+export type InstalledWindowView = 'grid' | 'compact';
 
 /** Chromium resolves auto-fill to pixel tracks in computed grid styles. */
-export function installedColumnCount(template: string, viewMode: InstalledWindowView): number {
-  if (viewMode === 'list') return 1;
+export function installedColumnCount(template: string): number {
   const tracks = template.trim().split(/\s+/).filter((track) => /^\d+(?:\.\d+)?px$/.test(track));
   return Math.max(1, tracks.length);
 }
 
 export function installedRowEstimate(width: number, viewMode: InstalledWindowView): number {
-  if (viewMode === 'list') return 58;
   if (viewMode === 'compact') return 194;
   // Grid media fills the padded card's 16:9 frame. The remaining title,
   // footer, spacing and borders have a fixed combined height.

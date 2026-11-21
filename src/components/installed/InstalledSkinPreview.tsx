@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, MoveDiagonal, MoveDiagonal2, Pin, X } from 'lucide-react';
@@ -10,6 +10,8 @@ import { installedPropTarget, type PropPreviewTarget } from '../../lib/installed
 import { PIN_PREVIEW_EVENT, pinInstalledPreview, type PreviewPin } from '../../lib/installedPreviewPin';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { IconButton } from '../common/ui';
+import { useFloatingPanel } from '../common/useFloatingPanel';
+import { validPanelBox, type PanelBox } from '../../lib/floatingPanelGeometry';
 import { installedMotionTarget, type MotionPreviewTarget } from '../../lib/installedMotionPreview';
 import type { SkinEditSource } from '../../types/skinEditor';
 import type { Mod } from '../../types/mod';
@@ -21,7 +23,6 @@ const AnimationModViewer = lazy(() => import('./MotionModViewers').then(module =
 type PreviewTarget = { kind: 'hero'; source: SkinEditSource } | ({ kind: 'prop' } & PropPreviewTarget) | MotionPreviewTarget;
 type Shown = { key: string; target: PreviewTarget; name: string; counter?: string };
 type Peek = Shown & { pin: PreviewPin; left: number; top: number; width: number; height: number };
-type Box = { x: number; y: number; width: number; height: number };
 
 /** Warm viewers kept around, so stepping back and forth through a few files stays instant. */
 const WARM_VIEWERS = 4;
@@ -29,34 +30,19 @@ const WARM_VIEWERS = 4;
 const WHEEL_STEP = 50;
 /** Alt+drag turn rate: one full turn per 360px. */
 const TURN_PER_PX = (Math.PI * 2) / 360;
-/** Pinned panel: opens at the right edge below the page toolbar, then goes wherever it is dragged. */
-const PANEL = { width: 360, height: 480, margin: 16, top: 64, minWidth: 240, minHeight: 280 };
+/** Pinned geometry is shared across preview targets and restored inside the active area. */
+const PANEL = { width: 360, height: 480, minWidth: 240, minHeight: 280 };
 const PANEL_STORAGE_KEY = 'grimoire.installed.previewPanel';
 
-function defaultBox(): Box {
-  return { x: window.innerWidth - PANEL.width - PANEL.margin, y: PANEL.top, width: PANEL.width, height: PANEL.height };
-}
-
-/** Keeps the panel on screen and no larger than the window. */
-function fitBox(box: Box): Box {
-  const width = Math.min(Math.max(PANEL.minWidth, box.width), window.innerWidth - 2 * PANEL.margin);
-  const height = Math.min(Math.max(PANEL.minHeight, box.height), window.innerHeight - 2 * PANEL.margin);
-  return {
-    width, height,
-    x: Math.min(Math.max(PANEL.margin, box.x), window.innerWidth - width - PANEL.margin),
-    y: Math.min(Math.max(PANEL.margin, box.y), window.innerHeight - height - PANEL.margin),
-  };
-}
-
-function readBox(): Box {
+function readBox(): PanelBox | null {
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(PANEL_STORAGE_KEY) ?? 'null');
-    if (raw && typeof raw === 'object' && (['x', 'y', 'width', 'height'] as const).every(k => Number.isFinite((raw as Record<string, unknown>)[k]))) return raw as Box;
+    if (validPanelBox(raw)) return raw;
   } catch { /* storage may be unavailable */ }
-  return defaultBox();
+  return null;
 }
 
-function saveBox(box: Box): void {
+function saveBox(box: PanelBox): void {
   try { localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(box)); } catch { /* storage may be unavailable */ }
 }
 
@@ -88,20 +74,22 @@ export default function InstalledSkinPreview({ hideNsfw }: { hideNsfw: boolean }
   const mods = useAppStore(state => state.mods);
   // Lives above the cache so a mod toggle (which rebuilds the cache) keeps the panel open.
   const [pin, setPin] = useState<PreviewPin | null>(null);
-  const [box, setBox] = useState<Box>(readBox);
+  const floating = useFloatingPanel({
+    initial: readBox, placement: 'top-right', size: PANEL, resizeMode: 'corner',
+    minSize: { width: PANEL.minWidth, height: PANEL.minHeight }, onCommit: saveBox,
+  });
   if (!settings) return null;
   // Replacements, reorder and profile changes must never reuse a stale stack.
   const revision = JSON.stringify([settings.devMode ? settings.devDeadlockPath : settings.deadlockPath,
     hideNsfw, mods.map(mod => [mod.metaKey, mod.sha256, mod.size, mod.installedAt, mod.priority, mod.skinEdit, mod.nsfw])]);
-  return <PreviewCache key={revision} hideNsfw={hideNsfw} pin={pin} setPin={setPin} box={box} setBox={setBox} />;
+  return <PreviewCache key={revision} hideNsfw={hideNsfw} pin={pin} setPin={setPin} floating={floating} />;
 }
 
-function PreviewCache({ hideNsfw, pin, setPin, box, setBox }: {
+function PreviewCache({ hideNsfw, pin, setPin, floating }: {
   hideNsfw: boolean;
   pin: PreviewPin | null;
   setPin: Dispatch<SetStateAction<PreviewPin | null>>;
-  box: Box;
-  setBox: Dispatch<SetStateAction<Box>>;
+  floating: ReturnType<typeof useFloatingPanel>;
 }) {
   const { t } = useTranslation();
   const mods = useAppStore((state) => state.mods);
@@ -314,48 +302,18 @@ function PreviewCache({ hideNsfw, pin, setPin, box, setBox }: {
 
   // A rebuilt cache (after a mod change) still has the pinned file to show.
   const viewers = pinned && !cached.some(item => item.key === pinned.key) ? [...cached, pinned].slice(-WARM_VIEWERS) : cached;
-  const panel = fitBox(box);
-  // The resize grip sits on the bottom corner facing the middle of the window, so a panel against
-  // either edge can still grow.
-  const growLeft = panel.x + panel.width / 2 > window.innerWidth / 2;
-  const reshape = (event: ReactPointerEvent<HTMLElement>, mode: 'move' | 'resize') => {
-    if (event.button !== 0 || (mode === 'move' && event.target instanceof Element && event.target.closest('button'))) return;
-    event.preventDefault();
-    const element = event.currentTarget;
-    const from = { x: event.clientX, y: event.clientY };
-    let last = panel;
-    const follow = (moved: PointerEvent) => {
-      const dx = moved.clientX - from.x, dy = moved.clientY - from.y;
-      if (mode === 'move') last = fitBox({ ...panel, x: panel.x + dx, y: panel.y + dy });
-      else if (growLeft) {
-        const right = panel.x + panel.width;
-        const width = Math.min(Math.max(PANEL.minWidth, panel.width - dx), right - PANEL.margin);
-        last = fitBox({ x: right - width, y: panel.y, width, height: panel.height + dy });
-      } else last = fitBox({ ...panel, width: panel.width + dx, height: panel.height + dy });
-      setBox(last);
-    };
-    const stop = () => {
-      element.removeEventListener('pointermove', follow);
-      element.removeEventListener('pointerup', stop);
-      element.removeEventListener('pointercancel', stop);
-      saveBox(last);
-    };
-    element.setPointerCapture(event.pointerId);
-    element.addEventListener('pointermove', follow);
-    element.addEventListener('pointerup', stop);
-    element.addEventListener('pointercancel', stop);
-  };
+  const growLeft = floating.resizeFromLeft;
   return createPortal(<>{viewers.map(item => {
     const isPinned = item.key === pinned?.key;
     const shown = pinned ? isPinned : item.key === peek?.key;
     const label = isPinned ? pinned : peek;
-    return <aside key={item.key} hidden={!shown} data-installed-preview data-installed-preview-panel={isPinned || undefined}
+    return <aside key={item.key} ref={isPinned ? floating.ref : undefined} hidden={!shown} data-installed-preview data-installed-preview-panel={isPinned || undefined}
       aria-label={t('installed.card.preview3d', { name: label?.name ?? '' })}
-      className="fixed z-50 overflow-hidden rounded-sm border border-border bg-bg-secondary shadow-xl"
-      style={isPinned ? { left: panel.x, top: panel.y, width: panel.width, height: panel.height }
+      className={`fixed overflow-hidden rounded-sm border border-border bg-bg-secondary shadow-xl ${isPinned ? 'floating-panel z-40' : 'z-50'}`}
+      style={isPinned ? floating.style
         : shown && peek ? { left: peek.left, top: peek.top, width: peek.width, height: peek.height } : undefined}>
       <div className="flex h-full flex-col">
-        {isPinned && pin && <div onPointerDown={(event) => reshape(event, 'move')}
+        {isPinned && pin && <div onPointerDown={floating.onDragStart} title={t('installed.select.dragHint')}
           className="flex cursor-grab touch-none items-center gap-1 border-b border-border py-1 pr-1 pl-3 text-xs select-none active:cursor-grabbing">
           <span className="min-w-0 flex-1 truncate">{pinned.name}</span>
           {pinned.counter && <>
@@ -381,7 +339,7 @@ function PreviewCache({ hideNsfw, pin, setPin, box, setBox }: {
             <IconButton size="sm" icon={Pin} label={t('installed.preview.pin')}
               onClick={() => pinInstalledPreview(peek.pin.keys, peek.pin.keys[peek.pin.index] ?? '')} />
           </div>}
-          {isPinned && <div onPointerDown={(event) => reshape(event, 'resize')} title={t('installed.preview.resize')}
+          {isPinned && <div onPointerDown={floating.onResizeStart} title={t('installed.preview.resize')}
             className={`absolute bottom-0 flex h-5 w-5 touch-none items-center justify-center text-text-tertiary hover:text-text-primary ${growLeft ? 'left-0 cursor-nesw-resize' : 'right-0 cursor-nwse-resize'}`}>
             {growLeft ? <MoveDiagonal className="h-3 w-3" aria-hidden /> : <MoveDiagonal2 className="h-3 w-3" aria-hidden />}
           </div>}

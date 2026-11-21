@@ -14,7 +14,6 @@ import {
   LayoutGrid,
   Grid3x3,
   Grid2x2,
-  List,
   AlertTriangle,
   Funnel,
   ArrowDownUp,
@@ -38,6 +37,7 @@ import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
 import { hideCreatorNow } from '../lib/hiddenContent';
 import { browseNsfwFilter, browseRemoteFilters, type BrowseContentMode } from '../lib/browseFilters';
+import { heroCategoryIdsForName } from '../lib/heroNames';
 import { categorySubtreeIds } from '../lib/heroFilter';
 import { categoryModelForSection } from '../lib/categoryPaths';
 import { useCategoryStore } from '../stores/categoryStore';
@@ -62,20 +62,20 @@ import { getPrimaryFile, isModOutdated } from '../types/gamebanana';
 import {
   useAppStore,
 } from '../stores/appStore';
-import type { BrowseTimeRange, BrowseLayout, BrowseArtistRef, BrowseSortOption as SortOption } from '../stores/appStore';
+import type { BrowseTimeRange, BrowseArtistRef, BrowseSortOption as SortOption } from '../stores/appStore';
 import type { NsfwContentMode, HiddenCreator, HiddenMod } from '../types/mod';
 import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
 import { HeroSelect } from '../components/common/HeroSelect';
 import { DropdownSelect, Input } from '../components/common/forms';
 import { AnchoredPopover } from '../components/common/AnchoredPopover';
-import { Button, ViewOptionControl } from '../components/common/ui';
+import { Button, CheckboxMark, ViewOptionControl } from '../components/common/ui';
 import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
 import { checkQuickInstallRequirements } from '../stores/requirementsStore';
 import { HiddenCreatorsModal, HiddenModsModal } from '../components/HiddenContentManager';
 import ImportCollectionModal from '../components/ImportCollectionModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
-import { inferHeroFromTitle, findCategoryByName } from '../lib/lockerUtils';
+import { inferHeroFromTitle, findCategoryByName, canonicalHeroName } from '../lib/lockerUtils';
 import { classifyModFiles } from '../lib/updateFileMatch';
 import { decideFileDownload, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
 import { mergeSourceInstalls } from '../lib/updateCheck';
@@ -93,7 +93,6 @@ import {
   getReadableCardGridGap,
   getReadableCardTargetWidth,
   type BrowseCardDesign,
-  type ViewMode,
 } from '../components/browse/cardGeometry';
 import { usePrefersReducedMotion } from '../components/browse/cardUtils';
 
@@ -338,7 +337,8 @@ export default function Browse() {
   );
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
-  const { search, layout, sort, section, selectedSections, addedWithin, addedFrom, addedTo, onlyNsfw, heroCategoryId, categoryId, submitter, hiddenCreatorOverrideId } = browseUi;
+  const { search, sort, section, selectedSections, addedWithin, addedFrom, addedTo, onlyNsfw, heroCategoryId, extendedHeroMatching, categoryId, submitter, hiddenCreatorOverrideId } = browseUi;
+  const heroMatchingMode = typeof heroCategoryId === 'number' && extendedHeroMatching;
   const sectionStamp = selectedSections.slice().sort().join(',');
   const combinedFeed = selectedSections.length > 1;
   // Artist mode: the grid is scoped to one submitter's mods and Browse shows an
@@ -348,9 +348,7 @@ export default function Browse() {
   const [browseViewportMetrics, setBrowseViewportMetrics] = useState<BrowseViewportMetrics>(DEFAULT_BROWSE_VIEWPORT_METRICS);
   const [browseCardSizeMultiplier, setBrowseCardSizeMultiplierState] = useState(readBrowseCardSizeMultiplier);
   const browseCardSize = getResponsiveBrowseCardSize(browseViewportMetrics, browseCardSizeMultiplier);
-  const viewMode: ViewMode = layout === 'list' ? 'list' : 'grid';
   const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
-  const setLayout = useCallback((v: BrowseLayout) => setBrowseUi({ layout: v }), [setBrowseUi]);
   const setSort = useCallback((v: SortOption) => setBrowseUi({ sort: v }), [setBrowseUi]);
   const setSection = useCallback((v: string) => setBrowseUi({ section: v }), [setBrowseUi]);
   const setAddedWithin = useCallback((v: BrowseTimeRange) => setBrowseUi({ addedWithin: v }), [setBrowseUi]);
@@ -385,7 +383,7 @@ export default function Browse() {
   // wipe loaded results or scroll position. The cache stamp encodes current
   // filters; if filters changed in between (impossible today since they only
   // change on Browse, but defensive) we ignore the stale cache.
-  const initialFilterStamp = `${browseUi.selectedSections.slice().sort().join(',')}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${browseUi.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
+  const initialFilterStamp = `${browseUi.selectedSections.slice().sort().join(',')}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${heroMatchingMode}|${nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${browseUi.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
   const initialCache = browseSession && browseSession.source && browseSession.stamp === initialFilterStamp && browseCacheIsFresh(browseSession.fetchedAt)
     ? browseSession
     : null;
@@ -434,7 +432,7 @@ export default function Browse() {
   // double effect run in dev — the second setup compares stamps and short-
   // circuits, instead of consuming a one-shot skip flag.
   const lastFetchedStampRef = useRef<string | null>(
-    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.selectedSections.slice().sort().join(',')}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${browseUi.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}` : null
+    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.selectedSections.slice().sort().join(',')}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${heroMatchingMode}|${nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${browseUi.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}` : null
   );
   // Monotonic guard for browse/search requests. Filter changes and newer
   // requests invalidate older responses so they cannot append stale pages into
@@ -734,10 +732,16 @@ export default function Browse() {
   const selectedHeroNode = heroCategoryId !== 'all' && skinsCategory?.children
     ? skinsCategory.children.find((child) => child.id === heroCategoryId)
     : undefined;
-  const selectedHeroName = selectedHeroNode?.name;
+  const selectedHeroName = selectedHeroNode ? canonicalHeroName(selectedHeroNode.name) : undefined;
   const selectedHeroCategoryIds = useMemo(
-    () => (selectedHeroNode ? categorySubtreeIds(selectedHeroNode) : undefined),
-    [selectedHeroNode]
+    () => {
+      if (!selectedHeroNode || !selectedHeroName) return undefined;
+      if (!heroMatchingMode) return sectionStamp.split(',').includes('Mod') ? { Mod: categorySubtreeIds(selectedHeroNode) } : {};
+      return Object.fromEntries(sectionStamp.split(',').map(selectedSection => [
+        selectedSection, heroCategoryIdsForName(categoryTrees[categoryModelForSection(selectedSection)] ?? EMPTY_CATEGORIES, selectedHeroName),
+      ]));
+    },
+    [selectedHeroNode, selectedHeroName, heroMatchingMode, sectionStamp, categoryTrees]
   );
 
   // Debounce the search input: every keystroke previously fired a full FTS5
@@ -772,7 +776,7 @@ export default function Browse() {
   // Category and hero names resolve asynchronously with their category trees.
   // Keep both in the request identity so an early id-only local query cannot
   // suppress the corrected name-based query when either tree arrives.
-  const fetchFilterStamp = `${effectiveSearch}|${sort}|${sectionStamp}|${effectiveCategoryId}|${effectiveCategoryName ?? ''}|${heroCategoryId}|${selectedHeroName ?? ''}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}|${hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
+  const fetchFilterStamp = `${effectiveSearch}|${sort}|${sectionStamp}|${effectiveCategoryId}|${effectiveCategoryName ?? ''}|${heroCategoryId}|${heroMatchingMode}|${selectedHeroName ?? ''}|${JSON.stringify(selectedHeroCategoryIds)}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}|${hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
   const browseResultsCacheRef = useRef<Map<string, BrowseResultCacheEntry>>(new Map());
   const browseScrollCacheRef = useRef<Map<string, number>>(new Map());
   const activeFetchFilterStampRef = useRef(fetchFilterStamp);
@@ -787,7 +791,7 @@ export default function Browse() {
   const fetchedAtRef = useRef(initialCache?.fetchedAt ?? 0);
   const resultSourceRef = useRef(initialCache?.source);
   const loadedSessionStampRef = useRef(initialCache?.stamp);
-  const querySessionStamp = `${sectionStamp}|${effectiveSearch}|${sort}|${categoryId}|${heroCategoryId}|${nsfw}|${addedWithin}|${addedFrom}|${addedTo}|${submitter?.id ?? ''}|${hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
+  const querySessionStamp = `${sectionStamp}|${effectiveSearch}|${sort}|${categoryId}|${heroCategoryId}|${heroMatchingMode}|${nsfw}|${addedWithin}|${addedFrom}|${addedTo}|${submitter?.id ?? ''}|${hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
   const hasMoreRef = useRef<boolean>(hasMore);
   const totalCountRef = useRef<number>(_totalCount);
   useEffect(() => {
@@ -1217,10 +1221,10 @@ export default function Browse() {
         // The cached rows have no category id, only a root category name; see
         // rootCategoryNameById. Ignored when a hero is selected.
         categoryName: effectiveCategoryName,
-        // Mod skins match the hero's category. Sound and Wip have no hero
-        // categories, so they can only match the title.
-        heroCategoryIds: combinedFeed || section === 'Mod' ? selectedHeroCategoryIds : undefined,
-        heroName: combinedFeed || section !== 'Mod' ? selectedHeroName : undefined,
+        // Match hero branches in each section's tree or a name in any title.
+        heroCategoryIds: selectedHeroCategoryIds,
+        heroName: selectedHeroName,
+        extendedHeroMatching: heroMatchingMode,
         sortBy: sortMap[sort] || 'relevance',
         nsfw,
         addedWithin,
@@ -1315,7 +1319,7 @@ export default function Browse() {
         finishRefresh();
       }
     }
-  }, [page, effectiveSearch, section, selectedSections, combinedFeed, sort, perPage, effectiveCategoryId, effectiveCategoryName, selectedHeroName, selectedHeroCategoryIds, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp, querySessionStamp, finishRefresh]);
+  }, [page, effectiveSearch, section, selectedSections, combinedFeed, sort, perPage, effectiveCategoryId, effectiveCategoryName, selectedHeroName, selectedHeroCategoryIds, heroMatchingMode, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp, querySessionStamp, finishRefresh]);
 
   // Value-compare gate for the filter-reset: remember what filters last
   // triggered a reset; only reset when the new combination is actually
@@ -2055,28 +2059,12 @@ export default function Browse() {
   }, [selectedMod, installedMods, loadMods]);
 
   const readableCardTargetWidth = getReadableCardTargetWidth(browseCardSize);
-  const gridGap =
-    layout === 'list'
-      ? 12
-      : browseCardDesign === 'readable'
-        ? getReadableCardGridGap(readableCardTargetWidth)
-        : 12;
-  const columnMinWidth =
-    layout === 'list'
-      ? Math.max(1, browseViewportMetrics.containerWidth - 32)
-      : browseCardDesign === 'readable'
-        ? readableCardTargetWidth
-        : browseCardSize;
+  const gridGap = browseCardDesign === 'readable' ? getReadableCardGridGap(readableCardTargetWidth) : 12;
+  const columnMinWidth = browseCardDesign === 'readable' ? readableCardTargetWidth : browseCardSize;
   const contentWidth = Math.max(columnMinWidth, browseViewportMetrics.containerWidth - 32);
-  const virtualColumnCount =
-    layout === 'list'
-      ? 1
-      : Math.max(1, Math.floor((contentWidth + gridGap) / (columnMinWidth + gridGap)));
-  const virtualColumnWidth =
-    layout === 'list'
-      ? contentWidth
-      : Math.floor((contentWidth - gridGap * (virtualColumnCount - 1)) / virtualColumnCount);
-  const virtualCardHeight = estimateBrowseRowHeight(virtualColumnWidth, layout, browseCardDesign);
+  const virtualColumnCount = Math.max(1, Math.floor((contentWidth + gridGap) / (columnMinWidth + gridGap)));
+  const virtualColumnWidth = Math.floor((contentWidth - gridGap * (virtualColumnCount - 1)) / virtualColumnCount);
+  const virtualCardHeight = estimateBrowseRowHeight(virtualColumnWidth, browseCardDesign);
   const virtualRowHeight = virtualCardHeight + gridGap;
   // Keep all fetched records; only complete filtered rows are revealed below.
   // Hide outdated mods if the user has opted in.
@@ -2193,7 +2181,30 @@ export default function Browse() {
     setBrowseUi({ submitter: artist, section: selectedDetailsSection });
     scrollContainerRef.current?.scrollTo({ top: 0 });
   });
-  const clearArtist = () => setBrowseUi({ submitter: undefined });
+  const clearArtist = useStableCallback(() => setBrowseUi({ submitter: undefined }));
+
+  // Like mod details, creator view consumes either side mouse button before
+  // Chromium can navigate away to a different app tab. Details keep priority.
+  useEffect(() => {
+    if (!artistMode || selectedMod) return;
+    const isSideButton = (event: MouseEvent) => event.button === 3 || event.button === 4;
+    const suppressNavigation = (event: MouseEvent) => {
+      if (isSideButton(event)) event.preventDefault();
+    };
+    const leaveArtist = (event: MouseEvent) => {
+      if (!isSideButton(event)) return;
+      event.preventDefault();
+      clearArtist();
+    };
+    window.addEventListener('mousedown', suppressNavigation);
+    window.addEventListener('auxclick', suppressNavigation);
+    window.addEventListener('mouseup', leaveArtist);
+    return () => {
+      window.removeEventListener('mousedown', suppressNavigation);
+      window.removeEventListener('auxclick', suppressNavigation);
+      window.removeEventListener('mouseup', leaveArtist);
+    };
+  }, [artistMode, selectedMod, clearArtist]);
 
   const updateHiddenCreators = useStableCallback(async (
     updater: (current: HiddenCreator[]) => HiddenCreator[]
@@ -2495,20 +2506,7 @@ export default function Browse() {
                 className="p-3"
               >
                 <div className={BROWSE_MENU_SECTIONS_CLASS}>
-                  <div>
-                    <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
-                    <ViewOptionControl<BrowseLayout>
-                      label={t('browse.viewOptions.layout')}
-                      value={layout}
-                      onChange={setLayout}
-                      options={[
-                        { value: 'grid', label: t('browse.viewOptions.grid'), icon: LayoutGrid },
-                        { value: 'list', label: t('browse.viewOptions.list'), icon: List },
-                      ]}
-                    />
-                  </div>
-
-                  <div className={`space-y-3 ${layout === 'list' ? 'opacity-45' : ''}`}>
+                  <div className="space-y-3">
                     <div>
                       <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardSize')}</div>
                       <div className="flex items-center gap-2">
@@ -2519,7 +2517,7 @@ export default function Browse() {
                           max={BROWSE_CARD_SIZE_MULTIPLIER_MAX}
                           step={BROWSE_CARD_SIZE_MULTIPLIER_STEP}
                           value={browseCardSizeMultiplier}
-                          disabled={layout === 'list'}
+
                           onChange={(e) => setBrowseCardSizeMultiplier(Number(e.currentTarget.value))}
                           aria-label={t('browse.viewOptions.cardSize')}
                           aria-valuetext={`${browseCardSizeMultiplier.toFixed(2)}x card size`}
@@ -2532,7 +2530,7 @@ export default function Browse() {
                     <div>
                       <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
                       <ViewOptionControl<BrowseCardDesign>
-                        disabled={layout === 'list'}
+
                         label={t('browse.viewOptions.cardDesign')}
                         value={browseCardDesign}
                         onChange={setBrowseCardDesign}
@@ -2646,6 +2644,7 @@ export default function Browse() {
                             )}
                           </div>
                           {heroOptions.length > 0 && (
+                            <div className="space-y-1.5">
                             <HeroSelect
                               ariaLabel={t('browse.filters.filterByHero')}
                               value={String(heroCategoryId)}
@@ -2673,6 +2672,15 @@ export default function Browse() {
                                 clearLabel: t('browse.filters.clearSearch'),
                               }}
                             />
+                            <button type="button" role="checkbox" aria-checked={extendedHeroMatching}
+                              title={t('browse.filters.extendedHeroMatchingDescription')}
+                              onClick={() => setBrowseUi({ extendedHeroMatching: !extendedHeroMatching })}
+                              disabled={!hasLocalCache || localSearchFailed || !!submitter}
+                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-hl/5 hover:text-text-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50">
+                              <CheckboxMark checked={extendedHeroMatching} variant="menu" tone="white" />
+                              <span className="flex-1 truncate">{t('browse.filters.extendedHeroMatching')}</span>
+                            </button>
+                            </div>
                           )}
                         </div>
                       )}
@@ -2864,7 +2872,7 @@ export default function Browse() {
                 aria-live="polite"
               >
                 {Array.from({ length: Math.min(completeBrowseRowCount(perPage, virtualColumnCount, true) || virtualColumnCount, virtualColumnCount * 6) }).map((_, i) => (
-                  <ModCardSkeleton key={i} viewMode={viewMode} cardDesign={browseCardDesign} height={virtualCardHeight} index={i} />
+                  <ModCardSkeleton key={i} cardDesign={browseCardDesign} height={virtualCardHeight} index={i} />
                 ))}
               </div>
             );
@@ -2916,8 +2924,6 @@ export default function Browse() {
               columnWidth={virtualColumnWidth}
               cardHeight={virtualCardHeight}
               gridGap={gridGap}
-              layout={layout}
-              viewMode={viewMode}
               cardDesign={browseCardDesign}
               cardSize={browseCardSize}
               installedIds={installedItemKeys}

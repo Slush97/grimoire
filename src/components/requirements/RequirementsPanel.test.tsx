@@ -198,7 +198,7 @@ describe('compact requirements panel', () => {
     expect(checks[0].checked).toBe(false);
     expect(checks[1].disabled).toBe(true);
     expect(dialog.textContent).toContain('requirements.notInstalled');
-    expect(dialog.querySelectorAll('li .h-10.w-10')).toHaveLength(2);
+    expect(dialog.querySelectorAll('li [aria-label="requirements.view"]')).toHaveLength(2);
     expect(button(dialog, 'requirements.enableAll')).toBeDefined();
     expect(button(dialog, 'requirements.onlyThis')).toBeDefined();
     expect(button(dialog, 'requirements.disable')).toBeDefined();
@@ -348,12 +348,43 @@ describe('compact requirements panel', () => {
   it.each([
     ['enable', 'requirements.enableTitle', ['requirements.disable', 'requirements.onlyThis', 'requirements.enableAll']],
     ['disable', 'requirements.disableTitle', ['requirements.disableAll', 'requirements.onlyThis', 'requirements.enable']],
-    ['manage', 'requirements.manageTitle', ['requirements.disableAll', 'requirements.enableAll', 'common.actions.close']],
+    ['manage', 'Mod 10', ['requirements.disableAll', 'requirements.enableAll']],
   ] as const)('shows the %s dialog title and ordered footer actions', async (mode, title, actions) => {
     const dialog = await renderToggle(toggleReview(mode));
     expect(dialog.querySelector('h2')?.textContent).toBe(title);
     const footer = dialog.querySelector('.modal-panel > div:last-child')!;
     expect([...footer.querySelectorAll('button')].map(element => element.textContent)).toEqual(actions);
+    if (mode === 'manage') {
+      expect(dialog.querySelectorAll('[aria-label="common.actions.close"]')).toHaveLength(1);
+      expect(dialog.querySelector('h2')?.parentElement?.querySelector('p')).toBeNull();
+    }
+  });
+
+  it('places colored requirement type tags on the description line even without a description', async () => {
+    const review = toggleReview('manage');
+    review.snapshots = { 'Mod:10': source([
+      requirement(100), { ...requirement(200), importance: 'recommended' }, { ...requirement(300), importance: 'optional' },
+    ]).requirements };
+    const dialog = await renderToggle(review);
+    const rows = [...dialog.querySelectorAll('li')];
+    for (const [index, [tone, label]] of [['danger', 'required'], ['warning', 'recommended'], ['info', 'optional']].entries()) {
+      const tag = rows[index].querySelector(`.text-state-${tone}`)!;
+      expect(tag.textContent).toBe(`requirements.${label}`);
+      expect(tag.parentElement?.tagName).toBe('P');
+      expect(tag.parentElement?.previousElementSibling?.textContent).toContain(index === 0 ? 'Mod 100' : `Required ${(index + 1) * 100}`);
+      expect(tag.parentElement?.textContent).toBe(index === 0 ? 'requirements.required Required 100' : `requirements.${label}`);
+    }
+  });
+
+  it('opens the managed mod page from its title while retaining the requirements review', async () => {
+    const review = toggleReview('manage');
+    const dialog = await renderToggle(review);
+    const title = dialog.querySelector<HTMLButtonElement>('h2 button')!;
+    expect(title.textContent).toBe(review.mod.name);
+    expect(title.querySelector('.lucide-external-link')).not.toBeNull();
+    await act(async () => title.click());
+    expect(useRequirementsStore.getState().targets).toEqual([{ id: 10, section: 'Mod' }]);
+    expect(useRequirementsStore.getState().toggleReview).toBe(review);
   });
 
   it.each([

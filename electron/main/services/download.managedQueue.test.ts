@@ -19,6 +19,7 @@ const harness = vi.hoisted(() => ({
     extractArchive: vi.fn(),
     assertVpkSafety: vi.fn(),
     categoryPaths: undefined as CategoryPaths | undefined,
+    groupMetadata: {} as Record<string, { gameBananaId: number; localGroupId: string; localImport: boolean; modName: string }>,
     copying: false,
     settings: { autoEnableDownloads: true, autoDisableSiblingVariants: true },
 }));
@@ -42,6 +43,7 @@ vi.mock('./devMods', () => ({ isCopyingModsToDev: () => harness.copying }));
 vi.mock('./metadata', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./metadata')>()),
     getModMetadata: () => undefined,
+    loadMetadata: () => harness.groupMetadata,
     setModMetadataWithHash: harness.setModMetadataWithHash,
 }));
 vi.mock('./mods', async (importOriginal) => ({
@@ -195,6 +197,7 @@ describe('managed download FIFO', () => {
         harness.extractArchive.mockReset();
         harness.assertVpkSafety.mockReset().mockResolvedValue(undefined);
         harness.copying = false;
+        harness.groupMetadata = {};
         harness.categoryPaths = undefined;
     });
 
@@ -232,6 +235,27 @@ describe('managed download FIFO', () => {
             .toEqual([['Haze'], ['Wraith']]);
         expect(harness.setModMetadataWithHash.mock.calls.every(([, metadata]) => metadata.heroDetection?.source === 'vpk'))
             .toBe(true);
+    });
+
+    it('saves textual hero detection for a newly downloaded skin without a hero category', async () => {
+        harness.fetchModDetails.mockResolvedValue({
+            name: 'Haze outfit', category: { id: 33295, name: 'Skins' },
+            files: [{ id: 96, fileName: 'outfit.vpk', description: 'Ivy variant', downloadUrl: `${harness.baseUrl}/96`, fileSize: 11 }],
+        });
+        await enqueueManagedDownload('/game', { ...args(96), fileName: 'outfit.vpk', section: 'Mod' }, mainWindow,
+            { afterInstall: async () => {} });
+        expect(harness.setModMetadataWithHash).toHaveBeenCalledOnce();
+        expect(harness.setModMetadataWithHash.mock.calls[0][1]).toMatchObject({
+            categoryId: 33295, categoryName: 'Skins', heroDetection: { heroes: ['Ivy'], source: 'description' },
+        });
+    });
+
+    it('keeps newly downloaded files in a normal mod group with custom attachments', async () => {
+        harness.groupMetadata = { original: { gameBananaId: 97, localGroupId: 'mixed', localImport: false, modName: 'Parent' } };
+        await enqueueManagedDownload('/game', args(97), mainWindow, { afterInstall: async () => {} });
+        expect(harness.setModMetadataWithHash.mock.calls[0][1]).toMatchObject({
+            gameBananaId: 97, localGroupId: 'mixed', localImport: false, modName: 'Parent',
+        });
     });
 
     it('refuses ordinary, one-click, and managed jobs during developer library replacement', async () => {

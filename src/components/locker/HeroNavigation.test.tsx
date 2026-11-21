@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
+import { SegmentedControl } from '../common/ui';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeroNavigation } from './HeroNavigation';
@@ -98,4 +99,27 @@ describe.each(['data-locker-hero-view', 'data-foundry-hero-view'])('%s arrow con
     press(document.body);
     expect(onNavigate).not.toHaveBeenCalled();
   });
+  it('keeps arrow-key selection inside joined tabs, skips disabled entries and supports Home/End', () => {
+    function Options() {
+      const [value, setValue] = useState('skins');
+      return <SegmentedControl variant="joined" panelId="hero-options" value={value} onChange={setValue} label="Hero sections"
+        options={[{ value: 'skins', label: 'Skins' }, { value: 'sounds', label: 'Sounds', disabled: true },
+          { value: 'cards', label: 'Cards' }, { value: 'effects', label: 'Effects' }]} />;
+    }
+    act(() => root.render(<div {...{ [viewAttribute]: true }}>
+      <HeroNavigation previous={previous} next={next} onNavigate={onNavigate} enabled />
+      <Options />
+    </div>));
+    const tabs = host.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    act(() => tabs[0].focus());
+    expect(press(tabs[0]).defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(tabs[2]);
+    expect(tabs[2].getAttribute('aria-selected')).toBe('true');
+    expect(tabs[2].getAttribute('aria-controls')).toBe('hero-options');
+    expect(host.querySelectorAll('[data-segment-indicator]')).toHaveLength(1);
+    press(tabs[2], { key: 'End' }); expect(document.activeElement).toBe(tabs[3]);
+    press(tabs[3], { key: 'Home' }); expect(document.activeElement).toBe(tabs[0]);
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
 });

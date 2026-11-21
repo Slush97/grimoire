@@ -13,10 +13,18 @@
    white-only icon). Prefer a token: this is for what a token cannot say. */
 @custom-variant light (&:where([data-theme='light'] *));
 
+.floating-panel {
+  transition: left 120ms ease-out, top 120ms ease-out, width 120ms ease-out, height 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-panel { transition: none; }
+}
+
 /* Z-index scale. New surfaces pick from this ladder instead of inventing
    values (no more z-[9999]):
      z-30  page-level overlays inside the content area (Locker hero/global panels)
-     z-40  sticky chrome (sidebar)
+     z-40  sticky chrome (sidebar) and movable popups
      z-50  modals (Modal component) and full-screen dialogs
      z-60  surfaces that stack above a modal: toasts, ModDetailsModal
      z-80  context menus and popovers (always top) */
@@ -351,10 +359,6 @@
     0 0 22px rgb(from var(--color-state-warning) r g b / 0.16),
     0 10px 26px rgb(60 50 30 / 0.18);
   border-color: rgb(from var(--color-state-warning) r g b / 0.5);
-}
-
-:root[data-theme='light'] .premium-inline-rename-input {
-  background: rgb(from var(--color-hl) r g b / 0.06);
 }
 
 /* Bottom-up dark scrim for art/thumbnail overlays so foreground chrome stays
@@ -2775,23 +2779,6 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-/* Seamless Title Inline Renaming */
-.premium-inline-rename-input {
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  line-height: inherit;
-  color: inherit;
-  background: rgba(0, 0, 0, 0.3);
-  border: none;
-  border-bottom: 2px solid var(--color-accent);
-  padding: 0 4px;
-  border-radius: 2px;
-  outline: none;
-  width: 100%;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
-}
-
 @keyframes mod-list-count-pop {
   0% { transform: scale(1); }
   45% { transform: scale(1.12); }
@@ -2909,4 +2896,16 @@ body {
   .settings-gear--spin {
     animation: none;
   }
+}
+
+/* Installed cards blur their own artwork in a clipped layer. Filtering the
+   backdrop too can leave clipped control glows in Chromium's card texture. */
+.installed-card.premium-glass-card {
+  backdrop-filter: none;
+}
+
+/* Selected borders retain the conflict border weight, using the user's accent. */
+:root .installed-card[data-selected='true'],
+:root .installed-card[data-selected='true']:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
 }

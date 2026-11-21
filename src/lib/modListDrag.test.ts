@@ -61,19 +61,12 @@ describe('pointer insertion', () => {
   ];
 
   it('inserts before or after a card across grid rows', () => {
-    expect(listPointerIndex(cards, { x: 10, y: 30 }, false)).toBe(0);
-    expect(listPointerIndex(cards, { x: 140, y: 30 }, false)).toBe(1);
-    expect(listPointerIndex(cards, { x: 200, y: 30 }, false)).toBe(2);
-    expect(listPointerIndex(cards, { x: 10, y: 120 }, false)).toBe(2);
-    expect(listPointerIndex(cards, { x: 200, y: 120 }, false)).toBe(4);
-    expect(listPointerIndex(cards, { x: 10, y: 190 }, false)).toBe(4);
-  });
-
-  it('uses vertical midpoints for rows and accepts an empty list', () => {
-    const rows = [cards[0], cards[2]];
-    expect(listPointerIndex(rows, { x: 90, y: 10 }, true)).toBe(0);
-    expect(listPointerIndex(rows, { x: 10, y: 70 }, true)).toBe(1);
-    expect(listPointerIndex(rows, { x: 10, y: 150 }, true)).toBe(2);
-    expect(listPointerIndex([], { x: 0, y: 0 }, true)).toBe(0);
+    expect(listPointerIndex(cards, { x: 10, y: 30 })).toBe(0);
+    expect(listPointerIndex(cards, { x: 140, y: 30 })).toBe(1);
+    expect(listPointerIndex(cards, { x: 200, y: 30 })).toBe(2);
+    expect(listPointerIndex(cards, { x: 10, y: 120 })).toBe(2);
+    expect(listPointerIndex(cards, { x: 200, y: 120 })).toBe(4);
+    expect(listPointerIndex(cards, { x: 10, y: 190 })).toBe(4);
+    expect(listPointerIndex([], { x: 0, y: 0 })).toBe(0);
   });
 });

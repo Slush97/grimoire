@@ -12,6 +12,19 @@ const sqooky: BrowseArtistRef = { id: 3826762, name: 'Sqooky!' };
 describe('appStore Browse section filters', () => {
   beforeEach(() => useAppStore.getState().resetBrowseUi());
 
+  it('ignores saved list-layout choices from earlier versions', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => ['browseLayout', 'browseViewMode'].includes(key) ? 'list' : null,
+    });
+    try {
+      vi.resetModules();
+      const { useAppStore: freshStore } = await import('./appStore');
+      expect(freshStore.getState().browseUi).not.toHaveProperty('layout');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('keeps shared filters when combining sections and clears section-only categories', () => {
     const { setBrowseUi } = useAppStore.getState();
     setBrowseUi({ search: 'blue', heroCategoryId: 42, categoryId: 100 });

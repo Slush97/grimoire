@@ -157,6 +157,26 @@ export const MODEL_ENTRY_OVERRIDES: Readonly<Record<string, string>> = {
     Baba: 'models/heroes_wip/baba/baba.vmdl_c',
 };
 
+// `_vN` is ignored on both sides: a newer body can still read its textures from the older folder.
+const bodyModelFolder = (folder: string) => folder.replace(/_v\d+$/, '');
+const BODY_MODEL_HEROES = new Map(Object.entries(MODEL_ENTRY_OVERRIDES)
+    .map(([hero, entry]) => [bodyModelFolder(entry.split('/')[2]), hero]));
+
+/**
+ * Heroes whose previewed body a VPK changes: any mesh, material or texture in the folder of the
+ * model the preview exports. A HUD, sound or ability-effect file tagged with a hero has none.
+ */
+export function bodyModelHeroes(paths: readonly string[]): string[] {
+    const heroes = new Set<string>();
+    for (const path of paths) {
+        const folder = /^(?:models|materials(?:\/models)?)\/heroes(?:_wip|_staging)?\/([a-z0-9_]+)\//
+            .exec(path.replace(/\\/g, '/').toLowerCase())?.[1];
+        const hero = folder && BODY_MODEL_HEROES.get(bodyModelFolder(folder));
+        if (hero) heroes.add(hero);
+    }
+    return [...heroes].sort((a, b) => a.localeCompare(b));
+}
+
 /** Model codenames to try for a hero, most-specific first: any divergent
  *  body-model basename, then the panorama codename(s) that cover the rest of
  *  the roster. De-duplicated, order preserved. */

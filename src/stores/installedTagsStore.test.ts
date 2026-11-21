@@ -22,18 +22,93 @@ beforeEach(() => {
   getItem = vi.fn((key: string) => storage.get(key) ?? null);
   setItem = vi.fn((key: string, value: string) => storage.set(key, value));
   vi.stubGlobal('localStorage', { getItem, setItem });
-  useInstalledTagsStore.setState({ byScope: {} });
+  useInstalledTagsStore.setState({ byScope: {}, orderByScope: {} });
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Installed custom tags', () => {
+  it('assigns and clears every grouped member without removing the custom tag catalog or other mods', () => {
+    store().create(normal, 'Favorites');
+    const id = tags()[0].id;
+    const members = [mod('one'), mod('two')];
+    store().setForMods(normal, id, [...members, mod('other')], true);
+    store().setForMods(normal, id, members, true);
+    expect(tags()[0].keys).toHaveLength(3);
+    store().clearForMods(normal, members);
+    expect(tags()).toEqual([expect.objectContaining({ id, name: 'Favorites', keys: [customTagMemberKey(mod('other'))] })]);
+    store().setForMods(normal, id, members, true);
+    store().setForMods(normal, id, members, false);
+    expect(tags()[0].keys).toEqual([customTagMemberKey(mod('other'))]);
+  });
+
+  it('retains temporarily absent tags in their saved slots while reordering visible tags', () => {
+    store().setOrder(normal, ['tag:hud', 'tag:temporarily absent', 'tag:skins']);
+    useInstalledTagsStore.setState({ byScope: {}, orderByScope: {} });
+    store().reorder(normal, ['tag:skins', 'tag:hud', 'tag:new']);
+    expect(store().orderByScope[normal]).toEqual(['tag:skins', 'tag:temporarily absent', 'tag:hud', 'tag:new']);
+    store().setOrder(normal, ['tag:hud', 'tag:skins']);
+    expect(store().orderByScope[normal]).toEqual(['tag:hud', 'tag:skins']);
+  });
+
+  it('removes a deleted custom tag from stored priorities before the scope has been loaded', () => {
+    store().create(normal, 'Favorites');
+    const id = tags()[0].id;
+    store().setOrder(normal, ['tag:hud', `custom:${id}`, 'tag:skins']);
+    useInstalledTagsStore.setState({ byScope: {}, orderByScope: {} });
+    store().remove(normal, id);
+    expect(store().orderByScope[normal]).toEqual(['tag:hud', 'tag:skins']);
+  });
+  it('creates new custom tags at the highest priority without disturbing existing manual ordering', () => {
+    store().setOrder(normal, ['tag:hud', 'tag:skins']);
+    expect(store().create(normal, 'Favorites')).toBe(true);
+    const favorite = tags()[0].id;
+    expect(store().orderByScope[normal]).toEqual([`custom:${favorite}`, 'tag:hud', 'tag:skins']);
+    store().setOrder(normal, ['tag:hud', `custom:${favorite}`, 'tag:skins']);
+    expect(store().create(normal, 'favorites')).toBe(false);
+    expect(store().orderByScope[normal]).toEqual(['tag:hud', `custom:${favorite}`, 'tag:skins']);
+    expect(store().create(normal, 'New tag')).toBe(true);
+    expect(store().orderByScope[normal]).toEqual([`custom:${tags()[1].id}`, 'tag:hud', `custom:${favorite}`, 'tag:skins']);
+    useInstalledTagsStore.setState({ byScope: {}, orderByScope: {} });
+    store().load(normal);
+    expect(store().orderByScope[normal][0]).toBe(`custom:${tags()[1].id}`);
+  });
+
+  it('persists tag priorities per installation and retains them through custom-tag renames', () => {
+    store().create(normal, 'Favorites');
+    const id = tags()[0].id;
+    store().setOrder(normal, [`custom:${id}`, 'tag:hud', 'tag:hud']);
+    store().setOrder(developer, ['tag:skins', 'tag:hud']);
+    store().setOrder(other, ['tag:sounds']);
+    store().rename(normal, id, 'Keepers');
+    useInstalledTagsStore.setState({ byScope: {}, orderByScope: {} });
+    for (const scope of [normal, developer, other]) store().load(scope);
+    expect(store().orderByScope[normal]).toEqual([`custom:${id}`, 'tag:hud']);
+    expect(store().orderByScope[developer]).toEqual(['tag:skins', 'tag:hud']);
+    expect(store().orderByScope[other]).toEqual(['tag:sounds']);
+    expect(tags()[0].name).toBe('Keepers');
+    store().remove(normal, id);
+    expect(store().orderByScope[normal]).toEqual(['tag:hud']);
+  });
+
+  it('defensively loads priorities and keeps changes usable if browser storage is unavailable', () => {
+    getItem.mockReturnValue('["tag:hud",null,3,"tag:hud",""]');
+    store().load(normal);
+    expect(store().orderByScope[normal]).toEqual(['tag:hud']);
+    getItem.mockReturnValue('{broken json');
+    store().load(developer);
+    expect(store().orderByScope[developer]).toEqual([]);
+    setItem.mockImplementation(() => { throw new Error('storage unavailable'); });
+    expect(() => store().setOrder(developer, ['tag:skins'])).not.toThrow();
+    expect(store().orderByScope[developer]).toEqual(['tag:skins']);
+  });
+
   it('persists independent catalogues for installation paths and normal/developer mode', () => {
     expect(normal).not.toBe(developer);
     expect(normal).toBe(getInstallationScope({ ...settings, deadlockPath: 'c:/GAMES/Deadlock/' }));
     expect(store().create(normal, 'Normal tag')).toBe(true);
     expect(store().create(developer, 'Dev tag')).toBe(true);
     expect(store().create(other, 'Other installation')).toBe(true);
-    expect(storage.size).toBe(3);
+    expect(storage.size).toBe(6);
     useInstalledTagsStore.setState({ byScope: {} });
     for (const scope of [normal, developer, other]) store().load(scope);
     expect(tags().map(tag => tag.name)).toEqual(['Normal tag']);

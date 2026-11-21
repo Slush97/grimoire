@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '../components/common/ui';
+import { Button, SegmentedControl } from '../components/common/ui';
 import {
   ArrowLeft,
   Star,
@@ -103,6 +103,21 @@ export function LockerHeroView({
   shuffleArmed,
 }: LockerHeroViewProps) {
   const { t } = useTranslation();
+  const viewRef = useRef<HTMLDivElement>(null);
+  // The full-screen layer starts below any app banners, including while a
+  // banner is dismissed or arrives after this view has already opened.
+  useLayoutEffect(() => {
+    const layer = viewRef.current?.closest<HTMLElement>('[data-locker-hero-overlay]');
+    const viewport = viewRef.current?.closest<HTMLElement>('[data-app-content-viewport]');
+    if (!layer || !viewport) return;
+    const update = () => { layer.style.top = Math.max(0, viewport.getBoundingClientRect().top) + 'px'; };
+    const observer = new ResizeObserver(update);
+    observer.observe(viewport);
+    window.addEventListener('resize', update);
+    update();
+    return () => { observer.disconnect(); window.removeEventListener('resize', update); };
+  }, []);
+
   // Issue #208: the backdrop reflects the active skin's chosen Locker image, if
   // the user picked one (set per skin in the skins list below).
   const lockerModThumbnails = useAppStore((s) => s.lockerModThumbnails);
@@ -131,6 +146,7 @@ export function LockerHeroView({
   const setView3d = useLockerViewer((state) => state.setOpen);
   const navigate = useNavigate();
   const [section, setSection] = useState<SectionId>('skins');
+  const sectionPanelId = useId();
   const [poseSkinSelection, setPoseSkinSelection] = useState<{
     heroId: number;
     key: string;
@@ -285,7 +301,7 @@ export function LockerHeroView({
     );
 
   return (
-    <div data-locker-hero-view className="relative flex h-full overflow-hidden">
+    <div ref={viewRef} data-locker-hero-view className="relative flex h-full overflow-hidden">
       {/* Hero backdrop (2D portrait or live 3D pose) — full-bleed behind every
           panel so it can bleed through the frosted-glass rail + selection
           column. The image is sized to the window height with natural aspect
@@ -315,44 +331,6 @@ export function LockerHeroView({
         <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
       </div>
 
-      {/* Top-right controls: adjust the hero-detail backdrop image, and the live
-          3D model toggle. The 3D toggle opens/closes the floating model panel
-          rather than swapping the backdrop, so the 2D portrait stays put and the
-          model can float over it at any window size. */}
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
-        {activeSkin && activeSkinKey && (
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            title={t('locker.hero.lockerImages')}
-            aria-label={t('locker.hero.lockerImages')}
-            className="flex items-center gap-1.5 rounded-full border border-border/70 bg-bg-secondary/70 px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary backdrop-blur cursor-pointer"
-          >
-            <ImageIcon className="h-3.5 w-3.5" />
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            // Start reading the hideout while the viewer's code and hero load.
-            const { settings } = useAppStore.getState();
-            if (!view3d && !lockerViewerLoaded() && openingViewerScene(storedViewerScene(settings, `viewer:${hero.name}:view`), 'midtown',
-              settings?.experimentalHideoutDefault === true, hideoutReadyNow()) === 'hideout') preloadHideout(`viewer:${hero.name}:view`);
-            setView3d(!view3d);
-          }}
-          aria-pressed={view3d}
-          title={view3d ? t('locker.hero.hide3dModel') : t('locker.hero.showLive3dModel')}
-          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-            view3d
-              ? 'border-accent/60 bg-accent/20 text-text-primary'
-              : 'border-border/70 bg-bg-secondary/70 text-text-secondary hover:text-text-primary backdrop-blur'
-          }`}
-        >
-          <Box className="h-3.5 w-3.5" />
-          3D
-        </button>
-      </div>
-
       {/* Progressive frosted-glass background — every layer (including the
           base heavy blur) is masked with a long, smooth taper so nothing has
           a hard right edge. Stacking blurs compounds: a region under all
@@ -365,7 +343,7 @@ export function LockerHeroView({
           to clear. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[1040px] xl:w-[1160px]"
+        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[976px] xl:w-[1096px]"
       >
         <div
           className="absolute inset-0"
@@ -397,106 +375,92 @@ export function LockerHeroView({
         <div className="locker-hero-glass absolute inset-0" />
       </div>
 
-      {/* Left sidebar: hero identity + section nav, formatted like the Global
-          view's type selector (Back, title + count, full-width rows). Solid bg
-          below lg; transparent on lg so the feathered glass shows through. */}
-      <div className="relative z-10 flex w-[260px] flex-shrink-0 flex-col gap-6 overflow-y-auto scrollbar-glass bg-bg-secondary p-6 animate-slide-in-left lg:w-[300px] lg:bg-transparent xl:w-[340px]">
-        <div className="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex w-fit items-center gap-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            {t('locker.hero.back')}
-          </button>
-          <button
-            type="button"
-            onClick={onToggleFavorite}
-            className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
-              isFavorite
-                ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
-                : 'border-border/70 text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            <Star className="w-4 h-4" />
-            {isFavorite ? t('locker.hero.unfavorite') : t('locker.hero.favorite')}
-          </button>
-        </div>
-
-        {/* Hero Name. Hidden when the active skin's backdrop already shows the
-            hero name (issue #208). */}
-        <HeroNavigation {...navigation}>
-          {hideHeroName && backdropImage ? null : nameFailed ? (
-            <h2 className="truncate text-2xl font-bold text-text-primary drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] light:drop-shadow-none">
-              {hero.name}
-            </h2>
-          ) : (
-            <img
-              src={getHeroNamePath(hero.name)}
-              alt={hero.name}
-              className="h-8 w-auto max-w-full object-contain light:invert"
-              onError={() => setNameFailed(true)}
-            />
-          )}
-        </HeroNavigation>
-
-        <nav aria-label={t('locker.hero.lockerSections')} className="flex flex-col gap-1.5">
-          {sections.map(({ id, label, icon: Icon, count, disabled }) => {
-            const isActive = activeSection === id;
-            return (
+      <div className="relative z-10 flex min-h-0 w-full max-w-[56rem] flex-col bg-bg-primary lg:bg-transparent">
+        <header className="flex shrink-0 animate-slide-in-left flex-col gap-4 px-6 pb-4 pt-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={onBack}>{t('locker.hero.back')}</Button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button type="button" onClick={onToggleFavorite} aria-pressed={isFavorite}
+                title={isFavorite ? t('locker.hero.unfavorite') : t('locker.hero.favorite')}
+                aria-label={isFavorite ? t('locker.hero.unfavorite') : t('locker.hero.favorite')}
+                className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${isFavorite
+                  ? 'border-accent/60 bg-accent/20 text-text-primary'
+                  : 'border-border/70 bg-bg-secondary/70 text-text-secondary backdrop-blur hover:text-text-primary'}`}>
+                <Star className={`h-3.5 w-3.5 ${isFavorite ? 'fill-current' : ''}`} />
+              </button>
+              {activeSkin && activeSkinKey && (
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(true)}
+                  title={t('locker.hero.lockerImages')}
+                  aria-label={t('locker.hero.lockerImages')}
+                  className="flex items-center gap-1.5 rounded-full border border-border/70 bg-bg-secondary/70 px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary backdrop-blur cursor-pointer"
+                >
+                  <ImageIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
               <button
-                key={id}
                 type="button"
-                disabled={disabled}
-                aria-current={isActive ? 'page' : undefined}
-                onClick={() => setSection(id)}
-                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                  disabled
-                    ? 'cursor-default border-transparent opacity-40'
-                    : isActive
-                      ? 'border-accent/60 bg-accent/15 cursor-pointer'
-                      : 'border-transparent hover:bg-hl/10 cursor-pointer'
+                onClick={() => {
+                  // Start reading the hideout while the viewer's code and hero load.
+                  const { settings } = useAppStore.getState();
+                  if (!view3d && !lockerViewerLoaded() && openingViewerScene(storedViewerScene(settings, `viewer:${hero.name}:view`), 'midtown',
+                    settings?.experimentalHideoutDefault === true, hideoutReadyNow()) === 'hideout') preloadHideout(`viewer:${hero.name}:view`);
+                  setView3d(!view3d);
+                }}
+                aria-pressed={view3d}
+                title={view3d ? t('locker.hero.hide3dModel') : t('locker.hero.showLive3dModel')}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                  view3d
+                    ? 'border-accent/60 bg-accent/20 text-text-primary'
+                    : 'border-border/70 bg-bg-secondary/70 text-text-secondary hover:text-text-primary backdrop-blur'
                 }`}
               >
-                <Icon className="h-4 w-4 flex-shrink-0 text-text-primary/80" />
-                <span className="flex-1 truncate text-sm font-medium text-text-primary">{label}</span>
-                {count !== null && <span className="text-xs text-text-primary/50">{count}</span>}
+                <Box className="h-3.5 w-3.5" />
+                3D
               </button>
-            );
-          })}
-        </nav>
-
-        {/* Load order for stacked skins. Lives in the sidebar (not over the
-            grid) and self-hides unless 2+ skins are active. Only relevant to
-            the Skins section. */}
-        {activeSection === 'skins' && onReorderSkins && (
-          <SkinLoadOrderStrip
-            mods={skinList}
-            onReorder={onReorderSkins}
-            hideNsfwPreviews={hideNsfwPreviews}
-          />
-        )}
-        {workshopEnabled && activeSection === 'skins' && <Button variant="secondary" size="sm"
-          onClick={() => navigate('/foundry', { state: { heroName: hero.name, skinSources: activeSkinSources } })}>
-          {t('foundry.skin.editInWorkshop')}
-        </Button>}
-      </div>
-
-      {/* Right pane: the active section's content. Width-capped on lg+ so the
-          hero stays visible to its right (unlike the Global view, the backdrop
-          here IS the subject, not scenery to overlay). */}
-      <div className="relative z-10 min-w-0 flex-1 overflow-y-auto scrollbar-glass bg-bg-primary lg:flex-none lg:w-[480px] lg:bg-transparent xl:w-[540px]">
-        <div className="space-y-4 p-6">
-          {contentHeading && (
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-base font-semibold text-text-primary drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] light:drop-shadow-none">
-                {contentHeading.title}
-              </h3>
-              <span className="text-xs text-text-primary/60">{contentHeading.count}</span>
             </div>
-          )}
-          {selectionPanel}
+          </div>
+            <div className="mx-auto w-80 max-w-full">
+              <HeroNavigation {...navigation} plain>
+                {hideHeroName && backdropImage ? null : nameFailed ? (
+                  <h2 className="truncate text-2xl font-bold text-text-primary drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] light:drop-shadow-none">
+                    {hero.name}
+                  </h2>
+                ) : (
+                  <img
+                    src={getHeroNamePath(hero.name)}
+                    alt={hero.name}
+                    className="h-12 w-auto max-w-full object-contain light:invert"
+                    onError={() => setNameFailed(true)}
+                  />
+                )}
+              </HeroNavigation>
+            </div>
+          <SegmentedControl variant="joined" framed={false} fill value={activeSection} onChange={setSection}
+            label={t('locker.hero.lockerSections')} panelId={sectionPanelId}
+            options={sections.map(({ id, label, icon: Icon, count, disabled }) => ({ value: id, disabled,
+              label: <><Icon className="h-4 w-4 shrink-0" /><span className="truncate text-sm">{label}</span>
+                {count !== null && <span className="text-xs tabular-nums text-text-secondary">{count}</span>}</>,
+            }))} />
+        </header>
+        <div id={sectionPanelId} role="tabpanel" aria-labelledby={sectionPanelId + '-tab-' + activeSection}
+          className="min-h-0 flex-1 overflow-y-auto scrollbar-glass">
+          <div key={activeSection} className="space-y-4 animate-slide-in-left px-6 pb-6 pt-2">
+            {contentHeading && <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <div className="flex items-baseline gap-2">
+                <h3 className="text-base font-semibold text-text-primary">{contentHeading.title}</h3>
+                <span className="text-xs text-text-secondary">{contentHeading.count}</span>
+              </div>
+              {workshopEnabled && activeSection === 'skins' && <Button variant="secondary" size="sm"
+                onClick={() => navigate('/foundry', { state: { heroName: hero.name, skinSources: activeSkinSources } })}>
+                {t('foundry.skin.editInWorkshop')}
+              </Button>}
+            </div>}
+            {activeSection === 'skins' && onReorderSkins && <SkinLoadOrderStrip mods={skinList}
+              onReorder={onReorderSkins} hideNsfwPreviews={hideNsfwPreviews} />}
+            {selectionPanel}
+          </div>
         </div>
       </div>
 

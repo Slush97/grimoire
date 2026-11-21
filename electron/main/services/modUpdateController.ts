@@ -1,3 +1,4 @@
+import { isAttachedLocalVariant } from '../../../src/lib/localVariantEligibility';
 import type { DownloadModArgs } from '../../../src/types/electron';
 import type { GameBananaModDetails } from '../../../src/types/gamebanana';
 import type { Mod } from '../../../src/types/mod';
@@ -168,7 +169,7 @@ export function createModUpdateController(deps: Dependencies) {
         try {
             await prepare(async () => {
                 const installed = visibleInstalledMods(await deps.mods(assertContext().deadlockPath));
-                const targets = installed.filter(mod => selected.has(mod.id) && !mod.ignoreUpdates && typeof mod.gameBananaId === 'number');
+                const targets = installed.filter(mod => selected.has(mod.id) && !isAttachedLocalVariant(mod, installed) && !mod.ignoreUpdates && typeof mod.gameBananaId === 'number');
                 const bySubmission = new Map<string, Mod[]>();
                 for (const mod of targets) {
                     const key = `${mod.sourceSection ?? 'Mod'}:${mod.gameBananaId}`;
@@ -259,7 +260,7 @@ export function createModUpdateController(deps: Dependencies) {
                 const installed = visibleInstalledMods(await deps.mods(path));
                 if (choice.cancelled) return;
                 if (group.removed) throw new Error('This replacement request was removed.');
-                if (installed.some(mod => mod.gameBananaId === group.modId && mod.gameBananaFileId === newFileId && (mod.sourceSection ?? 'Mod') === group.section) || mergeSourceFileIds(installed).has(newFileId)) {
+                if (installed.some(mod => mod.localImport !== true && mod.gameBananaId === group.modId && mod.gameBananaFileId === newFileId && (mod.sourceSection ?? 'Mod') === group.section) || mergeSourceFileIds(installed).has(newFileId)) {
                     throw new Error('This replacement file is already installed.');
                 }
                 if (!sources.every(id => installed.some(mod => mod.id === id))) throw new Error('The file being replaced has changed.');

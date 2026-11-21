@@ -72,17 +72,17 @@ export default function HeroEffectsPanel({ heroName }: HeroEffectsPanelProps) {
         <>
           {/* Surface toggle: ability particles vs body/gun materials. These are
               independent slots; each keeps its own applied dot. */}
-          <SegmentedControl value={surface} onChange={setSurface} options={[
+          <SegmentedControl variant="joined" size="sm" value={surface} onChange={setSurface} options={[
             { value: 'abilities', label: <span className="flex items-center gap-2">{t('locker.effects.abilities')}{abilitiesApplied && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}</span> },
             { value: 'skin', label: <span className="flex items-center gap-2">{t('locker.effects.bodyGun')}{skinApplied && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}</span> },
           ]} />
 
           {/* Both stay mounted so applied dots track without refetch churn and
               in-flight slider state survives flipping between surfaces. */}
-          <div className={surface === 'abilities' ? 'space-y-3' : 'hidden'}>
+          <div className={surface === 'abilities' ? 'space-y-3 animate-slide-in-left' : 'hidden'}>
             <HeroColorPicker heroName={heroName} onAppliedChange={setAbilitiesApplied} />
           </div>
-          <div className={surface === 'skin' ? 'space-y-3' : 'hidden'}>
+          <div className={surface === 'skin' ? 'space-y-3 animate-slide-in-left' : 'hidden'}>
             <TrippySkinPanel
               heroName={heroName}
               active={surface === 'skin'}

@@ -535,6 +535,56 @@ interface VpkEntryIndex {
     entryOffset: Uint32Array;
     entryLength: Uint32Array;
 }
+/** Import requires complete inline payloads: copying only a split directory VPK loses its chunks. */
+export function validateImportVpk(vpkPath: string): void {
+    const header = Buffer.alloc(28);
+    const descriptor = openSync(vpkPath, 'r');
+    try {
+        const bytes = readSync(descriptor, header, 0, header.length, 0);
+        if (bytes < 12 || header.readUInt32LE(0) !== VPK_SIGNATURE || ![1, 2].includes(header.readUInt32LE(4))
+            || header.readUInt32LE(4) === 2 && bytes < 28) {
+            throw new Error('Unsupported or incomplete VPK header');
+        }
+    } finally { closeSync(descriptor); }
+    const index = vpkEntryIndex(vpkPath);
+    const stats = parseVpkEntryStats(vpkPath);
+    if (!index || !stats?.length || index.slots.size !== stats.length) throw new Error('Cannot read complete VPK contents');
+    // The general-purpose readers tolerate partial trees for diagnostics. Imports
+    // require every string and directory level to terminate successfully.
+    let offset = 0;
+    const readName = () => {
+        const end = index.tree.indexOf(0, offset);
+        if (end < 0) throw new Error('VPK directory is truncated');
+        const present = end > offset;
+        offset = end + 1;
+        return present;
+    };
+    while (readName()) {
+        let firstPath = true;
+        while (true) {
+            if (!readName() && !firstPath) break;
+            firstPath = false;
+            while (readName()) {
+                if (offset + 18 > index.tree.length) throw new Error('VPK directory is truncated');
+                offset += 18 + index.tree.readUInt16LE(offset + 4);
+                if (offset > index.tree.length) throw new Error('VPK preload data is truncated');
+            }
+        }
+    }
+    if (index.tree.subarray(offset).some(byte => byte !== 0)) throw new Error('Invalid VPK directory data');
+    const dataEnd = header.readUInt32LE(4) === 2 ? index.dataStart + header.readUInt32LE(12) : index.size;
+    if (dataEnd + (header.readUInt32LE(4) === 2 ? header.readUInt32LE(16) + header.readUInt32LE(20) + header.readUInt32LE(24) : 0) > index.size) {
+        throw new Error('VPK data sections are truncated');
+    }
+    for (let slot = 0; slot < index.preloadStart.length; slot++) {
+        if (index.preloadStart[slot] + index.preloadBytes[slot] > index.tree.length
+            || index.tree.readUInt16LE(index.preloadStart[slot] - 2) !== 0xffff) throw new Error('Invalid VPK directory record');
+        if (index.entryLength[slot] === 0) continue;
+        if (index.archiveIndex[slot] !== VPK_DIR_ARCHIVE_INDEX) throw new Error('Split VPKs must be packed into one self-contained VPK before import');
+        if (index.dataStart + index.entryOffset[slot] + index.entryLength[slot] > dataEnd) throw new Error('VPK payload is truncated');
+    }
+}
+
 const VPK_ENTRY_INDEX_LIMIT = 4;
 const vpkEntryIndexes = new Map<string, VpkEntryIndex>();
 

@@ -1,12 +1,12 @@
 import type { GlobalModType, Mod } from '../types/mod';
-import { categoryModelForSection, normalizeCategoryLabel, resolveCategoryPath, type CategoryPaths } from './categoryPaths';
+import { generalPropModel, baseTagGlobalType, categoryModelForSection, normalizeCategoryLabel, resolveCategoryPath, type CategoryPaths } from './categoryPaths';
 import { heroNameForLabel } from './heroNames';
 import { GLOBAL_MOD_TYPE_LABELS, canonicalHeroName, skinCategoryHero } from './lockerUtils';
 
 export type InstalledCardTaxonomyInput = Pick<
   Mod,
   'categoryId' | 'categoryName' | 'globalType' | 'lockerHero' | 'sourceSection'
-> & Partial<Pick<Mod, 'gameBananaId' | 'lockerHeroes' | 'lockerHeroSource'>>;
+> & Partial<Pick<Mod, 'gameBananaId' | 'lockerHeroes' | 'lockerHeroSource' | 'tagOverrides' | 'detectedTags' | 'propTypes'>>;
 
 export interface InstalledTaxonomyContext {
   heroByCategoryId?: ReadonlyMap<number, string>;
@@ -23,6 +23,33 @@ export interface InstalledCardTaxonomy {
   /** The representative file's deepest non-hero category. */
   categoryLabel?: string;
   globalType?: GlobalModType;
+  baseOverridden?: boolean;
+}
+
+/** Unranked tags keep their existing hierarchy and follow explicitly ranked tags. */
+export function sortInstalledTags<T extends { key: string }>(tags: readonly T[], order: readonly string[]): T[] {
+  const ranks = new Map(order.map((key, index) => [key, index]));
+  return [...tags].sort((a, b) => (ranks.get(a.key) ?? order.length) - (ranks.get(b.key) ?? order.length));
+}
+
+/** Match the cards' deepest-first hierarchy without translating tag identities. */
+export function defaultInstalledTagOrder(
+  tags: readonly { key: string; custom?: boolean }[],
+  pathsByModel: InstalledTaxonomyContext['pathsByModel'],
+): string[] {
+  const depths = new Map<string, number>();
+  for (const paths of Object.values(pathsByModel ?? {})) {
+    for (const path of paths?.values() ?? []) {
+      path.forEach((category, index) => {
+        const key = `tag:${normalizeCategoryLabel(category.name).toLowerCase()}`;
+        depths.set(key, Math.max(depths.get(key) ?? -1, index));
+      });
+    }
+  }
+  return [...tags].sort((a, b) =>
+    Number(!!b.custom) - Number(!!a.custom)
+    || (depths.get(b.key) ?? -1) - (depths.get(a.key) ?? -1),
+  ).map(tag => tag.key);
 }
 
 function uniqueLabels(labels: readonly string[]): string[] {
@@ -54,13 +81,18 @@ export function getInstalledCardTaxonomy(
   ) : undefined;
   // Main has already applied manual choices and General precedence. An empty
   // resolved set is authoritative too; raw legacy metadata must not revive it.
-  const heroNames = uniqueLabels(mod.lockerHeroes
+  const heroNames = uniqueLabels(mod.tagOverrides?.heroes ?? mod.lockerHeroes
     ?? (mod.globalType ? [] : explicitHero ? [explicitHero] : section === 'Mod' ? (mappedHero ? [mappedHero] : categoryHeroes) : []));
-  const categoryLabels = uniqueLabels(labels.filter(label => !heroNameForLabel(label, context.heroNames)
+  const categoryLabels = uniqueLabels(mod.tagOverrides?.base ?? labels.filter(label => !heroNameForLabel(label, context.heroNames)
     && !heroNames.some(hero => hero.toLowerCase() === canonicalHeroName(label).toLowerCase())));
+  categoryLabels.splice(0, categoryLabels.length, ...categoryLabels.filter(label => !/^cursors?$/i.test(label)));
+  if (mod.tagOverrides?.base) {
+    const depths = new Map(labels.map((label, index) => [label.toLowerCase(), index]));
+    categoryLabels.sort((a, b) => (depths.get(a.toLowerCase()) ?? -1) - (depths.get(b.toLowerCase()) ?? -1));
+  }
   // Locally generated/imported files keep their explicit General label when
   // there is no category to display. Linked files only expose real categories.
-  const customLabels = !linked && labels.length === 0 && mod.globalType
+  const customLabels = mod.tagOverrides?.base === undefined && !linked && labels.length === 0 && mod.globalType && !generalPropModel(mod.globalType)
     ? [GLOBAL_MOD_TYPE_LABELS[mod.globalType]] : [];
   return {
     heroNames,
@@ -68,6 +100,7 @@ export function getInstalledCardTaxonomy(
     categoryLabel: categoryLabels.at(-1),
     ...(customLabels.length > 0 ? { customLabels } : {}),
     globalType: mod.globalType,
+    ...(mod.tagOverrides?.base !== undefined ? { baseOverridden: true } : {}),
   };
 }
 
@@ -80,7 +113,7 @@ export function installedTaxonomyTags(taxonomy: InstalledCardTaxonomy, section?:
   return uniqueLabels([
     ...taxonomy.categoryLabels,
     ...(taxonomy.customLabels ?? []),
-    ...sectionTags(section),
+    ...(taxonomy.baseOverridden ? [] : sectionTags(section)),
   ]);
 }
 
@@ -115,8 +148,65 @@ export function getInstalledGroupTaxonomy(
     ...(customLabels.length > 0 ? { customLabels } : {}),
     tags: uniqueLabels([
       ...orderedCategories,
-      ...taxonomies.flatMap(({ mod }) => sectionTags(mod.sourceSection)),
+      ...taxonomies.flatMap(({ mod, taxonomy }) => taxonomy.baseOverridden ? [] : sectionTags(mod.sourceSection)),
       ...customLabels,
     ]),
   };
+}
+
+/** Defaults come from detection, even after a manual selection changed the live identity. */
+export function getInstalledDefaultTaxonomy(
+  representative: InstalledCardTaxonomyInput,
+  variants: readonly InstalledCardTaxonomyInput[],
+  context: InstalledTaxonomyContext = {},
+): ReturnType<typeof getInstalledGroupTaxonomy> {
+  const restore = (mod: InstalledCardTaxonomyInput): InstalledCardTaxonomyInput => ({
+    ...mod,
+    tagOverrides: undefined,
+    ...(mod.detectedTags ? { lockerHeroes: mod.detectedTags.heroes, globalType: mod.detectedTags.globalType } : {}),
+  });
+  return getInstalledGroupTaxonomy(restore(representative), variants.map(restore), context);
+}
+
+/** Apply only the changed group selections; keep each file's other tags intact. */
+export function installedTagChangesForVariants<T extends InstalledCardTaxonomyInput>(
+  representative: T,
+  variants: readonly T[],
+  changes: Mod['tagOverrides'] | null,
+  context: InstalledTaxonomyContext = {},
+): { mod: T; tags: Mod['tagOverrides'] | null }[] {
+  if (!changes) return variants.map(mod => ({ mod, tags: changes }));
+  const group = getInstalledGroupTaxonomy(representative, variants, context);
+  return variants.map(mod => {
+    const taxonomy = getInstalledCardTaxonomy(mod, context);
+    const tags: NonNullable<Mod['tagOverrides']> = {};
+    for (const axis of ['base', 'heroes'] as const) {
+      const desired = changes[axis];
+      if (desired === undefined) continue;
+      const previous = axis === 'base' ? group.tags : group.heroNames;
+      const current = axis === 'base' ? installedTaxonomyTags(taxonomy, mod.sourceSection) : taxonomy.heroNames;
+      const removed = new Set(previous.filter(tag => !desired.includes(tag)));
+      tags[axis] = [...new Set([...current.filter(tag => !removed.has(tag)), ...desired.filter(tag => !previous.includes(tag))])];
+    }
+    return { mod, tags };
+  });
+}
+
+/** Share the built-in labels used by cards and filters, including cached categories. */
+export function installedBaseTagOptions(context: InstalledTaxonomyContext, current: readonly string[] = []): string[] {
+  const labels = ['Skins', 'Sounds', 'Wip', ...current];
+  for (const paths of Object.values(context.pathsByModel ?? {})) {
+    for (const path of paths?.values() ?? []) {
+      for (const category of path) {
+        if (!heroNameForLabel(category.name, context.heroNames)) labels.push(category.name);
+      }
+    }
+  }
+  const destinations = new Set(labels.map(baseTagGlobalType));
+  for (const [type, label] of Object.entries(GLOBAL_MOD_TYPE_LABELS)) {
+    // GameBanana keeps one Patrons tag; the two model slots are Locker destinations.
+    if (type === 'hidden-king' || type === 'archmother') continue;
+    if (baseTagGlobalType(label) && !destinations.has(type as GlobalModType)) labels.push(label);
+  }
+  return uniqueLabels(labels).filter(label => !/^cursors?$/i.test(label)).sort((a, b) => a.localeCompare(b));
 }

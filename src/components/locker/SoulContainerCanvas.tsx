@@ -1,184 +1,195 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { useSoulRegistry } from './soulRegistry';
 
-/**
- * Single shared WebGL context that renders every soul-container card in the
- * Locker's Global grid.
- *
- * A full-window, pointer-events-none overlay holds one Canvas. Each frame the
- * renderer walks the registry, and for every loaded tile sets the GL viewport
- * to that card's on-screen rect (clamped to the scroll pane) and renders the
- * model into it via the scissor test. One context paints the whole grid, so the
- * number of mods is irrelevant to the browser's ~16 live-context cap that was
- * silently dropping contexts and leaving cards blank white.
- *
- * Models render transparent everywhere except their own pixels, so all card
- * chrome underneath (frosted panel, Disabled tag, hover tint) shows through.
- */
+const SPIN_RATE = 0.5;
+const FADE_SECONDS = 0.2;
 
-const SPIN_RATE = 0.5; // rad/sec, matching the prior per-card auto-orbit.
+function createRenderer() {
+  const camera = new THREE.PerspectiveCamera(35, 16 / 9, 0.1, 100);
+  camera.position.set(0, 0.35, 3);
+  camera.lookAt(0, 0, 0);
+  const scene = new THREE.Scene();
+  const key = new THREE.DirectionalLight(0xffffff, 1.3);
+  key.position.set(3, 5, 2);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.5);
+  fill.position.set(-3, 2, -2);
+  const holder = new THREE.Group();
+  scene.add(new THREE.AmbientLight(0xffffff, 0.75), key, fill, holder);
+  const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+  const snapshot = new THREE.WebGLRenderTarget(1024, 576, { depthBuffer: false });
+  snapshot.texture.colorSpace = THREE.SRGBColorSpace;
+  // The scene target contains premultiplied linear color. Unpremultiply before
+  // tone mapping so both the PNG and the live viewport have identical edges.
+  const material = new THREE.ShaderMaterial({
+    uniforms: { source: { value: target.texture }, opacity: { value: 1 }, toneMappingExposure: { value: 1 } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: `#include <common>
+#include <tonemapping_pars_fragment>
+uniform sampler2D source;
+uniform float opacity;
+varying vec2 vUv;
+void main() {
+  vec4 color = texture2D(source, vUv);
+  if (color.a > 0.0) color.rgb /= color.a;
+  color.rgb = ACESFilmicToneMapping(color.rgb);
+  gl_FragColor = vec4(color.rgb, color.a * opacity);
+  #include <colorspace_fragment>
+}`,
+    transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
+  });
+  const quad = new FullScreenQuad(material);
+  return { camera, scene, holder, target, snapshot, material, quad,
+    exposure(value: number) { material.uniforms.toneMappingExposure.value = value; },
+    opacity(value: number) { material.uniforms.opacity.value = value; },
+    resize(width: number, height: number) {
+      target.setSize(width, height);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    },
+  };
+}
 
-/** Build the camera, lit scene, and run the per-tile scissor render loop. */
+/** One WebGL context serves hover previews and serial thumbnail captures. */
 export function TiledRenderer({ paneRef }: { paneRef: RefObject<HTMLElement | null> }) {
   const registry = useSoulRegistry();
-  const gl = useThree((s) => s.gl);
-  const invalidate = useThree((s) => s.invalidate);
-  const spinningRef = useRef(false);
+  const gl = useThree(s => s.gl);
+  const invalidate = useThree(s => s.invalidate);
+  const resources = useRef<ReturnType<typeof createRenderer> | null>(null);
+  const spinning = useRef(new Set<string>());
+  const reducedMotion = useRef(false);
 
   useEffect(() => {
     const wake = () => invalidate();
     const unsubscribe = registry.subscribe(wake);
-    // The loop sleeps when no loaded tile intersects the pane. Wake for model
-    // arrivals, scrolls (including ancestor scrolls), and pane/window resizing.
     window.addEventListener('scroll', wake, { capture: true, passive: true });
     window.addEventListener('resize', wake);
+    document.addEventListener('visibilitychange', wake);
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updateMotion = () => { reducedMotion.current = motion.matches; wake(); };
+    updateMotion();
+    motion.addEventListener('change', updateMotion);
     const observer = new ResizeObserver(wake);
     if (paneRef.current) observer.observe(paneRef.current);
-    wake();
     return () => {
       unsubscribe();
       window.removeEventListener('scroll', wake, true);
       window.removeEventListener('resize', wake);
+      document.removeEventListener('visibilitychange', wake);
+      motion.removeEventListener('change', updateMotion);
       observer.disconnect();
+      const owned = resources.current;
+      if (owned) { owned.target.dispose(); owned.snapshot.dispose(); owned.material.dispose(); owned.quad.dispose(); }
+      resources.current = null;
     };
   }, [registry, invalidate, paneRef]);
 
-  // Camera and lit scene are held in refs (not useMemo) because three objects
-  // are mutated every frame (camera aspect, scene add/remove), which the hook
-  // immutability lint forbids on memoized values. They're created once, lazily,
-  // inside the frame loop.
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  // A single child slot in the scene holds exactly one tile's model at a time.
-  // Replacing the slot's child each iteration (rather than add/remove on the
-  // scene) guarantees a model can never get stuck across tiles or frames, so a
-  // card can never show another card's model.
-  const holderRef = useRef<THREE.Group | null>(null);
-
-  // Priority > 0 hands the render loop to us: r3f stops auto-rendering its own
-  // scene and we issue the per-tile draws below. The canvas is alpha:true, so
-  // the renderer's default clear is transparent; we clear the whole buffer once
-  // per frame (scissor off) to wipe cards that scrolled away, then each tile's
-  // render auto-clears only its own scissor box before drawing.
   useFrame((_, delta) => {
-    if (!cameraRef.current) {
-      const cam = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
-      cam.position.set(0, 0.35, 3);
-      cam.lookAt(0, 0, 0);
-      cameraRef.current = cam;
-      // Force a fully transparent clear so this full-window overlay can never
-      // composite an opaque (black) buffer over the card grid, regardless of the
-      // driver's default clearAlpha for an alpha:true context.
-      gl.setClearColor(0x000000, 0);
-    }
-    if (!sceneRef.current) {
-      // One lit scene reused for every tile, with a dedicated holder group the
-      // current tile's model is parented into for the duration of its draw.
-      const s = new THREE.Scene();
-      const ambient = new THREE.AmbientLight(0xffffff, 0.75);
-      const key = new THREE.DirectionalLight(0xffffff, 1.3);
-      key.position.set(3, 5, 2);
-      const fill = new THREE.DirectionalLight(0xffffff, 0.5);
-      fill.position.set(-3, 2, -2);
-      const holder = new THREE.Group();
-      s.add(ambient, key, fill, holder);
-      sceneRef.current = s;
-      holderRef.current = holder;
-    }
-    const camera = cameraRef.current;
-    const scene = sceneRef.current;
-    const holder = holderRef.current!;
-
-    const canvas = gl.domElement;
-    const canvasRect = canvas.getBoundingClientRect();
-    const pane = paneRef.current?.getBoundingClientRect() ?? null;
-
-    // Wipe the whole buffer once (scissor off so the clear isn't boxed), then
-    // draw each tile into its own scissored region without further clears.
+    gl.setRenderTarget(null);
     gl.setScissorTest(false);
+    gl.setClearColor(0x000000, 0);
     gl.clear();
-    gl.setScissorTest(true);
-
-    let visible = false;
-    // Demand mode's first delta includes time spent asleep. Offscreen models
-    // used to retain their angle, so do not advance them by that idle time.
-    const spinDelta = spinningRef.current ? delta : 0;
-    for (const tile of registry.tiles.values()) {
-      const root = tile.root;
-      const el = tile.el;
-      if (!root || !el) continue;
-
-      const r = el.getBoundingClientRect();
-      if (r.width <= 0 || r.height <= 0) continue;
-
-      // Clamp to the scroll pane so a card scrolling under the pane edges is
-      // cropped rather than bleeding over neighbouring chrome.
-      const left = pane ? Math.max(r.left, pane.left) : r.left;
-      const right = pane ? Math.min(r.right, pane.right) : r.right;
-      const top = pane ? Math.max(r.top, pane.top) : r.top;
-      const bottom = pane ? Math.min(r.bottom, pane.bottom) : r.bottom;
-      const clampW = right - left;
-      const clampH = bottom - top;
-      if (clampW <= 0 || clampH <= 0) continue; // fully off-screen
-
-      // Viewport spans the FULL card rect (so the model stays anchored to the
-      // card and just gets cropped); scissor restricts drawing to the clamped,
-      // on-screen part. Values are logical (CSS) pixels relative to the canvas
-      // with a bottom-left origin; THREE applies the pixel ratio internally, so
-      // we must NOT pre-multiply by it.
-      const vx = r.left - canvasRect.left;
-      const vy = canvasRect.bottom - r.bottom;
-      const sx = left - canvasRect.left;
-      const sy = canvasRect.bottom - bottom;
-
-      gl.setViewport(vx, vy, r.width, r.height);
-      gl.setScissor(sx, sy, clampW, clampH);
-
-      camera.aspect = r.width / r.height;
-      camera.updateProjectionMatrix();
-
-      visible = true;
-      root.rotation.y += spinDelta * SPIN_RATE;
-      // Swap this tile's model into the holder (clearing whatever was there),
-      // then render. The holder only ever contains this one tile's model.
-      holder.clear();
+    if (document.hidden) { spinning.current.clear(); return; }
+    const pending = registry.captures.length > 0;
+    const needed = pending || [...registry.tiles.values()].some(tile => tile.root && (tile.hovered || tile.opacity > 0));
+    if (!needed) { spinning.current.clear(); return; }
+    const owned = resources.current ?? (resources.current = createRenderer());
+    const { camera, scene, holder, target, snapshot, quad } = owned;
+    owned.exposure(gl.toneMappingExposure);
+    const renderModel = (root: THREE.Object3D, width: number, height: number) => {
+      owned.resize(width, height);
+      gl.setScissorTest(false);
+      gl.setRenderTarget(target);
+      gl.clear();
       holder.add(root);
-      gl.render(scene, camera);
-    }
-    holder.clear();
-    spinningRef.current = visible;
-    if (visible) invalidate();
-  }, 1);
+      try { gl.render(scene, camera); } finally { holder.clear(); }
+    };
 
+    const capture = registry.captures.shift();
+    if (capture) {
+      const { width, height } = capture;
+      const root = registry.tiles.get(capture.id)?.root;
+      if (!root) capture.reject(new Error('Preview unavailable'));
+      else {
+        const yaw = root.rotation.y;
+        try {
+          root.rotation.set(0, capture.yaw, 0);
+          renderModel(root, width, height);
+          snapshot.setSize(width, height);
+          gl.setRenderTarget(snapshot);
+          gl.clear();
+          owned.opacity(1);
+          quad.render(gl);
+          const pixels = new Uint8Array(width * height * 4);
+          gl.readRenderTargetPixels(snapshot, 0, 0, width, height, pixels);
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const context = canvas.getContext('2d');
+          if (!context) throw new Error('Image capture unavailable');
+          const image = context.createImageData(width, height);
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const from = ((height - 1 - y) * width + x) * 4;
+              const to = (y * width + x) * 4;
+              const alpha = pixels[from + 3];
+              for (let c = 0; c < 3; c++) image.data[to + c] = alpha ? Math.min(255, pixels[from + c] * 255 / alpha) : 0;
+              image.data[to + 3] = alpha;
+            }
+          }
+          context.putImageData(image, 0, 0);
+          capture.resolve(canvas.toDataURL('image/png'));
+        } catch (error) { capture.reject(error instanceof Error ? error : new Error('Image capture failed')); }
+        finally { root.rotation.set(0, yaw, 0); }
+      }
+    }
+
+    const canvasRect = gl.domElement.getBoundingClientRect();
+    const pane = paneRef.current?.getBoundingClientRect();
+    const nextSpinning = new Set<string>();
+    let animate = registry.captures.length > 0;
+    const fade = Math.min(delta, 0.05) / FADE_SECONDS;
+    for (const [id, tile] of registry.tiles) {
+      const { root, el } = tile;
+      if (!root || !el) continue;
+      const rect = el.getBoundingClientRect();
+      const left = Math.max(rect.left, pane?.left ?? 0, canvasRect.left);
+      const right = Math.min(rect.right, pane?.right ?? canvasRect.right, canvasRect.right);
+      const top = Math.max(rect.top, pane?.top ?? 0, canvasRect.top);
+      const bottom = Math.min(rect.bottom, pane?.bottom ?? canvasRect.bottom, canvasRect.bottom);
+      const visible = rect.width > 0 && rect.height > 0 && right > left && bottom > top;
+      const wanted = tile.hovered && visible ? 1 : 0;
+      registry.setOpacity(id, reducedMotion.current || !visible ? wanted
+        : THREE.MathUtils.clamp(tile.opacity + (wanted ? fade : -fade), 0, 1));
+      if (tile.opacity !== wanted) animate = true;
+      if (tile.opacity === 0) { if (!tile.hovered) tile.onIdle?.(); continue; }
+      if (tile.hovered && !tile.manual) {
+        nextSpinning.add(id);
+        if (spinning.current.has(id)) root.rotateY(Math.min(delta, 0.1) * SPIN_RATE);
+        animate = true;
+      }
+      const dpr = gl.getPixelRatio();
+      renderModel(root, Math.max(1, Math.round(rect.width * dpr)), Math.max(1, Math.round(rect.height * dpr)));
+      gl.setRenderTarget(null);
+      gl.setViewport(rect.left - canvasRect.left, canvasRect.bottom - rect.bottom, rect.width, rect.height);
+      gl.setScissor(left - canvasRect.left, canvasRect.bottom - bottom, right - left, bottom - top);
+      gl.setScissorTest(true);
+      owned.opacity(tile.opacity);
+      quad.render(gl);
+    }
+    gl.setRenderTarget(null);
+    gl.setScissorTest(false);
+    spinning.current = nextSpinning;
+    if (animate) invalidate();
+  }, 1);
   return null;
 }
 
-export default function SoulContainerCanvas({
-  paneRef,
-}: {
-  /** The scrollable card pane; tile rects are clamped to it so models never
-   *  render outside the pane (e.g. under the type header or toolbar). */
-  paneRef: RefObject<HTMLElement | null>;
-}) {
+export default function SoulContainerCanvas({ paneRef }: { paneRef: RefObject<HTMLElement | null> }) {
   return (
-    // Mounted INSIDE the scroll pane (its stacking context), so z-[5] lands the
-    // models above each card's background/frosted panel (z-auto) but BELOW the
-    // card chrome (Active/Disabled tags z-10, retag + delete buttons z-20) so
-    // that chrome paints on top of the model instead of behind it. Still
-    // `fixed inset-0` (not absolute) so it overlays the viewport rather than
-    // scrolling away with the pane content; per-tile scissor clamps to the pane.
     <div className="pointer-events-none fixed inset-0 z-[5]">
-      {/* r3f sets pointerEvents:'auto' on its own container div, which would
-          override the wrapper above and swallow every click on the page. We
-          don't raycast, so force it back to none (merged after r3f's default). */}
-      <Canvas
-        frameloop="demand"
-        dpr={[1, 2]}
-        gl={{ alpha: true, antialias: true }}
-        style={{ pointerEvents: 'none' }}
-      >
+      <Canvas frameloop="demand" dpr={[1, 2]} gl={{ alpha: true, antialias: true }} style={{ pointerEvents: 'none' }}>
         <TiledRenderer paneRef={paneRef} />
       </Canvas>
     </div>

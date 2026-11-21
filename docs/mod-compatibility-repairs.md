@@ -28,6 +28,13 @@ app session. Navigation does not reset acknowledgement; a new or recurring
 finding does. Normal and developer installations keep independent session state.
 No acknowledgement is saved to disk.
 
+New findings, including those detected at startup, pulse the Issues button
+between dark and normal brightness of its alert color for five seconds.
+Unchanged scans and resolved findings do not restart the pulse. Navigation resumes the original
+five-second window. Hovering stops the pulse without acknowledging the findings,
+and leaving the button does not resume it. Opening Issues also stops the pulse.
+Reduced motion keeps the static alert color.
+
 This implementation uses Grimoire's own vpkmerge/morphic code. No DMM source,
 historical indexes, fixtures, or repair implementations are included.
 

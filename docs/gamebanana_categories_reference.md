@@ -92,14 +92,23 @@ choice for later enables in the same opening, including a swap's first variant.
 Closing and reopening the picker resets that choice. Cancelling a requirements
 prompt does not save a choice, and disable confirmations still apply individually.
 
-**View requirements** in a mod's context menu opens the same list with
-**Disable all** and **Enable all** actions. It also lists enabled mods that require
+**View requirements** appears in a mod's context menu only when it has declared
+requirements, including optional entries and locally generated skin dependencies.
+It opens the same list with
+**Disable all** and **Enable all** actions, in that order, with only the header X
+to close it. Its linked mod-name title opens the mod page, like the variant picker.
+Thumbnails keep a 40px height and the shared video aspect ratio. Colored Required,
+Recommended and Optional tags start the description line below each requirement
+name, including when there is no description. Long descriptions flow beneath the
+tag. It also lists enabled mods that require
 this mod, marking them as **Requires this mod**. The requirements icon also opens it.
 Required dependency problems on an enabled mod use a yellow icon; disabled mods
 and optional-only requirements use light gray. Requirements do not appear in
 the Installed **Issues** menu.
 
-For Browse Mod hero filters, include the hero category and all descendant IDs so nested categories still match. Browse Sound and Wip filtering uses catalog title matching where their trees do not provide equivalent hero categories. Browse card title matching also uses the cached category tree's hero roster and existing aliases, so it recognizes additions beyond the bundled roster without per-card requests. Explicit hero categories take precedence over titles.
+Browse's Filters > Hero section includes **Extended hero matching**, off by default. Standard matching uses the selected Mod hero's Skins subtree, while Sounds and WiPs retain title matching. Extended matching also includes Mod titles across every category and hero-named branches anywhere in each selected section's cached tree. This matching preference survives navigation, does not activate the Filters button or Clear all by itself, and is retained by Clear all. It requires the local catalog and adds no API requests; toggling it without selecting a hero does not reload the feed.
+
+Category IDs remain scoped to their section, and unselected sections remain excluded. Name matching reuses whole-name aliases and handles spaces, underscores and hyphens, while text search and other filters still narrow the combined results. A late or refreshed tree reruns the local query when its matching branches change. Browse cards use the cached category tree's hero roster and aliases to recognize additions beyond the bundled roster. Explicit hero categories take precedence over titles when choosing a card's displayed hero icons. The live API fallback retains its existing category-only Mod filter; it cannot combine those category and title matches in one request.
 
 Browse title matching accepts `Deadman` or `Danny` for Deadman Danny, `Harrow` for Nurse Harrow, and both `Rat King` and `RatKing`. These are whole-name matches, so unrelated words such as `harrowing` do not identify a hero.
 
@@ -108,11 +117,11 @@ Sound cards use a hero portrait only when they resolve to exactly one hero. A mu
 Installed cards and filter facets share `installedCardTaxonomy.ts` and the category-tree indexes:
 
 - The Tags filter includes every non-hero ancestor and leaf label, plus the existing Sounds/Wip section tags. Heroes have their separate filter.
-- Installed cards use 22px hero icons in a stack capped at 66px. Earlier heroes overlap in front of later heroes. Up to five hero icons are visible; from six heroes onward, four icons and a shadowed Soul Urn represent the group. The urn shares the overlapping slots and always sits behind every hero. The stack's mouse tooltip lists every hero separated by commas. The reusable 64px urn asset keeps its original colors; only this overflow treatment darkens it with CSS.
-- Card category tags run from the representative file's leaf toward its ancestors, with deeper categories before parents and custom fallback labels last. Their single 22px-high line fits as many tags as the available width allows, reserving the measured width of a `+n` chip whose mouse tooltip lists the remaining labels. Filter tag sets and counts are unchanged.
+- Installed cards use 22px hero icons in a stack capped at 66px. Earlier heroes overlap in front of later heroes. Up to six hero icons are visible; from seven heroes onward, five icons and a shadowed Soul Urn represent the group. The urn shares the overlapping slots and always sits behind every hero. The stack's mouse tooltip lists every hero separated by commas. The reusable 64px urn asset keeps its original colors; only this overflow treatment darkens it with CSS.
+- Card category tags default to the representative file's leaf before its ancestors, with deeper categories before parents and custom fallback labels last. A saved tag priority overrides this ordering across Installed cards. Their single 22px-high line fits as many tags as the available width allows, reserving the measured width of a `+n` chip whose mouse tooltip lists the remaining labels. Filter tag sets and counts are unchanged.
 - Grouped variants contribute their combined categories and hero identities, with each group counted once per filter option.
 - CameraOff, FileWarning, and requirements indicators share one overlapping stack before the hero stack and category tags in every Installed layout. Each 16px icon is centered in a 22px slot, with their shared stack currently capped at 110px. Severity colors and detailed tooltips are retained. Other warning badges keep their existing placement. Merged-source updates use the normal orange Update tag without an extra hover effect; source counts and replacement details remain in its tooltip.
-- When variant hero sets differ, the installed variant picker shows each file's own hero icons. It omits these repeated icons when all files target the same heroes, and never adds category text to the variant rows.
+- When variant hero sets differ, the installed variant picker shows each file's own hero icons using the shared overlapping stack. Up to four 16px icons overlap within 32px; more heroes use three hero icons and the overflow urn, with a tooltip listing every hero. It omits these repeated icons when all files target the same heroes, and never adds category text to the variant rows.
 - Category labels retain GameBanana's spelling and singular/plural forms, with two known corrections: `Faithul/Vanilla+` is displayed as `Faithful/Vanilla+`, and `RatKing Flag` as `Rat King Flag`. Both use the shared label normalizer for cached paths and offline labels, retaining the original category IDs.
 - Identical labels share a filter option. There is no synthetic Other bucket or a second tag generated from Locker's General classification for linked mods.
 
@@ -137,20 +146,54 @@ Game-loaded outgoing files block the swap with the usual warning and shake
 feedback on both rendered cards, including when the lock changes during selection.
 
 Installed's Hero selector supports several heroes, matching any selected hero.
-Selected heroes share the cards' 66px overlapping stack, showing up to eight
-icons before an overflow urn. Its tooltip lists every selected hero.
+Selected heroes use the shared overlapping stack capped at 60px, with consistent
+20px icons for both single and multiple selections. Up to six heroes are shown;
+larger selections use five hero icons and an overflow urn. Its tooltip lists every selected hero.
 Its Tags selector includes tags on left-click (green plus) and excludes them on
 right-click (red minus). A card must match an included tag when any are selected,
-and must not match any excluded tag. Either click clears a tag that is already
-included or excluded. The trigger shows a single tag as `+ HUD` or `- HUD`.
+and must not match any excluded tag. Right-clicking an included tag switches it
+to excluded; right-clicking an excluded tag clears it. Left-clicking either kind
+of selected tag clears it. The trigger shows a single tag as `+ HUD` or `- HUD`.
+The off-by-default Cycle tag filters preference instead makes left-click cycle
+through unselected, included, excluded, and back to unselected. Right-click clears
+a selected tag without changing unselected tags in this mode.
 Multiple selections show separate counts, such as `+2/-1 Tags`, with empty sides
-and their separator omitted.
+and their separator omitted. Built-in names are darker in edit mode to distinguish
+them from editable custom names.
 The selector's search can be switched to edit mode to create, rename, or delete
 custom tags. The edit toggle sits beside the input; renaming uses that same input
 and Enter to save, with an X to cancel.
-Custom tags appear first during editing. GameBanana categories and
-local General classifications remain read-only. Assign custom tags through the
-card's Custom Tags submenu. These user preferences reuse the list catalogue
+Edit mode lists built-in and custom tags together by priority. The leading number
+ends in a dot when idle; clicking it selects a digits-only field, saved with Enter
+or on leaving the field. Hovering a tag reveals up/down arrows directly before
+the number in reserved space. Position 1 has the highest priority and appears
+first on mod cards. New custom tags start at position 1. Defaults place custom
+tags first and retain the existing deepest-first category hierarchy below them;
+manual priorities can place custom tags anywhere. Right-clicking the active Edit Tags
+button asks for confirmation before restoring that hierarchy and placing custom
+tags first. Cancelling leaves the order intact. Reordering preserves saved slots
+for temporarily absent tags. Priorities persist separately per
+installation and normal/developer mode, using stable raw tag keys so translation
+or custom-tag renaming does not change their positions. Category names and
+local General classification names remain read-only. The card's **Set tags**
+submenu sits above **Add to list** and combines Custom, Base, and Hero sections.
+Base choices reuse the cached category labels, including tags not assigned to the
+mod yet. Empty Custom sections are omitted. Checked labels use the user's accent
+color. A matching Locker destination shows its icon before the checkmark, with
+the same text color. A pin between those icons marks detected defaults, including
+defaults currently deselected. Visible indicators pack against the right edge
+without reserving an unchecked checkmark slot. Default hero choices remain
+available even when missing from the cached roster. All resolved heroes are
+checked, including multi-hero detections. Each selected Base destination is
+reflected in Locker, while the same tags drive card labels
+and Installed filters. **Clear** removes custom, Base, and Hero assignments.
+**Reset** restores detected built-in tags without changing custom assignments.
+The two action labels are centered. Group edits keep unrelated tags on their
+original variants instead of copying them to every file.
+Overrides are stored separately in `mod-metadata.json`; the original category
+identity and detection hints remain available for reset and category refreshes.
+Detected defaults are supplied to the menu in memory and are not stored again.
+Opening or editing the menu adds no API requests. These custom-tag preferences reuse the list catalogue
 operations and are saved separately per installation and normal/developer mode.
 Grouping and splitting retain their membership through the existing stable-key
 mapping; no category data is rewritten.
@@ -166,9 +209,97 @@ Filters also contains the Default/Lists view switch and list management, even
 when no custom lists exist. Its Source, Status, and view segments use neutral
 selection colors; selected hero and tag dropdown triggers retain accent hints.
 
+## Local import preparation
+
+The local import dialog checks selected VPKs and archives before enabling Import.
+Files appear immediately with a yellow checking state, changing to red on failure.
+Errors show the failure message without Electron's transport prefixes.
+Every source must finish successfully; one invalid source blocks the batch until
+removed. Archives retain their inspected VPKs in temporary storage until import
+or dismissal; an active import retains its files until copying finishes even if
+the dialog closes. Installation validates the copied bytes again. Checks validate
+readable, complete inline VPK contents, not whether
+an older mod still works with the current game. Split directory VPKs need to be
+packed into a self-contained VPK. Optional Mod Safety keeps its existing setting
+and approval behavior. Hero detection and imprint/category recognition use local
+data only and add no API requests. Archive rows show the combined detected heroes.
+
+New one-file imports keep the shared name, gallery, and tags in the same panel
+as multi-file imports, without a grouping toggle.
+Selecting multiple sources shows the original Import as one mod with variants
+checkbox, enabled by default. Turning it off gives each source an editable name,
+a removable 64px-wide 16:9 thumbnail, and an NSFW flag. Removing sources until
+only one remains restores the one-mod editor and retains that source's details.
+As before, imprint recognition fills untouched names and cached thumbnail
+references. In the dialog, manually chosen or cleared artwork takes precedence
+over late recognition.
+Archives keep their existing per-source grouping and pack detection. Switching
+modes preserves both drafts; the first return to a new shared gallery seeds it
+from the separate thumbnails without duplicates. Clear all resets a separate
+batch to the default mode. Adding variants to an existing mod has no grouping toggle.
+The shared mod's name defaults to the first source's detected title
+or filename and stays editable. All sources share a horizontal image gallery,
+one NSFW control beside the mod name, and a Custom/Base/Hero tag picker. Manual tag additions
+and removals preserve each member's other detected classifications; custom tags
+use the existing installation-scoped catalogue. Tags match the mod-card chips,
+keep their remove buttons visible, and use a compact plus chip to add more when
+tags are present.
+After a partial import, the mode stays locked for retries. Shared settings also
+stay locked so they cannot diverge from the variants already installed. Failed
+variant names and separate-mod details remain editable.
+Shared images are stored once in
+`userData/local-mod-galleries/<localGroupId>/`, with an ordered manifest and no
+extra gallery fields in `mod-metadata.json`. In the import dialog, clicking an image selects the card
+thumbnail by moving it to the front of the gallery, marked with the accent outline. That
+thumbnail stays the same regardless of the active variant. The variant picker displays all
+images using the shared full-size viewer and respects NSFW settings. Shared
+artwork inherits an NSFW flag from any member before visibility filtering.
+Changing privacy settings closes an open gallery viewer. A group with
+shared artwork keeps its picker even when only one variant remains. Adding more
+variants preserves the existing gallery and each file's own tags.
+Standalone local mods also open the picker. Its header menu marks the mod NSFW,
+adds images, and browses for additional VPKs or archives using the same import
+checks. Clicking a local picker title edits the shared mod name directly in
+place. Local cards open the picker through View details and have no Ungroup
+variants action. Non-local
+pickers have no NSFW control or local actions menu. The add-variants import
+dialog inherits the mod's NSFW flag without showing a second control.
+Thumbnail context menus remove images or make one the mod thumbnail by
+moving it to the front of the gallery. They also reuse the standard image copy
+and open actions. Import thumbnails keep their inline controls.
+Existing catalogue thumbnails can be retained by reference without
+fetching them during gallery edits; uploaded images remain in managed storage.
+Unreadable gallery files are skipped, promoting the next readable image. An
+explicitly emptied gallery remains user-owned, so a delayed catalogue thumbnail
+fetch cannot restore removed artwork. Artwork does not prevent missing Sound
+previews from being fetched through the existing recognition flow.
+
+## Mixed variant groups
+
+The card menu can add VPK files or archives to normal GameBanana mods through
+that same stripped import dialog. Multiselect Group accepts two or more local files, or local files alongside one GameBanana
+submission (identified by section and submission ID). Files from different downloaded
+submissions cannot be grouped. Locally imported files retain their local origin even
+when embedded metadata names a GameBanana submission. Downloaded-only selections, merged
+outputs and incompatible Global placements remain blocked. The main-process planner
+checks the complete destination group, including existing members, for conflicting
+downloaded submissions before any writes. Add variant may seed one downloaded
+submission as a temporary group before importing its local attachments.
+The existing `localGroupId` stores membership. One optional metadata field,
+`localImport`, records file origin independently of embedded GameBanana identity.
+Older metadata keeps its existing interpretation without a migration.
+
+A mixed group uses a downloaded member for its title, artwork, and mod-page link,
+while its first enabled file determines load position. Its picker keeps the normal
+GameBanana UI, with local detach controls only on imported rows. Local gallery,
+rename, and NSFW header controls remain exclusive to fully local groups. Each
+file retains its own provenance, categories, and heroes. Downloads of additional
+original files and replacements retain mixed-group membership. Custom attachments
+are preserved during parent updates and sibling auto-disabling.
+
 ## Installed hero detection
 
-Mod-section skin ownership comes from its category ancestry. Installed Sound, Wip, and HUD files use the same local detector, which can return several supported heroes. Recognize HUD descendants through the cached Mod category path, with saved-label fallback offline:
+Mod-section skin ownership comes from its category ancestry. Skins assigned directly to Skins without a hero category use the textual steps below, skipping VPK asset inspection. This runs when downloading or updating them and during installed classification, using each file's own original metadata. Explicit hero categories and manual assignments take precedence. Installed Sound, Wip, and HUD files use the same local detector, which can return several supported heroes. Recognize HUD descendants through the cached Mod category path, with saved-label fallback offline:
 
 1. Inspect recognized asset paths inside that file's VPK. Resolve sound and model codenames through their existing namespaces and supported-hero mappings; NPC and unsupported hero tokens do not count.
 2. If any supported heroes are found, use that complete set and skip text matching.

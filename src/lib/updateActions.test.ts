@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
+
 import { decideFileDownload, modUpdateGroup, replaceableFilesFor, resolveUpdateRun, summarizeUpdateScope } from './updateActions';
 import { classifyModFiles, type InstalledUpdateEntry, type UpdateFileRow } from './updateFileMatch';
 import snapshot from './__fixtures__/gamebanana/files-2026-10-02.json';
+
+it('does not include custom attachments in their parent submission update', () => {
+  const normal = { gameBananaId: 7, localGroupId: 'mixed', localImport: false };
+  const local = { gameBananaId: 7, localGroupId: 'mixed', localImport: true };
+  expect(modUpdateGroup([normal, local], 7)).toEqual([normal]);
+});
 
 const rowsOf = (modId: number): UpdateFileRow[] => (snapshot as Record<string, UpdateFileRow[]>)[String(modId)];
 

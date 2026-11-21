@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 
 /** Wrapper treatment shared by every Installed grid item, sortable or not. */
-export function entryCardShell(isList: boolean): { className: string; style: CSSProperties } {
+export function entryCardShell(): { className: string; style: CSSProperties } {
   return {
     // Windowing bounds the mounted cards. Keep their natural layout available
     // even in overscan: content-visibility placeholders would be measured as
@@ -13,7 +13,7 @@ export function entryCardShell(isList: boolean): { className: string; style: CSS
     // section the scroller "helpfully" followed it thousands of pixels up.
     // Excluding cards leaves the grid container as the anchor, which never
     // moves on a reorder, so the view stays put through pin / unpin / delete.
-    className: `installed-entry-shell flex flex-col [overflow-anchor:none] ${isList ? '' : 'installed-entry-shell-grid'}`,
+    className: 'installed-entry-shell installed-entry-shell-grid flex flex-col [overflow-anchor:none]',
     style: {
       position: 'relative',
     },

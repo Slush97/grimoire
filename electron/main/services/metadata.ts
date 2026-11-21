@@ -29,20 +29,21 @@ export interface ModMetadata {
     variantLabel?: string;  // User-provided label to disambiguate variants of the same mod
     fileDescription?: string;  // GameBanana file "header" (_sDescription) — author's per-file label, used as fallback when the user hasn't named the variant
     sourceFileName?: string;   // Original GameBanana filename stem (e.g. "galaxy_rem_gold") — used as a label fallback when the author didn't set a file header
-    /** Opaque id linking several locally imported VPKs as variants of one mod.
-     *  The local analogue of gameBananaId for GROUPING ONLY: it carries no
-     *  provenance, names no upstream submission, and is meaningless outside
-     *  this install (it is a randomUUID minted at import time). Undefined for
-     *  GameBanana mods (they group by gameBananaId) and for standalone local
-     *  imports. The sidecar is merge-on-write, so no migration is needed. */
+    /** User-defined variant group. Downloaded and imported members retain their
+     *  own identity; localImport distinguishes origin inside mixed groups. */
     localGroupId?: string;
+    /** Import origin, independent of embedded GameBanana identity. Legacy entries infer it. */
+    localImport?: boolean;
     /** Explicit hero assignment or a preserved legacy local identity.
      *  New automatic results are payload-specific and live in heroDetection. */
     lockerHero?: string;
+    tagOverrides?: import('../../../src/types/mod').ModTagOverrides;
     /** Provenance for lockerHero. Missing values are legacy inferred tags. */
     lockerHeroSource?: import('../../../src/types/mod').LockerHeroSource;
     /** Fingerprinted Sound, WiP, HUD, or conservative local-file hero detection. */
     heroDetection?: import('../../../src/types/mod').InstalledHeroDetection;
+    propDetection?: import('../../../src/types/mod').InstalledPropDetection;
+    bodyModelDetection?: import('../../../src/types/mod').InstalledBodyModelDetection;
     /** Legacy local inference marker, retained with existing local metadata. */
     lockerHeroVpkChecked?: boolean;
     /** Preserved local General classification or an explicit manual override.
@@ -191,6 +192,7 @@ export function hasModIdentity(meta: ModMetadata): boolean {
         (typeof meta.modName === 'string' && meta.modName.trim().length > 0) ||
         meta.lockerHeroSource === 'manual' ||
         meta.globalTypeSource === 'manual' ||
+        meta.tagOverrides !== undefined ||
         meta.merged !== undefined ||
         meta.forgeInstall !== undefined ||
         meta.lockerCosmetics !== undefined ||

@@ -224,13 +224,11 @@ async function migrateLockerImagePreferences(
 // Browse-page UI state. Kept in the store (not local component state) so it
 // survives navigation away from /browse and back — user complaint: search
 // query, view mode, and filters all reset when switching pages.
-export type BrowseLayout = 'grid' | 'list';
 export type { BrowseSortOption } from '../lib/browseSections';
 
 export type BrowseTimeRange = 'all' | 'today' | 'week' | 'month' | 'custom';
 export interface BrowseUiState {
   search: string;
-  layout: BrowseLayout;
   sort: BrowseSortOption;
   section: string;
   selectedSections: BrowseSections;
@@ -246,6 +244,8 @@ export interface BrowseUiState {
   // doesn't resolve to any known hero" (item sounds, UI, music, etc.).
   // For Mod section it collapses to 'all' since every Skin lives under a hero.
   heroCategoryId: number | 'all' | 'none';
+  // Matching preference, independent of active filters and Clear all.
+  extendedHeroMatching: boolean;
   categoryId: number | 'all';
   // Category ids belong to their section. Remember them for this session only.
   categoryIdsBySection: Partial<Record<string, number | 'all'>>;
@@ -271,26 +271,9 @@ export interface BrowseArtistRef {
 // layout + sort behave like preferences. Cache them in localStorage so they
 // survive app restarts. The rest of BrowseUiState is session-only: search
 // queries and filters shouldn't follow across launches.
-const LAYOUT_KEY = 'browseLayout';
 const SORT_KEY = 'browseSort';
 const SOUND_VOLUME_KEY = 'grimoire:sound-preview-volume';
-// Pre-slider key holding 'grid' | 'compact' | 'dense' | 'list'. Read once for
-// migration so existing users keep a comparable layout and card size.
-const LEGACY_VIEW_MODE_KEY = 'browseViewMode';
-
 const SORT_OPTIONS: BrowseSortOption[] = ['default', 'popular', 'recent', 'updated', 'views', 'name'];
-
-function readPersistedLayout(): BrowseLayout {
-  try {
-    const stored = localStorage.getItem(LAYOUT_KEY);
-    if (stored === 'grid' || stored === 'list') return stored;
-    // Migrate from the old four-mode key: only 'list' carried structure.
-    if (localStorage.getItem(LEGACY_VIEW_MODE_KEY) === 'list') return 'list';
-  } catch {
-    // localStorage may be unavailable (e.g. SSR, restricted contexts).
-  }
-  return 'grid';
-}
 
 function readPersistedSort(): BrowseSortOption {
   try {
@@ -319,7 +302,6 @@ function readPersistedSoundVolume(): number {
 
 const DEFAULT_BROWSE_UI: BrowseUiState = {
   search: '',
-  layout: readPersistedLayout(),
   sort: readPersistedSort(),
   section: 'Mod',
   selectedSections: ['Mod'],
@@ -328,6 +310,7 @@ const DEFAULT_BROWSE_UI: BrowseUiState = {
   addedTo: '',
   onlyNsfw: false,
   heroCategoryId: 'all',
+  extendedHeroMatching: false,
   categoryId: 'all',
   categoryIdsBySection: {},
   soundNoHero: false,
@@ -496,7 +479,6 @@ interface AppState {
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
   reorderMods: (orderedIds: string[]) => Promise<void>;
-  reorderPriorityMods: (orderedIds: string[]) => Promise<void>;
   captureProfileShuffle: () => ProfileShuffle | undefined;
   restoreProfileShuffle: (shuffle: unknown) => void;
   setShuffleOnLaunch: (enabled: boolean) => void;
@@ -519,6 +501,8 @@ interface AppState {
   /** Drop the solo-restore snapshot without touching enablement. */
   clearSoloRestore: () => void;
   editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
+  setLocalModGallery: (modId: string, images: string[]) => Promise<void>;
+  setModsNsfw: (modIds: string[], nsfw: boolean) => Promise<void>;
   /** Group local mods as variants of one mod, or take them back out. Resolves
    *  with the group they now share (null after a clear). */
   setLocalVariantGroup: (
@@ -527,9 +511,7 @@ interface AppState {
   ) => Promise<string | null>;
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
-  /** Mark a mod Global (priority root) or clear it. Moves the VPK, so it goes
-   *  through the toggle queue like every other folder mutation. */
-  setModPriorityFolder: (modId: string, priority: boolean) => Promise<void>;
+  setModTags: (modId: string, tags: Mod['tagOverrides'] | null) => Promise<void>;
   setVariantLabel: (modId: string, label: string) => Promise<void>;
   /** Batch local import. Resolves with one result per source, in request order. */
   importCustomMods: (items: ImportCustomModArgs[]) => Promise<ImportCustomModResult[]>;
@@ -1145,20 +1127,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  reorderPriorityMods: async (orderedIds: string[]) => {
-    try {
-      const updated = await api.reorderPriorityMods(orderedIds);
-      invalidateModsReads();
-      set((state) => {
-        const mods = reconcileMods(state.mods, updated);
-        return mods === state.mods ? state : { mods };
-      });
-    } catch (err) {
-      if (!isGameRunningModLockError(err)) set({ modsError: String(err) });
-      get().loadMods({ force: true });
-    }
-  },
-
   // An empty pool with shuffle off is "never used shuffle", not a choice worth
   // saving: applying that snapshot later would wipe a pool built since, with no
   // undo. Returning undefined stores nothing, so the profile acts like a legacy
@@ -1177,8 +1145,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const result = profileShuffleSchema.safeParse(value);
     if (!result.success) return;
     const shuffle = result.data;
-    // A snapshot can predate a mod being pinned Global. Same rule as
-    // setModPriorityFolder: a pinned mod has no opt-in, so its key must not
+    // A snapshot can include legacy priority-root mods. Those mods have no
+    // shuffle opt-in, so their keys must not
     // come back through here.
     const { mods } = get();
     let included = new Set(shuffle.included);
@@ -1346,28 +1314,64 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearSoloRestore: () => set({ soloRestore: null }),
 
   editLocalMod: async (modId: string, args: EditLocalModArgs) => {
+    const scope = getInstallationScope(get().settings);
     const updated = await api.editLocalMod(modId, args);
+    if (scope !== getInstallationScope(get().settings)) return;
     // Renaming a member of a local variant group renames the whole group in
     // main, so mirror that here instead of leaving the siblings on their old
     // name until the next scan (the group card title reads from whichever
     // member is primary).
     const groupId = updated.localGroupId;
+    const sharedArtwork = updated.hasLocalGallery || get().mods.find(mod => mod.id === modId)?.hasLocalGallery;
     invalidateModsReads();
     set({
       mods: get().mods.map((m) => {
         if (m.id === modId) return updated;
-        if (!groupId || m.localGroupId !== groupId || m.name === updated.name) return m;
-        return { ...m, name: updated.name };
+        if (!groupId || m.localGroupId !== groupId) return m;
+        return { ...m, name: updated.name, nsfw: updated.nsfw, ...(sharedArtwork ? {
+          thumbnailUrl: updated.thumbnailUrl, hasLocalGallery: updated.hasLocalGallery,
+        } : {}) };
       }),
     });
   },
 
+  setModsNsfw: async (modIds, nsfw) => {
+    const scope = getInstallationScope(get().settings);
+    const mods = await api.setModsNsfw(modIds, nsfw);
+    if (scope !== getInstallationScope(get().settings)) return;
+    invalidateModsReads();
+    set({ mods });
+  },
+
+  setLocalModGallery: async (modId, images) => {
+    const target = get().mods.find(mod => mod.id === modId);
+    if (!target) throw new Error('Local mod not found');
+    const scope = getInstallationScope(get().settings);
+    const groupId = target.localGroupId ?? await get().setLocalVariantGroup([modId], { mode: 'mint' });
+    if (!groupId || scope !== getInstallationScope(get().settings)) throw new Error('The active installation changed');
+    let mods: Mod[];
+    try { mods = await api.setLocalModGallery(groupId, images); }
+    catch (error) {
+      const members = get().mods.filter(mod => mod.localGroupId === groupId);
+      if (!target.localGroupId && scope === getInstallationScope(get().settings)
+        && members.length === 1 && members[0].id === modId && !members[0].hasLocalGallery) {
+        await get().setLocalVariantGroup([modId], { mode: 'clear' }).catch(rollbackError =>
+          console.error('Failed to undo artwork grouping', rollbackError));
+      }
+      throw error;
+    }
+    if (scope !== getInstallationScope(get().settings)) return;
+    invalidateModsReads();
+    set({ mods });
+  },
+
   setLocalVariantGroup: async (modIds, target) => {
+    const tagScope = getInstallationScope(get().settings);
     try {
       const before = get().mods;
-      const tagScope = getInstallationScope(get().settings);
       const { groupId, mods } = await api.setLocalVariantGroup(modIds, target);
-      if (tagScope && tagScope === getInstallationScope(get().settings)) useInstalledTagsStore.getState().regroup(tagScope, before, mods);
+      if (tagScope !== getInstallationScope(get().settings)) return groupId;
+      if (tagScope) useInstalledTagsStore.getState().regroup(tagScope, before, mods);
       const plans = stablePreferencePlans(before, mods);
       const migrated = migrateStoredStableKeyPreferences(
         plans.preferencePlan,
@@ -1384,6 +1388,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       try {
         await migrateLockerImagePreferences(lockerImagePlan(before, mods));
+        if (tagScope !== getInstallationScope(get().settings)) return groupId;
         // The maps may already be loaded when grouping is invoked from Locker.
         // Refreshing is cheap compared with the image copies and keeps all
         // mounted surfaces on the canonical key immediately.
@@ -1402,7 +1407,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return groupId;
     } catch (err) {
-      set({ modsError: String(err) });
+      if (tagScope === getInstallationScope(get().settings)) set({ modsError: String(err) });
       throw err;
     }
   },
@@ -1415,45 +1420,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
+  setModTags: async (modId, tags) => {
+    const updated = await api.setModTags(modId, tags);
+    invalidateModsReads();
+    set({ mods: get().mods.map(mod => mod.id === modId ? updated : mod) });
+  },
+
   setModGlobalType: async (modId: string, globalType: GlobalModType | null) => {
     const updated = await api.setModGlobalType(modId, globalType);
     invalidateModsReads();
     set({
       mods: get().mods.map((m) => (m.id === modId ? updated : m)),
-    });
-  },
-
-  // Marking a mod Global renames its VPK into citadel/grimoire, which changes
-  // its id (ids derive from the filename). Route through enqueueToggle so the
-  // move can't interleave with a Locker/Installed toggle and work off a stale
-  // id, the same hazard documented on the mutation queue in mods.ts.
-  setModPriorityFolder: async (modId: string, priority: boolean) => {
-    await enqueueToggle(async () => {
-      try {
-        const updated = await api.setModPriorityFolder(modId, priority);
-        const mods = get().mods.map((m) => (m.id === modId ? updated : m));
-        invalidateModsReads();
-        // Pinning retires the mod's shuffle opt-in. Its card swaps the toggle
-        // for the always-on pin, so a key left behind would be invisible yet
-        // still counted, and unpinning would put the mod back in the shuffle
-        // without the user asking. Unpinning does not restore it: opting back
-        // in is one click on a control that is visible again.
-        const prunedPool = priority
-          ? prunePoolKeysForMod(get().shuffleIncluded, updated, mods)
-          : null;
-        if (prunedPool) {
-          writeStoredShuffleIncluded(prunedPool);
-          set({ mods, shuffleIncluded: prunedPool });
-        } else {
-          set({ mods });
-        }
-      } catch (err) {
-        // Reconcile any partial batch progress, then preserve the rejection for
-        // the initiating surface. The picker and card menus own contextual
-        // errors; swallowing here made them close as if a failed move worked.
-        await get().loadMods({ silent: true, force: true });
-        throw err;
-      }
     });
   },
 
@@ -1470,12 +1447,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   importCustomMods: async (items) => {
+    const tagScope = getInstallationScope(get().settings);
     try {
-      const { mods, results } = await api.importCustomMods(items);
+      const { mods, results } = await api.importCustomMods(items.map(({ customTagIds: _tags, ...item }) => item));
       // Same generation bump as the single import: whatever landed must not be
       // overwritten by a scan taken before the copies finished.
+      const sameInstallation = tagScope === getInstallationScope(get().settings);
+      if (!sameInstallation) return results;
       invalidateModsReads();
       set({ mods });
+      if (tagScope && sameInstallation) {
+        results.forEach((result, index) => {
+          if (!result.ok) return;
+          const imported = mods.filter(mod => result.importedModIds?.includes(mod.id));
+          for (const tagId of items[index]?.customTagIds ?? []) {
+            useInstalledTagsStore.getState().setForMods(tagScope, tagId, imported, true);
+          }
+        });
+      }
       // Per-source failures come back in `results`, not as a throw, so the cap
       // check runs over them. The dialog shows each failed row inline; the
       // notice is what explains the cap itself (which no row-level message can).
@@ -1485,8 +1474,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       return results;
     } catch (err) {
       // A throw here means the whole batch never ran (no game path, empty list).
-      if (isEnableCapError(err)) { set({ modsNotice: enableCapNotice() }); }
-      else { set({ modsError: String(err) }); }
+      if (tagScope === getInstallationScope(get().settings)) {
+        if (isEnableCapError(err)) set({ modsNotice: enableCapNotice() });
+        else set({ modsError: String(err) });
+      }
       throw err;
     }
   },
@@ -1579,9 +1570,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set({ browseUi: next });
     try {
-      if (partial.layout !== undefined) {
-        localStorage.setItem(LAYOUT_KEY, partial.layout);
-      }
       if (partial.sort !== undefined) {
         localStorage.setItem(SORT_KEY, partial.sort);
       }

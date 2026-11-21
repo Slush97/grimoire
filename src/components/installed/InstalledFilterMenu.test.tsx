@@ -12,7 +12,7 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 describe('Installed filter menu', () => {
   let host: HTMLDivElement;
   let root: Root;
-  const changed = { source: vi.fn(), status: vi.fn(), hero: vi.fn(), sort: vi.fn(), view: vi.fn(), reset: vi.fn(), manage: vi.fn() };
+  const changed = { source: vi.fn(), status: vi.fn(), hero: vi.fn(), sort: vi.fn(), view: vi.fn(), reset: vi.fn(), manage: vi.fn(), tagOrder: vi.fn(), resetTagOrder: vi.fn() };
   const heroes = ['Abrams', 'Haze', 'Baba', 'Bebop', 'Calico', 'Drifter', 'Dynamo', 'Ivy', 'Paradox'];
   function Harness({ emptyLists = false, selectedHeroes = [] }: { emptyLists?: boolean; selectedHeroes?: string[] } = {}) {
     const [sort, setSort] = useState<InstalledSortMode>('priority');
@@ -33,6 +33,7 @@ describe('Installed filter menu', () => {
       onHeroChange={next => { changed.hero(next); setHero(next); }}
       tagFilter={tags} tagOptions={[{ key: 'hud', label: 'HUD', count: 3 }]} onTagChange={setTags}
       excludedTagFilter={excluded} onExcludedTagChange={setExcluded} onCreateTag={vi.fn()} onRenameTag={vi.fn()} onDeleteTag={vi.fn()}
+      tagOrder={['hud']} onTagOrderChange={changed.tagOrder} onResetTagOrder={changed.resetTagOrder}
       listFilter={lists} listOptions={emptyLists ? [] : [{ key: 'empty', label: 'Empty list', count: 0 }]} onListChange={setLists}
       onManageLists={changed.manage}
       active={view !== 'all' || sourceSel.length !== 2 || statusSel.length !== 2 || hero.length > 0 || tags.length > 0 || excluded.length > 0 || lists.length > 0}
@@ -58,6 +59,19 @@ describe('Installed filter menu', () => {
     act(() => trigger().click());
   });
   afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it.each([false, true])('confirms a tag-order reset before applying it (confirm=%s)', async confirm => {
+    await act(async () => panel().querySelector<HTMLButtonElement>('[aria-label="installed.filters.tags"]')!.click());
+    const edit = document.querySelector<HTMLButtonElement>('[aria-label="installed.tags.edit"]')!;
+    await act(async () => edit.click());
+    await act(async () => edit.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    expect(trigger().getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('h2')?.textContent).toBe('installed.tags.resetOrderTitle');
+    expect(changed.resetTagOrder).not.toHaveBeenCalled();
+    await act(async () => button(confirm ? 'common.actions.reset' : 'common.actions.cancel').click());
+    expect(changed.resetTagOrder).toHaveBeenCalledTimes(confirm ? 1 : 0);
+    expect(changed.reset).not.toHaveBeenCalled();
+  });
 
   it('preserves empty Source and Status selections and separates keyboard focus from selection', () => {
     act(() => tabs('source')[0].click());
@@ -140,7 +154,7 @@ describe('Installed filter menu', () => {
     }
   });
 
-  it.each([2, 8, 9])('fits %i selected hero icons into the shared 66px stack', count => {
+  it.each([1, 2, 6, 7])('fits %i selected heroes into a 60px stack with fixed 20px icons', count => {
     act(() => root.unmount());
     root = createRoot(host);
     act(() => root.render(<Harness selectedHeroes={heroes.slice(0, count)} />));
@@ -148,11 +162,17 @@ describe('Installed filter menu', () => {
     const heroTrigger = panel().querySelector<HTMLButtonElement>('[aria-label="browse.filters.filterByHero"]')!;
     const stack = heroTrigger.querySelector<HTMLElement>('[data-hero-stack]')!;
     const images = [...stack.querySelectorAll<HTMLImageElement>('img')];
-    expect(stack.style.width).toBe(`${Math.min(66, count * 22)}px`);
+    expect(stack.style.width).toBe(`${Math.min(60, count * 20)}px`);
+    expect(stack.style.height).toBe('20px');
     expect(stack.title).toBe(heroes.slice(0, count).join(', '));
-    expect(images.filter(image => image.getAttribute('src') !== soulUrn)).toHaveLength(count > 8 ? 7 : count);
-    expect(images.filter(image => image.getAttribute('src') === soulUrn)).toHaveLength(count > 8 ? 1 : 0);
-    expect(heroTrigger.textContent).toContain('installed.filters.heroCount');
+    expect(images.filter(image => image.getAttribute('src') !== soulUrn)).toHaveLength(count > 6 ? 5 : count);
+    expect(images.filter(image => image.getAttribute('src') === soulUrn)).toHaveLength(count > 6 ? 1 : 0);
+    expect(heroTrigger.querySelectorAll('img')).toHaveLength(images.length);
+    for (const image of images) {
+      expect(image.classList.contains('h-5')).toBe(true);
+      expect(image.classList.contains('w-5')).toBe(true);
+    }
+    expect(heroTrigger.textContent).toContain(count === 1 ? heroes[0] : 'installed.filters.heroCount');
   });
 
   it('keeps the outer popover open through portaled hero selection and closes on Escape', () => {

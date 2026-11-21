@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import { heroColorDraftSchema } from '../../lib/effectDraftSchema';
 import { useTranslation } from 'react-i18next';
+import { SegmentedControl } from '../common/ui';
 import {
   Palette,
   Loader2,
@@ -524,20 +525,6 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
 
   const swatchCss = approxSwatch(hue, saturation, brightness);
 
-  const modeBtn = (selected: boolean) =>
-    `flex items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors disabled:cursor-not-allowed ${
-      selected
-        ? 'border border-accent/40 bg-accent/10 text-text-primary'
-        : 'border border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
-    }`;
-
-  const segBtn = (selected: boolean) =>
-    `rounded px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
-      selected
-        ? 'border border-accent/40 bg-accent/10 text-text-primary'
-        : 'border border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
-    }`;
-
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-4 text-xs text-text-secondary">
@@ -560,43 +547,17 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
       <p className="text-xs text-text-secondary">
         {t('locker.colors.intro', { hero: heroName })}
       </p>
-      {mode === 'hue' && <p className="text-xs text-text-secondary">{t('locker.colors.hueHint')}</p>}
 
-      {/* Mode toggle: three looks over the same one-per-hero slot. */}
-      <div className="inline-flex flex-wrap rounded-md border border-border p-0.5 text-xs">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => setMode('hue')}
-          className={modeBtn(mode === 'hue')}
-        >
-          <Palette className="h-3.5 w-3.5" /> {t('locker.colors.modes.singleColor')}
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => setMode('prism')}
-          className={modeBtn(mode === 'prism')}
-        >
-          <Sparkles className="h-3.5 w-3.5" /> {t('locker.colors.modes.rainbow')}
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => setMode('gradient')}
-          className={modeBtn(mode === 'gradient')}
-        >
-          <Blend className="h-3.5 w-3.5" /> {t('locker.colors.modes.gradient')}
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => setMode('trippy')}
-          className={modeBtn(mode === 'trippy')}
-        >
-          <Waves className="h-3.5 w-3.5" /> {t('locker.colors.modes.trippy')}
-        </button>
-      </div>
+      <SegmentedControl variant="joined" size="sm" value={mode} onChange={setMode} disabled={busy}
+        label={t('locker.hero.effects')} options={[
+          { value: 'hue', label: <><Palette className="h-3.5 w-3.5" />{t('locker.colors.modes.singleColor')}</> },
+          { value: 'prism', label: <><Sparkles className="h-3.5 w-3.5" />{t('locker.colors.modes.rainbow')}</> },
+          { value: 'gradient', label: <><Blend className="h-3.5 w-3.5" />{t('locker.colors.modes.gradient')}</> },
+          { value: 'trippy', label: <><Waves className="h-3.5 w-3.5" />{t('locker.colors.modes.trippy')}</> },
+        ]} />
+
+      <div key={mode} className="space-y-3 animate-slide-in-left">
+      {mode === 'hue' && <p className="text-xs text-text-secondary">{t('locker.colors.hueHint')}</p>}
 
       {mode !== 'trippy' && (
       <>
@@ -913,19 +874,8 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
             <span className="text-2xs font-medium text-text-secondary">
               {t('locker.colors.animation')}
             </span>
-            <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
-              {TRIPPY_ANIMATION_STYLES.map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setTrippyAnimStyle(a)}
-                  className={segBtn(trippyAnimStyle === a)}
-                >
-                  {t(TRIPPY_ANIMATION_LABEL_KEYS[a])}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl variant="joined" size="sm" value={trippyAnimStyle} onChange={setTrippyAnimStyle} disabled={busy}
+              label={t('locker.colors.animation')} options={TRIPPY_ANIMATION_STYLES.map(value => ({ value, label: t(TRIPPY_ANIMATION_LABEL_KEYS[value]) }))} />
           </div>
           {trippyAnimStyle !== 'off' && (
             <p className="text-2xs text-text-secondary/70">
@@ -958,23 +908,10 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
             <span className="text-2xs font-medium text-text-secondary">
               {t('locker.colors.paint')}
             </span>
-            <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
-              {(['all', 'abilities', 'weapons'] as const).map((tgt) => (
-                <button
-                  key={tgt}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setTrippyTargets(tgt)}
-                  className={segBtn(trippyTargets === tgt)}
-                >
-                  {tgt === 'all'
-                    ? t('locker.colors.targets.all')
-                    : tgt === 'abilities'
-                      ? t('locker.colors.targets.abilities')
-                      : t('locker.colors.targets.weapons')}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl variant="joined" size="sm" value={trippyTargets} onChange={setTrippyTargets} disabled={busy}
+              label={t('locker.colors.paint')} options={(['all', 'abilities', 'weapons'] as const).map(value => ({ value,
+                label: t(value === 'all' ? 'locker.colors.targets.all' : value === 'abilities' ? 'locker.colors.targets.abilities' : 'locker.colors.targets.weapons'),
+              }))} />
           </div>
 
           <p className="text-2xs text-text-secondary/80">
@@ -1063,6 +1000,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           </span>
         </div>
       )}
+      </div>
     </div>
   );
 }

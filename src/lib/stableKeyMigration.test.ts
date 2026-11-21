@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Mod } from '../types/mod';
 import { DISABLED_FAVORITES_KEY, DISABLED_ORDER_KEY, modPreferenceKey } from './disabledModPrefs';
-import { LOCKER_CATEGORIES_KEY } from './lockerCategories';
 import {
   SHUFFLE_INCLUDED_KEY,
   SHUFFLE_VARIANT_KEY,
@@ -222,7 +221,6 @@ describe('persisted preference migration', () => {
       [DISABLED_FAVORITES_KEY]: ['sha256:a'],
       [DISABLED_ORDER_KEY]: ['x', 'sha256:b', 'sha256:a'],
       [MOD_LISTS_KEY]: [{ id: 'skins', name: 'Skins', keys: ['sha256:a', 'sha256:b'] }],
-      [LOCKER_CATEGORIES_KEY]: [{ id: 'ivy', name: 'Ivy', keys: ['sha256:b'] }],
       [SHUFFLE_INCLUDED_KEY]: ['sha256:a'],
       [SHUFFLE_VARIANT_KEY]: { 'sha256:a': 'random', 'sha256:b': { fileId: 2 } },
     });
@@ -244,33 +242,18 @@ describe('persisted preference migration', () => {
     expect(JSON.parse(storage.get(DISABLED_FAVORITES_KEY) ?? 'null')).toEqual(['localgroup:g']);
     expect(JSON.parse(storage.get(DISABLED_ORDER_KEY) ?? 'null')).toEqual(['x', 'localgroup:g']);
     expect(JSON.parse(storage.get(MOD_LISTS_KEY) ?? 'null')[0].keys).toEqual(['localgroup:g']);
-    expect(JSON.parse(storage.get(LOCKER_CATEGORIES_KEY) ?? 'null')[0].keys).toEqual([
-      'localgroup:g',
-    ]);
     expect(JSON.parse(storage.get(SHUFFLE_INCLUDED_KEY) ?? 'null')).toEqual(['localgroup:g']);
     // New primary `a` wins the collision; b's policy cannot unexpectedly
     // resurrect if that file is detached again later.
     expect(JSON.parse(storage.get(SHUFFLE_VARIANT_KEY) ?? 'null')).toEqual({
       'localgroup:g': 'random',
     });
-    expect(dispatchEvent).toHaveBeenCalledOnce();
-    expect(dispatchEvent.mock.calls[0][0].type).toBe(STABLE_KEY_PREFERENCES_MIGRATED_EVENT);
-    expect(dispatchEvent.mock.calls[0][0].detail.disabledFavorites).toEqual(
+    const migrations = dispatchEvent.mock.calls.map(([event]) => event)
+      .filter(event => event.type === STABLE_KEY_PREFERENCES_MIGRATED_EVENT);
+    expect(migrations).toHaveLength(1);
+    expect(migrations[0].detail.disabledFavorites).toEqual(
       new Set(['localgroup:g'])
     );
-    expect(dispatchEvent.mock.calls[0][0].detail.lockerCategories).toEqual([
-      { id: 'ivy', name: 'Ivy', keys: ['localgroup:g'] },
-    ]);
-
-    const eventCategories = dispatchEvent.mock.calls[0][0].detail.lockerCategories;
-    eventCategories[0].keys.push('mutated-by-listener');
-    expect(migrated.detail.lockerCategories[0].keys).toEqual([
-      'localgroup:g',
-      'mutated-by-listener',
-    ]);
-    expect(JSON.parse(storage.get(LOCKER_CATEGORIES_KEY) ?? 'null')[0].keys).toEqual([
-      'localgroup:g',
-    ]);
   });
 
   it('does not rewrite storage or dispatch when only identity edges are present', () => {

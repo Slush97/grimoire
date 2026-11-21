@@ -2,15 +2,9 @@
   "src/components/AudioPreviewPlayer.tsx": {
     "em-dash": 2
   },
-  "src/components/DownloadQueueIndicator.tsx": {
-    "raw-palette": 2
-  },
   "src/components/ImportCollectionModal.tsx": {
     "raw-palette": 2,
     "em-dash": 4
-  },
-  "src/components/ImportCustomModsModal.tsx": {
-    "raw-palette": 3
   },
   "src/components/Layout.tsx": {
     "raw-palette": 1,
@@ -47,7 +41,7 @@
     "raw-palette": 4
   },
   "src/components/browse/BrowseModCard.tsx": {
-    "em-dash": 3
+    "em-dash": 2
   },
   "src/components/browse/cardUtils.ts": {
     "em-dash": 1
@@ -191,15 +185,14 @@
     "em-dash": 1
   },
   "src/pages/Installed.tsx": {
-    "em-dash": 7
+    "em-dash": 6
   },
   "src/pages/Locker.tsx": {
     "raw-hex": 1,
-    "raw-palette": 11,
-    "em-dash": 3
+    "raw-palette": 4,
+    "em-dash": 2
   },
   "src/pages/LockerHero.tsx": {
-    "raw-palette": 3,
     "em-dash": 2
   },
   "src/pages/Profiles.tsx": {

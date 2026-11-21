@@ -104,7 +104,7 @@ describe('Installed card windowing', () => {
     expect(host.querySelectorAll('[data-heavy]').length).toBeLessThan(50);
   });
 
-  it.each(['grid', 'compact', 'list'] as const)('waits for positive layout width before constructing %s cards', (viewMode) => {
+  it.each(['grid', 'compact'] as const)('waits for positive layout width before constructing %s cards', (viewMode) => {
     vi.mocked(Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')!.get!).mockReturnValue(0);
     const renderEntry = vi.fn((entry: ModEntry) => <button data-heavy>{entry.key}</button>);
     render({ viewMode, renderEntry });
@@ -122,11 +122,11 @@ describe('Installed card windowing', () => {
     expect(host.querySelectorAll('[data-heavy]').length).toBeLessThan(50);
   });
 
-  it.each(['compact', 'list'] as const)('keeps %s cards bounded and uses the matching column geometry', (viewMode) => {
-    render({ viewMode, gridClassName: viewMode === 'list' ? 'space-y-1.5' : 'grid gap-3' });
-    expect(host.querySelectorAll('[data-installed-window-row="0"]')).toHaveLength(viewMode === 'list' ? 1 : 4);
+  it.each(['compact', 'grid'] as const)('keeps %s cards bounded and uses the matching column geometry', (viewMode) => {
+    render({ viewMode, gridClassName: 'grid gap-3' });
+    expect(host.querySelectorAll('[data-installed-window-row="0"]')).toHaveLength(4);
     scroll(18000);
-    expect(host.querySelectorAll('[data-heavy]').length).toBeLessThan(viewMode === 'list' ? 20 : 60);
+    expect(host.querySelectorAll('[data-heavy]').length).toBeLessThan(60);
   });
 
   it('recalculates auto-fill columns after the grid width changes', () => {

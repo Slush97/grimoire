@@ -18,9 +18,16 @@ export function installedSkinTarget(mod: Mod, context: InstalledTaxonomyContext 
   return { heroName, skinSources: [{ metaKey: mod.metaKey, priority: mod.priority }] };
 }
 
+/** The preview shows the hero's body, so the file itself must change it. Hero tags alone also
+ *  cover HUD, sound and effect files. A saved overlay is previewed through its source skins. */
+export function installedHeroPreviewTarget(mod: Mod, context: InstalledTaxonomyContext = {}): SkinEditSource | null {
+  const target = installedSkinTarget(mod, context);
+  return target && (mod.skinEdit || mod.bodyModelHeroes?.includes(target.heroName)) ? target : null;
+}
+
 /** A saved material overlay is only meaningful together with its original skins. */
 export function installedSkinPreviewTarget(mod: Mod, mods: readonly Mod[], context: InstalledTaxonomyContext = {}): SkinEditSource | null {
-  const target = installedSkinTarget(mod, context);
+  const target = installedHeroPreviewTarget(mod, context);
   if (!target) return null;
   const stack = new Map<string, Mod>();
   const visiting = new Set<string>();

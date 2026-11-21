@@ -1,6 +1,6 @@
 /**
- * Persisted per-entry preferences for the Installed page: the favorite (star)
- * set and the manual drag order of the disabled section.
+ * Persisted per-entry favorites shared by Installed and Locker, and the manual
+ * drag order of Installed's disabled section.
  *
  * A favorite is settable from either section, so these keys must identify an
  * entry regardless of whether it is currently enabled or disabled. They do:
@@ -11,10 +11,18 @@
  * The localStorage key strings are frozen: changing one orphans every
  * preference already saved by a shipped build.
  */
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Mod } from '../types/mod';
 
 export const DISABLED_FAVORITES_KEY = 'installedDisabledFavorites';
+export const MOD_FAVORITES_CHANGED_EVENT = 'grimoire:mod-favorites-changed';
 export const DISABLED_ORDER_KEY = 'installedDisabledOrder';
+
+declare global {
+  interface WindowEventMap {
+    'grimoire:mod-favorites-changed': CustomEvent<readonly string[]>;
+  }
+}
 
 type DisabledModIdentity = Pick<Mod, 'id' | 'gameBananaId' | 'sha256' | 'localGroupId'>;
 
@@ -85,7 +93,11 @@ export function readStoredDisabledFavorites(): Set<string> {
 }
 
 export function writeStoredDisabledFavorites(favorites: Iterable<string>): void {
-  writeStoredStringArray(DISABLED_FAVORITES_KEY, favorites);
+  const keys = Array.from(new Set(favorites));
+  writeStoredStringArray(DISABLED_FAVORITES_KEY, keys);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(MOD_FAVORITES_CHANGED_EVENT, { detail: keys }));
+  }
 }
 
 export function readStoredDisabledOrder(): string[] {
@@ -121,4 +133,35 @@ export function createDisabledEntryComparator<T>(options: {
 
     return fallback(left, right);
   };
+}
+
+/** Shared Installed/Locker favorites, including stable-key grouping migrations. */
+export function useModFavorites() {
+  const [favorites, setFavorites] = useState(readStoredDisabledFavorites);
+  const current = useRef(favorites);
+  const update = useCallback((next: Set<string>) => {
+    current.current = next;
+    setFavorites(next);
+  }, []);
+
+  useEffect(() => {
+    const onChange = (event: WindowEventMap[typeof MOD_FAVORITES_CHANGED_EVENT]) => update(new Set(event.detail));
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === DISABLED_FAVORITES_KEY || event.key === null) update(readStoredDisabledFavorites());
+    };
+    window.addEventListener(MOD_FAVORITES_CHANGED_EVENT, onChange);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(MOD_FAVORITES_CHANGED_EVENT, onChange);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [update]);
+
+  const toggleFavorite = useCallback((key: string) => {
+    const next = toggleFavoriteKey(current.current, key);
+    update(next);
+    writeStoredDisabledFavorites(next);
+  }, [update]);
+
+  return { favorites, toggleFavorite };
 }

@@ -1,3 +1,4 @@
+import { isLocalMod, localVariantOriginIneligibility } from '../../../src/lib/localVariantEligibility';
 import type { LocalVariantGroupTarget } from '../../../src/types/electron';
 import type { GlobalModType, LockerHeroSource } from '../../../src/types/mod';
 
@@ -8,7 +9,7 @@ import type { GlobalModType, LockerHeroSource } from '../../../src/types/mod';
  * of) one local variant group?
  *
  * Kept pure and free of fs/electron so the rules that are easy to get wrong
- * (the GameBanana rejection, name unification, orphan pruning) are unit
+ * (origin preservation, name unification, orphan pruning) are unit
  * tested instead of only reachable through a real install.
  */
 
@@ -19,9 +20,11 @@ export interface LocalVariantGroupMember {
     metaKey: string;
     /** Current display name (metadata.modName, or the scan's fallback). */
     name: string;
-    /** Positive only for GameBanana mods, which group by submission id. */
+    /** Embedded or associated GameBanana identity, independent of file origin. */
     gameBananaId?: number;
+    sourceSection?: string;
     localGroupId?: string;
+    localImport?: boolean;
     lockerHero?: string;
     lockerHeroSource?: LockerHeroSource;
     globalType?: GlobalModType | null;
@@ -45,6 +48,7 @@ export interface LocalVariantGroupWrite {
     /** undefined clears the membership: setModMetadata merge-writes and the
      *  JSON encoder drops undefined values, so the key disappears. */
     localGroupId: string | undefined;
+    localImport?: boolean;
     /** Present only when this member has to adopt the group's name. */
     modName?: string;
 }
@@ -53,18 +57,6 @@ export interface LocalVariantGroupPlan {
     /** The group the listed mods now belong to, or null after a clear. */
     groupId: string | null;
     writes: LocalVariantGroupWrite[];
-}
-
-/** A normal GameBanana install groups by submission id. An explicitly-local
- * group is different: re-import adoption may legitimately discover GB
- * provenance after its localGroupId was minted, and that must not make the
- * group impossible to edit or clear. */
-function isGameBananaOnlyMod(member: LocalVariantGroupMember): boolean {
-    return (
-        typeof member.gameBananaId === 'number' &&
-        member.gameBananaId > 0 &&
-        !currentGroupOf(member)
-    );
 }
 
 function currentGroupOf(member: LocalVariantGroupMember): string | undefined {
@@ -94,9 +86,8 @@ export function resolveLocalVariantGroupProfile(
  * Plan the sidecar writes for one grouping request.
  *
  * Rules, in order:
- *  1. Every listed id must exist. Standalone GameBanana installs and merged
- *     outputs are ineligible; a local-group member that later adopted GB
- *     provenance remains eligible so the explicit group can be edited.
+ *  1. Every listed id must exist. Merged outputs are ineligible. Grouping
+ *     preserves each member's import origin and GameBanana identity.
  *  2. Grouping unifies `modName` across the group, because the card title is
  *     the primary's name and the primary changes as files are toggled. An
  *     existing member of the joined group owns the name; otherwise the first
@@ -126,12 +117,6 @@ export function planLocalVariantGroup(
         if (!member) throw new Error(`Mod not found: ${id}`);
         return member;
     });
-    const offender = targets.find(isGameBananaOnlyMod);
-    if (offender) {
-        throw new Error(
-            `Only local mods can be grouped as variants (${offender.name} came from GameBanana)`
-        );
-    }
     const merged = targets.find((member) => member.merged);
     if (merged) {
         throw new Error(`Merged outputs cannot be grouped as variants (${merged.name})`);
@@ -150,10 +135,6 @@ export function planLocalVariantGroup(
 
     const targetIds = new Set(targets.map((member) => member.id));
     // Rule 2: whose name the group takes.
-    const groupName = groupId
-        ? all.find((member) => !targetIds.has(member.id) && currentGroupOf(member) === groupId)
-              ?.name ?? targets[0].name
-        : undefined;
     // Existing members establish the shared priority-folder placement.
     const existingGroupMembers = groupId
         ? all.filter(
@@ -161,7 +142,18 @@ export function planLocalVariantGroup(
           )
         : [];
     const groupedMembers = groupId ? [...existingGroupMembers, ...targets] : [];
+    if (groupId) {
+        const reason = localVariantOriginIneligibility(groupedMembers);
+        if (reason === 'gamebanana') throw new Error('Cannot group different GameBanana submissions as variants');
+        // Add variant seeds the parent group before importing its local files.
+        // Downloaded-only selections are disabled in bulk Group, but this internal
+        // setup step must remain available for variants of one submission.
+    }
     if (groupId) resolveLocalVariantGroupProfile(groupedMembers);
+    const remoteOwner = groupedMembers.filter(member => !isLocalMod(member))
+        .sort((a, b) => a.gameBananaId! - b.gameBananaId!)[0];
+    const groupName = groupId ? remoteOwner?.name ?? existingGroupMembers[0]?.name ?? targets[0].name : undefined;
+
 
     const writes: LocalVariantGroupWrite[] = [];
     for (const member of groupId ? groupedMembers : targets) {
@@ -172,6 +164,7 @@ export function planLocalVariantGroup(
             id: member.id,
             metaKey: member.metaKey,
             localGroupId: groupId ?? undefined,
+            ...(groupId && (remoteOwner || member.localImport !== undefined) ? { localImport: isLocalMod(member) } : {}),
             modName: nameChanged ? groupName : undefined,
         });
     }
