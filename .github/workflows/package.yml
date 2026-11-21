@@ -21,7 +21,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # Pin to ubuntu-24.04 instead of ubuntu-latest. GitHub moved
+          # ubuntu-latest to ubuntu-26.04 with amd64v3 enabled, which caused
+          # GCC to emit AVX2/BMI2 instructions in better_sqlite3.node and
+          # crash with SIGILL on older x86-64 CPUs (#574).
+          - os: ubuntu-24.04
             platform: linux
           - os: windows-latest
             platform: win
@@ -111,6 +115,10 @@ jobs:
             )
           fi
           if [ "${{ matrix.platform }}" = "linux" ]; then
+            # Force baseline x86-64 codegen for native addons (better-sqlite3)
+            # so a newer runner or toolchain cannot emit AVX2/x86-64-v3 ops.
+            export CFLAGS="-march=x86-64 -mtune=generic"
+            export CXXFLAGS="-march=x86-64 -mtune=generic"
             pnpm exec electron-vite build && pnpm exec electron-builder --linux "${args[@]}"
           elif [ "${{ matrix.platform }}" = "mac" ]; then
             # See the matrix comment: arm64 only. postinstall skips the
@@ -155,6 +163,32 @@ jobs:
           $sigs = Get-ChildItem release -Recurse -File -Include *.exe, *.dll, *.node | Get-AuthenticodeSignature
           $sigs | Format-Table Status, @{ n = 'Signer'; e = { $_.SignerCertificate.Subject } }, Path -AutoSize -Wrap
           if ($sigs | Where-Object Status -ne 'Valid') { exit 1 }
+
+      # Guard against runner or compiler upgrades silently emitting AVX/AVX2 or
+      # BMI/MOVBE (x86-64-v3) instructions into Linux native addons (#574).
+      - name: Verify Linux native addons use baseline x86-64
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t nodes < <(find release/linux-unpacked -type f -name '*.node' | sort)
+          if [ "${#nodes[@]}" -eq 0 ]; then
+            echo "ERROR: no .node native addons found under release/linux-unpacked"
+            exit 1
+          fi
+          pattern='\t(v(?!err\b|erw\b)[a-z0-9]+|tzcnt|lzcnt|andn|bextr|blsi|blsmsk|blsr|bzhi|mulx|pdep|pext|rorx|sarx|shlx|shrx|movbe)\b'
+          failed=0
+          for bin in "${nodes[@]}"; do
+            echo "Checking $bin"
+            disasm="$(objdump -d --no-show-raw-insn "$bin")"
+            hits="$(printf '%s\n' "$disasm" | grep -oP "$pattern" || true)"
+            if [ -n "$hits" ]; then
+              echo "ERROR: $bin contains post-baseline x86-64 instructions:"
+              printf '%s\n' "$hits" | sort | uniq -c | sort -rn | head -n 20
+              failed=1
+            fi
+          done
+          exit "$failed"
 
       - name: Smoke test packaged app
         shell: bash
