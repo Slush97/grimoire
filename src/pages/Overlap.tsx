@@ -34,6 +34,7 @@ import { PageHeader, EmptyState, ConfirmModal, PageLayout } from '../components/
 import OverlapCard, { type OverlapMod } from '../components/overlap/OverlapCard';
 import IgnoredOverlaps, { type IgnoredTab } from '../components/overlap/IgnoredOverlaps';
 import OverlapExplainer from '../components/overlap/OverlapExplainer';
+import { IGNORE_OVERLAP_SETTING_ID, type SettingsLocationState } from '../components/settings/settingsHighlight';
 
 function normalizeIdentityPart(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -78,6 +79,7 @@ function OverlapAbout() {
         settingsLink: (
           <Link
             to="/settings/preferences"
+            state={{ highlightSettingId: IGNORE_OVERLAP_SETTING_ID } satisfies SettingsLocationState}
             className="underline decoration-dotted underline-offset-2 transition-colors hover:text-accent"
           />
         ),

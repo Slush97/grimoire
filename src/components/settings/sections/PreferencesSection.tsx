@@ -7,6 +7,7 @@ import { Card, Toggle } from '../../common/ui';
 import Tx from '../../translation/Tx';
 import type { AppSettings } from '../../../types/mod';
 import type { ForgeBridgeStatus } from '../../../types/electron';
+import { IGNORE_OVERLAP_SETTING_ID } from '../settingsHighlight';
 
 // General preferences, mod installation and updates, and external integrations.
 export default function PreferencesSection() {
@@ -84,7 +85,7 @@ export default function PreferencesSection() {
 
           <FilterDivider className="h-px bg-hl/5" />
 
-          <Toggle id="settings-preferences-settings-preferences-ignoreOverlap-toggle"
+          <Toggle id={IGNORE_OVERLAP_SETTING_ID}
             checked={settings?.ignoreConflictsByDefault ?? false}
             onChange={(checked) => update({ ignoreConflictsByDefault: checked })}
             label={<Tx k="settings.preferences.ignoreOverlap" fallback="Ignore overlap by default" />}
