@@ -24,7 +24,6 @@
   xdg-utils,
   procps,
   grimoire-src,
-  social-src,
   vpkmerge,
 }:
 
@@ -32,30 +31,18 @@ let
   pnpm = pnpm_12;
 
   packageJson = builtins.fromJSON (builtins.readFile (grimoire-src + "/package.json"));
-
-  # The pnpm lockfile links @grimoire/social-types from
-  # ../grimoire-social/packages/social-types, and electron.vite.config.ts
-  # aliases the same path. Materialize the sibling checkout next to the
-  # unpacked source, IDENTICALLY in the pnpm fetcher and the main build:
-  # pnpm validates the out-of-tree importer in both.
-  siblingPostUnpack = ''
-    cp -r ${social-src} "$(dirname "$sourceRoot")/grimoire-social"
-    chmod -R u+w "$(dirname "$sourceRoot")/grimoire-social" "$sourceRoot"
-  '';
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "grimoire";
   version = packageJson.version;
 
   src = grimoire-src;
-  postUnpack = siblingPostUnpack;
 
   pnpmDeps = fetchPnpmDeps {
     inherit (finalAttrs) pname version src;
-    postUnpack = siblingPostUnpack;
     inherit pnpm;
-    # The hash changes when pnpm-lock.yaml, the pinned pnpm major,
-    # fetcherVersion, or social-types' package.json change. Refresh it with
+    # The hash changes when pnpm-lock.yaml, the pinned pnpm major, or
+    # fetcherVersion change. Refresh it with
     #   nix build --no-link .#grimoire.pnpmDeps
     # and copy the "got:" value from the mismatch. The Nix workflow
     # (.github/workflows/nix.yml) runs that build on every PR that touches
@@ -84,17 +71,6 @@ stdenv.mkDerivation (finalAttrs: {
     # build refuses to run without an https value.
     GRIMOIRE_SOCIAL_BASE_URL = "https://grimoire-social.slusheliott.workers.dev";
   };
-
-  # pnpmConfigHook installed with --ignore-scripts (the Electron and vpkmerge
-  # downloads and husky prepare are skipped by design). The aliased
-  # social-types sources import zod; guarantee resolution from grimoire's own
-  # node_modules since the sibling has none in the sandbox.
-  postConfigure = ''
-    if [ ! -e ../grimoire-social/packages/social-types/node_modules/zod ]; then
-      mkdir -p ../grimoire-social/packages/social-types/node_modules
-      ln -s "$PWD/node_modules/zod" ../grimoire-social/packages/social-types/node_modules/zod
-    fi
-  '';
 
   # resources/vpkmerge is gitignored (normally fetched by the postinstall
   # script), but electron-builder.yml lists it as extraResources. Provide the

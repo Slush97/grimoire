@@ -12,45 +12,16 @@ Requirements:
 
 With Nix, `flake.nix` provides all of the above via `nix develop`. On NixOS
 also enable `programs.nix-ld.enable = true;` (the dev workflow runs
-npm-fetched binaries: Electron, vpkmerge, 7za). Setup is the same as below,
-inside the shell:
-
-```bash
-cd grimoire-social && nix develop -c pnpm install
-cd ../grimoire && nix develop
-pnpm install
-pnpm exec electron-rebuild -f -w better-sqlite3
-pnpm dev
-```
-
-Grimoire shares its wire-format types with its companion service,
-[grimoire-social](https://github.com/Slush97/grimoire-social) (also open source),
-through the `@grimoire/social-types` workspace package. `pnpm-workspace.yaml`
-resolves it from `../grimoire-social/packages/social-types`, so **the two repos
-have to sit side by side** and grimoire-social needs its own install (that's
-where the `zod` peer dependency comes from). Cloning grimoire alone fails with
-`ERR_PNPM_WORKSPACE_PKG_NOT_FOUND`.
+npm-fetched binaries: Electron, vpkmerge, 7za).
 
 ```bash
 git clone https://github.com/Slush97/grimoire.git
-git clone https://github.com/Slush97/grimoire-social.git
-
-cd grimoire-social
-pnpm install --ignore-scripts
-
-cd ../grimoire
+cd grimoire
 pnpm install
-pnpm exec electron-rebuild -f -w better-sqlite3
 pnpm dev
 ```
 
-You end up with:
-
-```
-parent-dir/
-  grimoire/
-  grimoire-social/
-```
+`pnpm dev` automatically rebuilds `better-sqlite3` against Electron's ABI on first run (and whenever Electron changes). You can also trigger native rebuilds manually with `pnpm rebuild:electron` or `pnpm rebuild:node` (the latter is only needed if you want to run the SQLite unit tests under plain Node).
 
 `pnpm dev` needs nothing else: the social client falls back to
 `http://localhost:8787` (wrangler dev) when `GRIMOIRE_SOCIAL_BASE_URL` is unset,
@@ -61,6 +32,24 @@ URL, so pass one if you're producing installers locally:
 ```bash
 GRIMOIRE_SOCIAL_BASE_URL=https://example.invalid pnpm package:linux
 ```
+
+### Working on `@grimoire/social-types` locally
+
+Shared wire-format schemas and the hero roster are published as compiled release tarballs from [grimoire-social](https://github.com/Slush97/grimoire-social) and pinned in `package.json`, so normal `grimoire` development does not require cloning `grimoire-social`.
+
+If you are editing both repos together, build the types package in `grimoire-social` (`pnpm build:types`) and temporarily link it into `grimoire`:
+
+```bash
+pnpm link ../grimoire-social/packages/social-types
+```
+
+When you are done, remove the local link and restore the pinned release tarball:
+
+```bash
+pnpm unlink @grimoire/social-types
+```
+
+`pnpm link` adds an override to `pnpm-workspace.yaml` and updates `pnpm-lock.yaml`, so run `pnpm unlink` (not just `pnpm install`) and verify `git status` is clean before committing.
 
 ## Code style
 

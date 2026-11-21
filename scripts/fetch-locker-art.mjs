@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { HERO_NAMES } from '../../grimoire-social/packages/social-types/src/heroes.ts';
+import { HERO_NAMES } from '@grimoire/social-types/heroes';
 
 // These are selected illustrations, not a mirror of each wiki file's latest upload.
 const entries = JSON.parse(await readFile(new URL('./locker-artwork.json', import.meta.url), 'utf8'));

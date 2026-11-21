@@ -22,7 +22,6 @@ jobs:
       sha: ${{ steps.meta.outputs.sha }}
       previous: ${{ steps.meta.outputs.previous }}
       version: ${{ steps.meta.outputs.version }}
-      social-sha: ${{ steps.meta.outputs.social-sha }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -58,7 +57,6 @@ jobs:
           echo "sha=$NIGHTLY_SHA" >> "$GITHUB_OUTPUT"
           echo "previous=$PREVIOUS" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "social-sha=$(gh api repos/Slush97/grimoire-social/git/ref/heads/main --jq .object.sha)" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
@@ -73,7 +71,6 @@ jobs:
       ref: ${{ needs.prepare.outputs.sha }}
       version: ${{ needs.prepare.outputs.version }}
       channel: nightly
-      social-ref: ${{ needs.prepare.outputs.social-sha }}
 
   publish:
     needs: [prepare, build]

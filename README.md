@@ -128,27 +128,16 @@ No telemetry. On its own, Grimoire only talks to GitHub (to check for app update
 
 ## Development
 
-Grimoire shares wire-format types with its companion service,
-[grimoire-social](https://github.com/Slush97/grimoire-social), through a
-workspace package resolved from `../grimoire-social`. Clone both side by side,
-or `pnpm install` fails with `ERR_PNPM_WORKSPACE_PKG_NOT_FOUND`. Needs Node 24+
-and pnpm 12.
+Needs Node 24+ and pnpm 12.
 
 ```bash
 git clone https://github.com/Slush97/grimoire.git
-git clone https://github.com/Slush97/grimoire-social.git
-
-cd grimoire-social
-pnpm install --ignore-scripts
-
-cd ../grimoire
+cd grimoire
 pnpm install
-pnpm exec electron-rebuild -f -w better-sqlite3
 pnpm dev
 ```
 
-Package builds: `pnpm package:win` or `pnpm package:linux` (both require
-`GRIMOIRE_SOCIAL_BASE_URL` set to an https URL).
+`pnpm dev` automatically rebuilds `better-sqlite3` for the installed Electron version on first run. Package builds (`pnpm package:win`, `pnpm package:linux`, `pnpm package:mac`) require `GRIMOIRE_SOCIAL_BASE_URL` set to an `https://` URL.
 
 More detail in [CONTRIBUTING.md](CONTRIBUTING.md).
 

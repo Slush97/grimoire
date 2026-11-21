@@ -1,6 +1,3 @@
-packages:
-  - ../grimoire-social/packages/*
-
 # Dependencies allowed to run install scripts. better-sqlite3 stays off because
 # electron-rebuild and electron-builder build it for Electron's ABI, and its own
 # script deletes the binary when it fails against the local Node.
