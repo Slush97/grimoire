@@ -627,3 +627,16 @@ export function sortLockerMods<T>(items: readonly T[], options: {
     return Number(favorites.has(keyOf(right))) - Number(favorites.has(keyOf(left)));
   });
 }
+
+/** Keep hero controls beside the art until their usable minimum obscures half of it. */
+export function lockerHeroOptionsWidth(areaWidth: number, imageWidth: number, minimumWidth: number): number {
+  const visibleImage = Math.min(areaWidth, imageWidth);
+  if (areaWidth <= 0 || visibleImage <= 0) return Math.max(0, areaWidth);
+  const imageLeft = areaWidth - visibleImage;
+  const preferred = imageLeft + visibleImage * 0.2;
+  let width = Math.max(minimumWidth, Math.min(preferred, areaWidth * 0.38));
+  if (width > preferred) width = Math.max(minimumWidth, areaWidth * 0.3);
+  // Keep near-cap layouts consistent across small differences in artwork aspect ratio.
+  if (width >= areaWidth * 0.35 && width <= areaWidth * 0.38) width = areaWidth * 0.38;
+  return width - imageLeft >= visibleImage * 0.5 ? areaWidth : Math.min(areaWidth, width);
+}

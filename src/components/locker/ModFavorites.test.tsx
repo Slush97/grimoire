@@ -30,6 +30,7 @@ describe.each(['cards', 'list'] as const)('Locker favorites in %s', layout => {
   let host: HTMLDivElement;
   let root: Root;
   beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true); localStorage.clear();
     host = document.createElement('div'); document.body.append(host); root = createRoot(host);
   });

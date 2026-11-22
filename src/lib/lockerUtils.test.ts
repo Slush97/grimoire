@@ -1,3 +1,4 @@
+import { lockerHeroOptionsWidth } from './lockerUtils';
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
 import { sortLockerMods, getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle, isLockerManagedMod, isLockerManagedSound } from './lockerUtils';
@@ -289,4 +290,22 @@ it('shares mixed prop packs across General categories and folds legacy killstrea
   expect(groups['hidden-king']).toEqual([mixed]); expect(groups.archmother).toEqual([mixed]); expect(groups.sinner).toEqual([mixed]);
   expect(groups.patron).toEqual([]); expect(groups.boxes).toEqual([]);
   expect(groups.sounds).toEqual([legacy]); expect(groups['killstreak-music']).toEqual([]);
+});
+
+describe('lockerHeroOptionsWidth', () => {
+  it.each([
+    [2000, 1600, 760], // Keep near-cap layouts consistent across hero artwork.
+    [2000, 1800, 560], // Preserve the image target outside the near-cap range.
+    [2000, 1000, 760], // Cap a wide empty margin at 38% of the area.
+    [2000, 2000, 600], // Fall back to 30% of the area to preserve usable controls.
+    [1200, 1200, 464], // Preserve the usable minimum when it exceeds the cap.
+    [928, 928, 928], // Switch to the whole area at exactly 50% image coverage.
+    [800, 800, 800],
+    [1000, 2000, 464], // Measure only the visible portion of oversized art.
+    [800, 500, 464], // Coverage is relative to the image, not the whole area.
+    [1000, 0, 1000],
+    [0, 500, 0],
+  ])('sizes area %ipx with image %ipx to %ipx', (area, image, expected) => {
+    expect(lockerHeroOptionsWidth(area, image, 464)).toBe(expected);
+  });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, ChevronDown, ExternalLink, GripVertical, ImagePlus, Shuffle, Trash2 } from 'lucide-react';
 import {
@@ -32,6 +32,8 @@ import { LockerModImagePicker } from './LockerModImagePicker';
 import { LockerCardAction, LockerCardHeader, ModFavoriteButton, ShuffleIncludeButton } from './ShuffleControls';
 import { Select } from '../common/forms';
 import { RevealImage } from '../common/RevealImage';
+import { modRequirementRefs } from '../../lib/modRequirements';
+import { useRequirementsStore } from '../../stores/requirementsStore';
 
 interface SkinGroup {
   key: string;
@@ -379,8 +381,7 @@ async function toggleSkin(mod: Mod, onToggle: HeroSkinsPanelProps['onSelect'], e
   if (mod.enabled && toggled === false) shakeElement(element);
 }
 
-/** One skin group as a media card (hero detail view). Every card holds the same
- *  height (media + title + a fixed status row); the variant chooser opens over
+/** One skin group as a media card (hero detail view). The variant chooser opens over
  *  the card's own media so it never reflows the grid or spills onto the next
  *  card, where that card's corner buttons would paint over it (#486). */
 function SkinGroupCard({
@@ -436,6 +437,26 @@ function SkinGroupCard({
   // The user's chosen image wins over the uploader's thumbnail (issue #208).
   const displaySrc = overrideSrc ?? primary.thumbnailUrl;
   const cardRef = useRef<HTMLDivElement>(null);
+  const titleRowRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLSpanElement>(null);
+  const variantLabelRef = useRef<HTMLSpanElement>(null);
+  const modPage = modRequirementRefs(primary)[0];
+  useLayoutEffect(() => {
+    const row = titleRowRef.current, name = titleRef.current, label = variantLabelRef.current;
+    if (!row || !name || !label) return;
+    let cancelled = false;
+    const update = () => {
+      if (cancelled) return;
+      // Measure the label at its natural width even when it is currently hidden.
+      label.hidden = false;
+      label.hidden = name.scrollWidth + label.scrollWidth + 28 > row.clientWidth;
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(row);
+    update();
+    void document.fonts?.ready.then(update);
+    return () => { cancelled = true; observer.disconnect(); };
+  }, [primary.name, enabledCount, isMulti, t]);
   const revealNsfwOnHover = useAppStore((state) => state.settings?.revealNsfwOnHover ?? false);
   const [variantsOpen, setVariantsOpen] = useState(false);
   // Close the variant picker on Escape or any click outside the card.
@@ -519,6 +540,8 @@ function SkinGroupCard({
         </div>
         <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover/card:bg-bg-primary/20" />
         <LockerCardHeader active={groupActive} favorite={favorite} shuffled={!!isIncluded}>
+          {modPage && <LockerCardAction icon={ExternalLink} label={t('variantPicker.openModPage')}
+            onClick={() => useRequirementsStore.getState().openTarget(modPage)} />}
           {onPickImage && <LockerCardAction icon={ImagePlus} label={t('locker.modImage.set', { name: primary.name })}
             onClick={onPickImage} />}
           {onRequestDelete && <LockerCardAction icon={Trash2} label={t('locker.skins.deleteSkin', { name: primary.name })}
@@ -538,13 +561,20 @@ function SkinGroupCard({
       </div>
 
       {/* Title. */}
-      <div className="min-w-0 px-0.5">
+      <div ref={titleRowRef} className="flex min-w-0 items-center gap-2 px-0.5">
         <h3
-          className="min-w-0 truncate text-sm font-semibold leading-tight text-text-primary"
+          className="min-w-0 flex-1 truncate text-sm font-semibold leading-tight text-text-primary"
           title={primary.name}
         >
-          {primary.name}
+          <span ref={titleRef} className="inline-block">{primary.name}</span>
         </h3>
+        {isMulti && <span className={`pointer-events-none flex shrink-0 items-center gap-1 text-2xs ${enabledCount === 0 ? 'text-accent' : 'text-text-secondary'}`}>
+          <span ref={variantLabelRef} className="whitespace-nowrap">
+            {enabledCount === 0 ? t('locker.skins.pickAVariant')
+              : t('locker.skins.activeCount', { enabled: enabledCount, total: group.variants.length })}
+          </span>
+          <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${variantsOpen ? 'rotate-180' : ''}`} />
+        </span>}
       </div>
 
       {/* Whole card is the primary control: select for single-variant groups,
@@ -589,25 +619,8 @@ function SkinGroupCard({
         </div>
       )}
 
-      {/* Fixed-height status row for multi-variant groups: a one-line summary
-          that toggles the variant picker. Keeping it a single line means every
-          card holds the same height. */}
       {isMulti && (
         <>
-          <div
-            className={`pointer-events-none mt-1 flex items-center gap-1 px-0.5 text-2xs ${
-              enabledCount === 0 ? 'text-accent' : 'text-text-secondary'
-            }`}
-          >
-            <span>
-              {enabledCount === 0
-                ? t('locker.skins.pickAVariant')
-                : t('locker.skins.activeCount', { enabled: enabledCount, total: group.variants.length })}
-            </span>
-            <ChevronDown
-              className={`h-3 w-3 transition-transform duration-200 ${variantsOpen ? 'rotate-180' : ''}`}
-            />
-          </div>
           {isIncluded && (
             <ShuffleVariantSelect
               group={group}
@@ -991,11 +1004,11 @@ export default function HeroSkinsPanel({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="@container/skin-picker space-y-2">
       {hasMods ? (
         <>
           {layout === 'cards' ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-4">
+            <div className="grid grid-cols-1 gap-4 @min-[29rem]/skin-picker:grid-cols-2">
               {groups.map((group) => (
                 <SkinGroupCard
                   key={group.key}

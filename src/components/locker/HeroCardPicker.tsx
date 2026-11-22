@@ -25,6 +25,9 @@ interface HeroCardPickerProps {
   heroName: string;
 }
 
+// About 75% of the old full-width tiles before moving another pair to the next row.
+const PORTRAIT_GRID_CLASS = 'grid grid-cols-[repeat(2,minmax(0,8rem))] justify-center gap-2 @min-[26rem]/portraits:grid-cols-[repeat(4,minmax(0,8rem))] @min-[39.25rem]/portraits:grid-cols-[repeat(6,minmax(0,8rem))]';
+
 /** A cheap order-independent fingerprint of the current picks, used to tell
  *  whether the slots differ from what was last applied (drives the Apply vs
  *  Applied vs Update button state). Length + tail avoids hashing whole data
@@ -364,26 +367,30 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                     </span>
                   )}
                 </div>
-                {/* Uniform aspect-3/4 tiles in a fixed grid keep the strip tidy
+                {/* Uniform aspect-3/4 tiles in a responsive grid keep the strip tidy
                     regardless of each variant's native aspect. max-w/h-full
                     contains the art without ever upscaling it, so tiny minimap
                     art stays crisp instead of blurring up to a forced height. */}
-                <div className="grid grid-cols-6 gap-2 p-3">
-                  {group.variants.map((p, i) => (
-                    <figure key={`${p.variant}:${i}`} className="min-w-0">
-                      <div className="flex aspect-[3/4] items-center justify-center overflow-hidden rounded-md border border-border/50 bg-bg-primary/40">
-                        <img
-                          src={p.dataUrl}
-                          alt={`${heroName} ${heroCardVariantLabel(p.variant, t)}`}
-                          title={`${heroCardVariantLabel(p.variant, t)} · ${p.width}x${p.height} · ${p.formatName}`}
-                          className="max-h-full max-w-full object-contain"
-                        />
-                      </div>
-                      <figcaption title={heroCardVariantLabel(p.variant, t)} className="mt-1 truncate text-center text-xs leading-5 text-text-primary">
-                        {heroCardVariantLabel(p.variant, t)}
-                      </figcaption>
-                    </figure>
-                  ))}
+                <div className="p-3">
+                  <div className="@container/portraits">
+                    <div className={PORTRAIT_GRID_CLASS} data-locker-portrait-grid>
+                      {group.variants.map((p, i) => (
+                        <figure key={`${p.variant}:${i}`} className="min-w-0">
+                          <div className="flex aspect-[3/4] items-center justify-center overflow-hidden rounded-md border border-border/50 bg-bg-primary/40">
+                            <img
+                              src={p.dataUrl}
+                              alt={`${heroName} ${heroCardVariantLabel(p.variant, t)}`}
+                              title={`${heroCardVariantLabel(p.variant, t)} · ${p.width}x${p.height} · ${p.formatName}`}
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          </div>
+                          <figcaption title={heroCardVariantLabel(p.variant, t)} className="mt-1 truncate text-center text-xs leading-5 text-text-primary">
+                            {heroCardVariantLabel(p.variant, t)}
+                          </figcaption>
+                        </figure>
+                      ))}
+                    </div>
+                  </div>
                 </div>
                 {isBusy && (
                   <span className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -427,56 +434,58 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
               default art dimmed with an upload hint; a filled slot shows the
               cropped result with a clear (x) button. Each tile keeps the
               variant's true aspect so the preview matches the in-game shape. */}
-          <div className="grid grid-cols-6 gap-2.5">
-            {slots.map((slot) => {
-              const pick = picks[slot.variant];
-              return (
-                <figure key={slot.variant} className="relative min-w-0">
-                  <button
-                    type="button"
-                    disabled={customBusy}
-                    onClick={() => handlePickVariant(slot)}
-                    title={`${heroCardVariantLabel(slot.variant, t)} · ${slot.width} x ${slot.height}`}
-                    style={{ aspectRatio: `${slot.width} / ${slot.height}` }}
-                    className="group relative flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border border-border/50 bg-bg-primary/40 transition-colors hover:border-accent/50 disabled:cursor-not-allowed"
-                  >
-                    <img
-                      src={pick ?? slot.baseDataUrl}
-                      alt={`${heroName} ${heroCardVariantLabel(slot.variant, t)}`}
-                      className={`max-h-full max-w-full object-contain ${pick ? '' : 'opacity-30'}`}
-                    />
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white/0 transition-colors group-hover:bg-black/55 group-hover:text-white/90">
-                      <Upload className="h-4 w-4" />
-                    </span>
-                  </button>
-                  {pick && (
+          <div className="@container/portraits">
+            <div className={PORTRAIT_GRID_CLASS} data-locker-portrait-grid>
+              {slots.map((slot) => {
+                const pick = picks[slot.variant];
+                return (
+                  <figure key={slot.variant} className="relative min-w-0">
                     <button
                       type="button"
                       disabled={customBusy}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleClearVariant(slot.variant);
-                      }}
-                      title={t('locker.cards.clearImage')}
-                      aria-label={t('locker.cards.clearVariantImage', {
-                        variant: heroCardVariantLabel(slot.variant, t),
-                      })}
-                      className="absolute right-1 top-1 z-10 cursor-pointer rounded-full bg-black/75 p-1 text-white/90 shadow-sm ring-1 ring-hl/10 transition-colors hover:bg-black/90 hover:text-white disabled:cursor-not-allowed"
+                      onClick={() => handlePickVariant(slot)}
+                      title={`${heroCardVariantLabel(slot.variant, t)} · ${slot.width} x ${slot.height}`}
+                      style={{ aspectRatio: `${slot.width} / ${slot.height}` }}
+                      className="group relative flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border border-border/50 bg-bg-primary/40 transition-colors hover:border-accent/50 disabled:cursor-not-allowed"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <img
+                        src={pick ?? slot.baseDataUrl}
+                        alt={`${heroName} ${heroCardVariantLabel(slot.variant, t)}`}
+                        className={`max-h-full max-w-full object-contain ${pick ? '' : 'opacity-30'}`}
+                      />
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white/0 transition-colors group-hover:bg-black/55 group-hover:text-white/90">
+                        <Upload className="h-4 w-4" />
+                      </span>
                     </button>
-                  )}
-                  <figcaption className="mt-1 text-center">
-                    <span title={heroCardVariantLabel(slot.variant, t)} className="block truncate text-xs leading-5 text-text-primary">
-                      {heroCardVariantLabel(slot.variant, t)}
-                    </span>
-                    <span className="block truncate text-2xs tabular-nums text-text-secondary">
-                      {slot.width} x {slot.height}
-                    </span>
-                  </figcaption>
-                </figure>
-              );
-            })}
+                    {pick && (
+                      <button
+                        type="button"
+                        disabled={customBusy}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleClearVariant(slot.variant);
+                        }}
+                        title={t('locker.cards.clearImage')}
+                        aria-label={t('locker.cards.clearVariantImage', {
+                          variant: heroCardVariantLabel(slot.variant, t),
+                        })}
+                        className="absolute right-1 top-1 z-10 cursor-pointer rounded-full bg-black/75 p-1 text-white/90 shadow-sm ring-1 ring-hl/10 transition-colors hover:bg-black/90 hover:text-white disabled:cursor-not-allowed"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <figcaption className="mt-1 text-center">
+                      <span title={heroCardVariantLabel(slot.variant, t)} className="block truncate text-xs leading-5 text-text-primary">
+                        {heroCardVariantLabel(slot.variant, t)}
+                      </span>
+                      <span className="block truncate text-2xs tabular-nums text-text-secondary">
+                        {slot.width} x {slot.height}
+                      </span>
+                    </figcaption>
+                  </figure>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
