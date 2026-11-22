@@ -16,15 +16,31 @@ joined `SegmentedControl` moves a single highlight between tabs, respects reduce
 motion and supports arrow keys plus Home/End. Its keyboard events stay inside the
 control so they cannot trigger previous/next hero navigation.
 
-The content pane sits below the tabs and uses up to 56rem of the available width.
-Skin load order stays above the larger skin-card grid, and card-art previews show
-all six base icon types in one row. Each source header shows the installed mod
-name followed by its filename in secondary text. Both stay on one line with
+The content pane measures the visible, right-aligned hero image, including the
+empty area to its left. It aims to overlap 20% of that image, capped at 38% of the
+whole hero view. If the 29rem usable minimum would exceed the image target, it
+falls back toward 30% of the area. If that layout covers at least half the image,
+the controls fill the whole area. Preferred widths between 35% and 38% of the
+area use the 38% cap to avoid slight pane changes for wider hero illustrations.
+Image loads, fallback art, custom backdrops,
+window resizing and sidebar changes all refresh the measurement. The frosted
+backdrop stays within the options pane's width, fading inside its right edge
+without extending the image coverage. It hides in full-area mode.
+Skin load order stays above the skin-card grid. Two skin columns shrink down to
+14rem cards, then become one column when the content is narrower than 29rem.
+Both installed and upload-your-own portrait grids use the same container queries:
+six columns at 39.25rem, four at 26rem, then two. Portraits shrink to about 75% of
+their previous size before a pair wraps, and stay capped at 8rem after wrapping.
+Each source header shows the installed mod name followed by its filename in secondary text. Both stay on one line with
 ellipses; the filename hides when the name needs at least half the header width.
 Icon captions use readable sentence-case text on a dark surface. Mod-card actions sit inside the thumbnail and
 reuse Locker's round controls and permanent Active/shuffle/Favorite status pill.
 Only the Active checkmark is accent-colored inside the pill; per-card load-order
-badges and multi-VPK variant controls remain available. Effects sub-options reuse
+badges and multi-VPK variant controls remain available. Skin-card actions also
+open the source mod page. Variant
+summaries sit to the right of the name and collapse to their chevron when the
+full name and summary would not fit. Skin selection does not anchor the scroll
+position to a card when active groups move to the top. Effects sub-options reuse
 the compact joined selector, retaining their applied dots and draft values. The
 Single Color hint sits beneath the mode selector so that selector stays in place.
 Plain hero arrows have enlarged hitboxes extending slightly over the logo, while

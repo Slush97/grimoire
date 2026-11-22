@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { getAssetPath } from '../lib/assetPath';
 import { Button, SegmentedControl } from '../components/common/ui';
 import {
   ArrowLeft,
@@ -28,6 +29,7 @@ import type { Mod } from '../types/mod';
 import type { HeroPoseSkinSource } from '../types/portrait';
 import {
   activeLockerSkin,
+  lockerHeroOptionsWidth,
   countLockerSkins,
   getHeroNamePath,
   getHeroRenderPath,
@@ -104,6 +106,7 @@ export function LockerHeroView({
 }: LockerHeroViewProps) {
   const { t } = useTranslation();
   const viewRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   // The full-screen layer starts below any app banners, including while a
   // banner is dismissed or arrives after this view has already opened.
   useLayoutEffect(() => {
@@ -221,6 +224,22 @@ export function LockerHeroView({
           ? (hero.iconUrl ?? '')
           : '');
 
+  useLayoutEffect(() => {
+    const view = viewRef.current, image = imageRef.current;
+    if (!view) return;
+    const update = () => {
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+      const width = lockerHeroOptionsWidth(view.clientWidth, image?.clientWidth ?? 0, 29 * rem);
+      view.style.setProperty('--locker-hero-options-width', `${width}px`);
+      view.dataset.lockerHeroLayout = width >= view.clientWidth ? 'full' : 'split';
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(view);
+    if (image) { observer.observe(image); image.addEventListener('load', update); }
+    update();
+    return () => { observer.disconnect(); image?.removeEventListener('load', update); };
+  }, [renderSrc]);
+
   const handleRenderError = () => {
     if (renderFallbackStep === 0) {
       setRenderFallbackStep(1);
@@ -301,7 +320,7 @@ export function LockerHeroView({
     );
 
   return (
-    <div ref={viewRef} data-locker-hero-view className="relative flex h-full overflow-hidden">
+    <div ref={viewRef} data-locker-hero-view data-locker-hero={hero.name} className="relative flex h-full overflow-hidden">
       {/* Hero backdrop (2D portrait or live 3D pose) — full-bleed behind every
           panel so it can bleed through the frosted-glass rail + selection
           column. The image is sized to the window height with natural aspect
@@ -310,9 +329,11 @@ export function LockerHeroView({
           whatever space is left to the left of the image shows the solid
           bg-primary, which the frosted overlay reads as a dark frosted panel:
           same look as if the portrait extended that far. */}
-      <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden">
+      <div className="absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden">
         {renderSrc ? (
           <img
+            ref={imageRef}
+            data-locker-hero-image
             src={renderSrc}
             alt={hero.name}
             className={
@@ -331,19 +352,11 @@ export function LockerHeroView({
         <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
       </div>
 
-      {/* Progressive frosted-glass background — every layer (including the
-          base heavy blur) is masked with a long, smooth taper so nothing has
-          a hard right edge. Stacking blurs compounds: a region under all
-          three layers is much more blurred than one under only the lightest.
-          So as the lighter layers fade out first, the effective blur softens
-          from "very heavy" through "medium" to "nothing" without ever
-          dropping off a cliff. The container is intentionally much wider
-          than the panels it backs (rail + selection is ~640/710px; container
-          is ~1000/1100px) so the gradient has runway to feather all the way
-          to clear. */}
+      {/* Layered blur fades inside the controls' width, keeping exposed hero
+          art clear beyond the options edge. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[976px] xl:w-[1096px]"
+        className="locker-hero-frost pointer-events-none absolute inset-y-0 left-0 z-[5]"
       >
         <div
           className="absolute inset-0"
@@ -375,7 +388,14 @@ export function LockerHeroView({
         <div className="locker-hero-glass absolute inset-0" />
       </div>
 
-      <div className="relative z-10 flex min-h-0 w-full max-w-[56rem] flex-col bg-bg-primary lg:bg-transparent">
+      {hero.name === 'Lash' && (
+        <div aria-hidden className="locker-lash-compact-backdrop pointer-events-none absolute inset-0 bg-bg-primary">
+          <img src={getAssetPath('/locker/that-vyper.png')} alt="" draggable={false}
+            className="absolute inset-x-0 bottom-0 h-auto w-full opacity-75 invert light:invert-0" />
+        </div>
+      )}
+
+      <div data-locker-hero-options className="locker-hero-options relative z-10 flex min-h-0 flex-col">
         <header className="flex shrink-0 animate-slide-in-left flex-col gap-4 px-6 pb-4 pt-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={onBack}>{t('locker.hero.back')}</Button>
@@ -437,7 +457,7 @@ export function LockerHeroView({
                 )}
               </HeroNavigation>
             </div>
-          <SegmentedControl variant="joined" framed={false} fill value={activeSection} onChange={setSection}
+          <SegmentedControl variant="joined" framed={false} fill className="[&>button]:px-2" value={activeSection} onChange={setSection}
             label={t('locker.hero.lockerSections')} panelId={sectionPanelId}
             options={sections.map(({ id, label, icon: Icon, count, disabled }) => ({ value: id, disabled,
               label: <><Icon className="h-4 w-4 shrink-0" /><span className="truncate text-sm">{label}</span>
@@ -445,7 +465,7 @@ export function LockerHeroView({
             }))} />
         </header>
         <div id={sectionPanelId} role="tabpanel" aria-labelledby={sectionPanelId + '-tab-' + activeSection}
-          className="min-h-0 flex-1 overflow-y-auto scrollbar-glass">
+          className="min-h-0 flex-1 overflow-y-auto scrollbar-glass" style={{ overflowAnchor: 'none' }}>
           <div key={activeSection} className="space-y-4 animate-slide-in-left px-6 pb-6 pt-2">
             {contentHeading && <div className="flex flex-wrap items-baseline justify-between gap-3">
               <div className="flex items-baseline gap-2">

@@ -483,6 +483,33 @@ body {
   background-clip: padding-box;
 }
 
+/* The options define image coverage; their frost stays inside that same edge. */
+.locker-hero-options,
+.locker-hero-frost {
+  width: var(--locker-hero-options-width, 100%);
+  max-width: 100%;
+}
+
+[data-locker-hero-layout='full'] .locker-hero-options {
+  background: var(--color-bg-primary);
+}
+
+[data-locker-hero-layout='full'] .locker-hero-frost {
+  display: none;
+}
+
+.locker-lash-compact-backdrop {
+  display: none;
+}
+
+[data-locker-hero='Lash'][data-locker-hero-layout='full'] .locker-lash-compact-backdrop {
+  display: block;
+}
+
+[data-locker-hero='Lash'][data-locker-hero-layout='full'] .locker-hero-options {
+  background: transparent;
+}
+
 /* The tint over the Locker hero view's frosted glass: solid behind the rail,
    feathering out to the hero art on the right. On the dark themes the art is
    as dark as the glass, so text stays readable while the tint fades under
