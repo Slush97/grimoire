@@ -1,15 +1,22 @@
 import { create } from 'zustand';
 import { getModFileList } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { computeUpdateFlags, type UpdateFlags } from '../lib/updateCheck';
+import { computeUpdateFlags, removedMods, type UpdateFlags } from '../lib/updateCheck';
 import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
+import type { GameBananaRemoval } from '../types/gamebanana';
 import { useAppStore } from './appStore';
 
-export const useModUpdateCheckStore = create<UpdateFlags>(() => ({
+interface ModUpdateCheckState extends UpdateFlags {
+  /** Local mod ids whose submission was trashed, withheld or made private. */
+  removed: ReadonlyMap<string, GameBananaRemoval>;
+}
+
+export const useModUpdateCheckStore = create<ModUpdateCheckState>(() => ({
   updatesAvailable: new Set(),
   staleMergeSources: new Map(),
   updatableMergeSources: new Map(),
+  removed: new Map(),
 }));
 
 /** One app-wide checker; page subscriptions only read its results. */
@@ -61,7 +68,7 @@ export function listenForModUpdateChecks(): () => void {
             if (!target) return;
             const [modId, section] = target;
             try {
-              await updateCheckCache.load(modId, async () => (await getModFileList(modId, section)).files);
+              await updateCheckCache.load(modId, () => getModFileList(modId, section));
             } catch {
               // Keep last known rows; refocusing or a library change retries.
             }
@@ -71,7 +78,10 @@ export function listenForModUpdateChecks(): () => void {
 
         if (stopped) return;
         if (revision !== currentRevision) continue;
-        useModUpdateCheckStore.setState(computeUpdateFlags(mods, updateCheckCache.rows, autoMatch));
+        useModUpdateCheckStore.setState({
+          ...computeUpdateFlags(mods, updateCheckCache.rows, autoMatch),
+          removed: removedMods(mods, updateCheckCache.removals),
+        });
         if (revision === currentRevision) return;
       }
     } finally {

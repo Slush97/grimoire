@@ -20,6 +20,7 @@ import { restoreModBackup, revealModInFolder } from '../../lib/api';
 import { ModBackupsSubmenu } from './ModBackupsSubmenu';
 import type { ModConflict } from '../../lib/api';
 import type { Mod, GlobalModType } from '../../types/mod';
+import type { GameBananaRemoval } from '../../types/gamebanana';
 import { isCardSelectClick } from './selection';
 import ModThumbnail from '../ModThumbnail';
 import { RevealImage } from '../common/RevealImage';
@@ -35,6 +36,7 @@ import { canOpenImageSource, copyImageToClipboard, resolveImageSource } from '..
 import type { ModList } from '../../lib/modLists';
 import { ModListSubmenu } from './ModListMenu';
 import { Tag, CheckboxMark } from '../common/ui';
+import { RemovedTag } from './RemovedTag';
 import type { InstalledWindowView as ViewMode } from './installedWindowing';
 import { HeroIconStack, RepairIssueIcons, FittingTagList, MOD_TAG_CHIP_CLASS, MOD_TAG_SURFACE_CLASS } from './chips';
 import { EMPTY_LIST_IDS } from './emptyIds';
@@ -96,6 +98,8 @@ interface ModCardProps {
   conflicts: ModConflict[];
   soundVolume: number;
   updateAvailable?: boolean;
+  /** Set when the mod's GameBanana page was trashed, withheld or made private. */
+  removal?: GameBananaRemoval;
   /** Absorbed merge sources whose GameBanana file was replaced or removed. */
   staleSourceCount?: number;
   /** The part of `staleSourceCount` the merged-contents dialog can update.
@@ -397,6 +401,7 @@ export function ModCard({
   conflicts,
   soundVolume,
   updateAvailable,
+  removal,
   staleSourceCount = 0,
   updatableSourceCount = 0,
   onOpenDetails,
@@ -1020,6 +1025,7 @@ export function ModCard({
                   {t('profiles.actions.update')}
                 </Tag>
               )}
+              {removal && <RemovedTag removal={removal} variant="overlay" />}
               {mod.merged && (
                 <Tag
                   variant="overlay"

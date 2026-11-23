@@ -36,7 +36,7 @@ describe('app-wide mod update checks', () => {
     vi.clearAllMocks();
     updateCheckCache.invalidate(Array.from({ length: 12 }, (_, i) => i + 1));
     useAppStore.setState({ settings: settings(), mods: [mod('old')] });
-    useModUpdateCheckStore.setState({ updatesAvailable: new Set(), staleMergeSources: new Map(), updatableMergeSources: new Map() });
+    useModUpdateCheckStore.setState({ updatesAvailable: new Set(), staleMergeSources: new Map(), updatableMergeSources: new Map(), removed: new Map() });
     mocks.files.mockReset().mockResolvedValue({ files: rows() });
   });
   afterEach(() => { stop(); vi.useRealTimers(); });
@@ -55,6 +55,15 @@ describe('app-wide mod update checks', () => {
     useAppStore.setState({ modsLoading: true });
     expect(mocks.files).toHaveBeenCalledTimes(1);
     expect(useModUpdateCheckStore.getState().updatesAvailable.size).toBe(2);
+  });
+
+  it('marks every installed file of a removed submission without flagging an update', async () => {
+    const removal = { kind: 'trashed', byOwner: true, reason: 'By request' } as const;
+    mocks.files.mockImplementation(async (modId: number) => modId === 7 ? { files: [], removal } : { files: rows(1) });
+    useAppStore.setState({ mods: [mod('a'), mod('b'), mod('live', { gameBananaId: 8 })] });
+    stop = listenForModUpdateChecks();
+    await vi.waitFor(() => expect(useModUpdateCheckStore.getState().removed).toEqual(new Map([['a', removal], ['b', removal]])));
+    expect(useModUpdateCheckStore.getState().updatesAvailable.size).toBe(0);
   });
 
   it('refreshes invalidated files without any page subscribing', async () => {

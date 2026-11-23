@@ -38,6 +38,7 @@ import type {
   GameBananaFile,
   GameBananaModUpdate,
   GameBananaItemRef,
+  GameBananaRemoval,
 } from '../types/gamebanana';
 import { isModOutdated, formatDate, parseGameBananaItemUrl } from '../types/gamebanana';
 import type { DeleteModEntry } from '../types/mod';
@@ -60,6 +61,7 @@ import { categoryModelForSection, resolveCategoryPath } from '../lib/categoryPat
 import { heroNameForLabel } from '../lib/heroNames';
 import { useCategoryStore } from '../stores/categoryStore';
 import { HeroTagLabel } from './installed/chips';
+import { RemovedNotice } from './installed/RemovedTag';
 
 type ModDetailsNavigationDirection = 'previous' | 'next';
 
@@ -92,6 +94,9 @@ interface ModDetailsModalProps {
   navigationDirection?: ModDetailsNavigationDirection;
   navigationLabel?: string;
   updateAvailable?: boolean;
+  /** The submission was trashed, withheld or made private after it was
+   *  installed. GameBanana then serves the page without files or description. */
+  removal?: GameBananaRemoval;
   /** Current file rows that are actual replacement destinations. Keeping this
    *  separate from the mod-level badge prevents alternate variants from all
    *  being mislabeled as updates. */
@@ -167,6 +172,7 @@ function ModDetailsModal({
   navigationDirection = 'next',
   navigationLabel,
   updateAvailable,
+  removal,
   updateFileIds = new Set<number>(),
   archivedByAuthor = false,
   replaceableFiles = [],
@@ -1320,6 +1326,8 @@ function ModDetailsModal({
             }
           />
         )}
+
+        {removal && <RemovedNotice removal={removal} />}
 
         {offline && (
           <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-5 py-2 text-xs text-amber-300">

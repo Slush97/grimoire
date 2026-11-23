@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { computeUpdateFlags } from './updateCheck';
-import { listenForModUpdateChanges, UpdateCheckCache } from './updateCheckCache';
+import { computeUpdateFlags, removedMods } from './updateCheck';
+import { listenForModUpdateChanges, UpdateCheckCache, type UpdateCheckList } from './updateCheckCache';
 import type { DownloadEventData } from '../types/electron';
 import type { UpdateFileRow } from './updateFileMatch';
 
 const rows = (id: number): UpdateFileRow[] => [{
   id, fileName: `skin_v${id}.zip`, isArchived: false, description: 'Skin', dateAdded: id * 10000,
 }];
+
+const list = (id: number, removal?: UpdateCheckList['removal']): UpdateCheckList => ({ files: rows(id), removal });
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -24,11 +26,11 @@ describe('mod update cache refreshes', () => {
 
   it('shares a file-list request across variants and page remounts', async () => {
     const cache = new UpdateCheckCache();
-    const response = deferred<UpdateFileRow[]>();
+    const response = deferred<UpdateCheckList>();
     const fetch = vi.fn(() => response.promise);
     const first = cache.load(7, fetch);
     const second = cache.load(7, fetch);
-    response.resolve(rows(2));
+    response.resolve(list(2));
     await Promise.all([first, second]);
     await cache.load(7, fetch);
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -37,15 +39,36 @@ describe('mod update cache refreshes', () => {
   it('clears a false update flag after invalidation without changing the installed list', async () => {
     const cache = new UpdateCheckCache();
     const installed = [{ id: 'pak01', gameBananaId: 7, gameBananaFileId: 2, sourceFileName: 'skin_v2' }];
-    await cache.load(7, async () => rows(1));
+    await cache.load(7, async () => list(1));
     expect(computeUpdateFlags(installed, cache.rows).updatesAvailable.has('pak01')).toBe(true);
     const notify = vi.fn();
     cache.subscribe(notify);
 
     cache.invalidate([7]);
     expect(notify).toHaveBeenCalledTimes(1);
-    await cache.load(7, async () => rows(2));
+    await cache.load(7, async () => list(2));
     expect(computeUpdateFlags(installed, cache.rows).updatesAvailable.size).toBe(0);
+  });
+
+  it('remembers a removed submission until a later check finds it back', async () => {
+    const cache = new UpdateCheckCache();
+    const installed = [{ id: 'pak01', gameBananaId: 7, gameBananaFileId: 2 }, { id: 'pak02', gameBananaId: 8, gameBananaFileId: 3 }];
+    const removal = { kind: 'trashed', byOwner: true } as const;
+    await cache.load(7, async () => ({ files: [], removal }));
+    await cache.load(8, async () => list(3));
+    expect(removedMods(installed, cache.removals)).toEqual(new Map([['pak01', removal]]));
+    expect(computeUpdateFlags(installed, cache.rows).updatesAvailable.size).toBe(0);
+
+    vi.advanceTimersByTime(30 * 60 * 1000);
+    cache.expire();
+    await expect(cache.load(7, async () => { throw new Error('offline'); })).rejects.toThrow('offline');
+    expect(cache.removals.get(7)).toBe(removal);
+    await cache.load(7, async () => list(2));
+    expect(cache.removals.size).toBe(0);
+
+    await cache.load(8, async () => ({ files: [], removal: { kind: 'withheld' } }));
+    cache.invalidate([8]);
+    expect(cache.removals.size).toBe(0);
   });
 
   it('notifies an explicit refresh even if the cache was already empty', () => {
@@ -61,22 +84,22 @@ describe('mod update cache refreshes', () => {
 
   it('never lets a pre-download response overwrite the refreshed file list', async () => {
     const cache = new UpdateCheckCache();
-    const old = deferred<UpdateFileRow[]>();
+    const old = deferred<UpdateCheckList>();
     const stale = cache.load(7, () => old.promise);
     cache.invalidate([7]);
-    await cache.load(7, async () => rows(2));
-    old.resolve(rows(1));
+    await cache.load(7, async () => list(2));
+    old.resolve(list(1));
     await stale;
     expect(cache.rows.get(7)).toEqual(rows(2));
   });
 
   it('does not let an obsolete failure evict a successful refresh', async () => {
     const cache = new UpdateCheckCache();
-    const old = deferred<UpdateFileRow[]>();
+    const old = deferred<UpdateCheckList>();
     const stale = cache.load(7, () => old.promise);
     const rejected = expect(stale).rejects.toThrow('offline');
     cache.invalidate([7]);
-    await cache.load(7, async () => rows(2));
+    await cache.load(7, async () => list(2));
     old.reject(new Error('offline'));
     await rejected;
     expect(cache.rows.get(7)).toEqual(rows(2));
@@ -86,7 +109,7 @@ describe('mod update cache refreshes', () => {
     const cache = new UpdateCheckCache();
     await expect(cache.load(7, async () => { throw new Error('offline'); })).rejects.toThrow('offline');
     expect(computeUpdateFlags([{ id: 'pak01', gameBananaId: 7, gameBananaFileId: 2 }], cache.rows).updatesAvailable.size).toBe(0);
-    await cache.load(7, async () => rows(2));
+    await cache.load(7, async () => list(2));
     expect(cache.rows.get(7)).toEqual(rows(2));
   });
 
@@ -97,7 +120,7 @@ describe('mod update cache refreshes', () => {
     await expect(cache.load(7, async () => { throw new Error('offline'); })).rejects.toThrow('offline');
     const installed = [{ id: 'pak01', gameBananaId: 7, gameBananaFileId: 2 }];
     const refresh = vi.fn(async () => {
-      await cache.load(7, async () => rows(2));
+      await cache.load(7, async () => list(2));
       return computeUpdateFlags(installed, cache.rows);
     });
     const unsubscribe = cache.subscribe(() => { void refresh(); });
@@ -113,20 +136,20 @@ describe('mod update cache refreshes', () => {
 
   it('refetches expired rows when returning to the page', async () => {
     const cache = new UpdateCheckCache();
-    const fetch = vi.fn(async () => rows(1));
+    const fetch = vi.fn(async () => list(1));
     await cache.load(7, fetch);
     vi.advanceTimersByTime(29 * 60 * 1000);
     await cache.load(7, fetch);
     expect(fetch).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(60 * 1000);
-    await cache.load(7, async () => rows(2));
+    await cache.load(7, async () => list(2));
     expect(cache.rows.get(7)).toEqual(rows(2));
   });
 
   it('keeps known update flags when an expired refresh fails', async () => {
     const cache = new UpdateCheckCache();
     const installed = [{ id: 'pak01', gameBananaId: 7, gameBananaFileId: 2, sourceFileName: 'skin_v2' }];
-    await cache.load(7, async () => rows(1));
+    await cache.load(7, async () => list(1));
     vi.advanceTimersByTime(30 * 60 * 1000);
     cache.expire();
     expect(cache.rows.get(7)).toEqual(rows(1));
@@ -137,14 +160,14 @@ describe('mod update cache refreshes', () => {
     cache.subscribe(notify);
     cache.expire();
     expect(notify).toHaveBeenCalledTimes(1);
-    await cache.load(7, async () => rows(2));
+    await cache.load(7, async () => list(2));
     expect(computeUpdateFlags(installed, cache.rows).updatesAvailable.size).toBe(0);
   });
 
   it('invalidates downloads app-wide, expires on focus, and removes listeners on cleanup', async () => {
     const cache = new UpdateCheckCache();
-    await cache.load(7, async () => rows(1));
-    await cache.load(8, async () => rows(3));
+    await cache.load(7, async () => list(1));
+    await cache.load(8, async () => list(3));
     let complete!: (event: DownloadEventData) => void;
     const unsubscribe = vi.fn();
     const api = { onDownloadComplete: (callback: typeof complete) => { complete = callback; return unsubscribe; } };
@@ -165,7 +188,7 @@ describe('mod update cache refreshes', () => {
     expect(cache.rows.get(8)).toEqual(rows(3));
     expect(notify).toHaveBeenCalledTimes(2);
 
-    await cache.load(8, async () => rows(4));
+    await cache.load(8, async () => list(4));
     expect(cache.rows.get(8)).toEqual(rows(4));
     stop();
     expect(unsubscribe).toHaveBeenCalledTimes(1);

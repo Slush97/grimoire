@@ -65,7 +65,7 @@ describe('fetchModFileList', () => {
         const list = await fetchModFileList(627024);
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('/Mod/627024?_csvProperties=_idRow,_aFiles');
+        expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('/Mod/627024?_csvProperties=_idRow,_aFiles,_bIsTrashed,_bIsWithheld,_bIsPrivate,_aTrashInfo');
         expect(list).toEqual({
             id: 627024,
             files: [
@@ -92,5 +92,31 @@ describe('fetchModFileList', () => {
                 },
             ],
         });
+    });
+
+    // Live responses on 2026-11-23. A removed submission answers 200 with its
+    // files nulled, so the status flags are the only sign that it is gone.
+    it.each([
+        ['an author trashing their mod',
+            { _bIsTrashed: true, _aTrashInfo: { _bIsTrashedByOwner: true, _bHideReason: false, _sReason: 'By request' } },
+            { kind: 'trashed', byOwner: true, reason: 'By request' }],
+        ['a moderator trashing a mod with the reason hidden',
+            { _bIsTrashed: true, _aTrashInfo: { _bIsTrashedByOwner: false, _bHideReason: true, _sReason: 'Stolen' } },
+            { kind: 'trashed', byOwner: false }],
+        ['a trashed mod with no trash details', { _bIsTrashed: true, _aTrashInfo: null }, { kind: 'trashed' }],
+        ['a withheld mod', { _bIsWithheld: true }, { kind: 'withheld' }],
+        ['a private mod', { _bIsPrivate: true }, { kind: 'private' }],
+    ])('reports %s', async (_, flags, removal) => {
+        const removed = { _idRow: 686304, _bIsPrivate: false, _bIsWithheld: false, _bIsTrashed: false, _aTrashInfo: null, _aFiles: null, ...flags };
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(removed), { status: 200 })));
+
+        expect(await fetchModFileList(686304)).toEqual({ id: 686304, files: [], removal });
+    });
+
+    it('reports nothing for a mod that is still up', async () => {
+        const live = { ...payload, _bIsPrivate: false, _bIsWithheld: false, _bIsTrashed: false, _aTrashInfo: null };
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(live), { status: 200 })));
+
+        expect(await fetchModFileList(627024)).not.toHaveProperty('removal');
     });
 });

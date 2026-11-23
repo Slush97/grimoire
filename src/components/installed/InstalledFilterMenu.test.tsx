@@ -12,9 +12,10 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 describe('Installed filter menu', () => {
   let host: HTMLDivElement;
   let root: Root;
-  const changed = { source: vi.fn(), status: vi.fn(), hero: vi.fn(), sort: vi.fn(), view: vi.fn(), reset: vi.fn(), manage: vi.fn(), tagOrder: vi.fn(), resetTagOrder: vi.fn() };
+  const changed = { removed: vi.fn(), source: vi.fn(), status: vi.fn(), hero: vi.fn(), sort: vi.fn(), view: vi.fn(), reset: vi.fn(), manage: vi.fn(), tagOrder: vi.fn(), resetTagOrder: vi.fn() };
   const heroes = ['Abrams', 'Haze', 'Baba', 'Bebop', 'Calico', 'Drifter', 'Dynamo', 'Ivy', 'Paradox'];
-  function Harness({ emptyLists = false, selectedHeroes = [] }: { emptyLists?: boolean; selectedHeroes?: string[] } = {}) {
+  function Harness({ emptyLists = false, selectedHeroes = [], removedCount = 0 }: { emptyLists?: boolean; selectedHeroes?: string[]; removedCount?: number } = {}) {
+    const [removedOnly, setRemovedOnly] = useState(false);
     const [sort, setSort] = useState<InstalledSortMode>('priority');
     const [view, setView] = useState<InstalledListView>('all');
     const [sourceSel, setSourceSel] = useState<InstalledSourceFilter[]>(['gamebanana', 'local']);
@@ -27,6 +28,8 @@ describe('Installed filter menu', () => {
       view={view} onViewChange={next => { changed.view(next); setView(next); }}
       sourceSel={sourceSel} sourceCounts={{ gamebanana: 20, local: 2 }}
       onSourceChange={next => { changed.source(next); setSourceSel(next); }}
+      removedOnly={removedOnly} removedCount={removedCount}
+      onRemovedOnlyChange={next => { changed.removed(next); setRemovedOnly(next); }}
       statusSel={statusSel} statusCounts={{ enabled: 4, disabled: 18 }}
       onStatusChange={next => { changed.status(next); setStatusSel(next); }}
       heroFilter={hero} heroOptions={heroes.map((name, index) => ({ name, count: index === 0 ? 2 : 1 }))}
@@ -71,6 +74,20 @@ describe('Installed filter menu', () => {
     await act(async () => button(confirm ? 'common.actions.reset' : 'common.actions.cancel').click());
     expect(changed.resetTagOrder).toHaveBeenCalledTimes(confirm ? 1 : 0);
     expect(changed.reset).not.toHaveBeenCalled();
+  });
+
+  it('offers the removed-from-GameBanana filter only while a mod is flagged or the filter is on', () => {
+    const row = () => panel().querySelector<HTMLButtonElement>('[role="checkbox"][title="installed.removed.filterTitle"]');
+    expect(row()).toBeNull();
+    act(() => root.render(<Harness removedCount={3} />));
+    expect(row()!.textContent).toBe('installed.removed.filter3');
+    act(() => row()!.click());
+    expect(changed.removed).toHaveBeenLastCalledWith(true);
+    expect(row()!.getAttribute('aria-checked')).toBe('true');
+    act(() => root.render(<Harness />));
+    expect(row()!.textContent).toBe('installed.removed.filter0');
+    act(() => row()!.click());
+    expect(row()).toBeNull();
   });
 
   it('preserves empty Source and Status selections and separates keyboard focus from selection', () => {

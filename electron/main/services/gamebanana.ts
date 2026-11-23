@@ -35,6 +35,7 @@ import type {
     GameBananaCollectionItemsResponse,
     GameBananaModFileListEntry,
     GameBananaModFileList,
+    GameBananaRemoval,
 } from '../../../src/types/gamebanana';
 export type {
     GameBananaSection,
@@ -883,7 +884,31 @@ export async function fetchModDetails(
 
 interface ModFileListRaw {
     _idRow: number;
-    _aFiles?: FileRaw[];
+    _aFiles?: FileRaw[] | null;
+    _bIsTrashed?: boolean;
+    _bIsWithheld?: boolean;
+    _bIsPrivate?: boolean;
+    _aTrashInfo?: {
+        _bIsTrashedByOwner?: boolean;
+        _bHideReason?: boolean;
+        _sReason?: string;
+    } | null;
+}
+
+/** A removed submission still answers 200, with its files nulled out. */
+function mapRemoval(raw: ModFileListRaw): GameBananaRemoval | undefined {
+    if (raw._bIsTrashed) {
+        const info = raw._aTrashInfo;
+        const reason = info?._bHideReason ? undefined : info?._sReason?.trim();
+        return {
+            kind: 'trashed',
+            ...(typeof info?._bIsTrashedByOwner === 'boolean' ? { byOwner: info._bIsTrashedByOwner } : {}),
+            ...(reason ? { reason } : {}),
+        };
+    }
+    if (raw._bIsWithheld) return { kind: 'withheld' };
+    if (raw._bIsPrivate) return { kind: 'private' };
+    return undefined;
 }
 
 /**
@@ -891,14 +916,17 @@ interface ModFileListRaw {
  * The Installed page's update check uses this to scan every installed mod
  * cheaply on mount - the full details payload (description, preview media,
  * category) is wasteful when we only need the file rows. `_aFiles` carries
- * archived rows too, each with its name, description and upload date.
+ * archived rows too, each with its name, description and upload date. The
+ * same request says whether the submission was trashed, withheld or made
+ * private since it was installed.
  */
 export async function fetchModFileList(
     modId: number,
     section = 'Mod'
 ): Promise<GameBananaModFileList> {
-    const url = `${GAMEBANANA_API_BASE}/${section}/${modId}?_csvProperties=_idRow,_aFiles`;
+    const url = `${GAMEBANANA_API_BASE}/${section}/${modId}?_csvProperties=_idRow,_aFiles,_bIsTrashed,_bIsWithheld,_bIsPrivate,_aTrashInfo`;
     const raw = await fetchJson<ModFileListRaw>(url);
+    const removal = mapRemoval(raw);
     return {
         id: raw._idRow,
         files: (raw._aFiles ?? []).map((f) => ({
@@ -908,6 +936,7 @@ export async function fetchModFileList(
             description: f._sDescription,
             dateAdded: f._tsDateAdded,
         })),
+        ...(removal ? { removal } : {}),
     };
 }
 
