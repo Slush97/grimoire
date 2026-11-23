@@ -36,7 +36,7 @@ export function SortableProfileGrid({ profiles, onReorder, className, children }
       accessibility={{
         screenReaderInstructions: { draggable: t('profiles.reorder.instructions') },
         announcements: {
-          onDragStart: ({ active }) => t('installed.lists.pickedUp', { name: profiles.find((profile) => profile.id === active.id)?.name }),
+          onDragStart: ({ active }) => t('profiles.reorder.pickedUp', { name: profiles.find((profile) => profile.id === active.id)?.name }),
           onDragOver: ({ over }) => over ? t('installed.lists.dragPosition', { position: ids.indexOf(String(over.id)) + 1, count: ids.length }) : undefined,
           onDragEnd: () => t('profiles.reorder.saved'),
           onDragCancel: () => t('installed.lists.reorderCancelled'),
