@@ -2103,6 +2103,21 @@
       "renameTitle": "{{name}} (дважды щёлкните, чтобы переименовать)",
       "gridMetaTitle": "{{file}} | {{size}} | установлен {{date}}"
     },
+    "removed": {
+      "trashed": "Удалён",
+      "withheld": "Скрыт",
+      "private": "Закрыт",
+      "trashedTitle": "Этот мод удалён с GameBanana.",
+      "trashedByAuthorTitle": "Автор удалил этот мод с GameBanana.",
+      "trashedByModeratorTitle": "Модератор GameBanana удалил этот мод.",
+      "withheldTitle": "Модераторы GameBanana скрыли этот мод, пока автор не исправит проблему.",
+      "privateTitle": "Автор закрыл доступ к этому моду на GameBanana.",
+      "reason": "Причина: {{reason}}",
+      "goneNote": "Ваша копия по-прежнему работает. Обновить или скачать мод заново больше нельзя.",
+      "hiddenNote": "Ваша копия по-прежнему работает. Обновить или скачать мод заново нельзя, пока он не вернётся.",
+      "filter": "Нет на GameBanana",
+      "filterTitle": "Показать только моды, страницу которых на GameBanana удалили, скрыли или закрыли"
+    },
     "solo": {
       "banner": "Проверка мода «{{name}}»: все остальные моды отключены.",
       "restore": "Восстановить моды",

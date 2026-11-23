@@ -1969,6 +1969,21 @@
       "installedAt": "Installed {{date}}",
       "gridMetaTitle": "{{file}} | {{size}} | installed {{date}}"
     },
+    "removed": {
+      "trashed": "Trashed",
+      "withheld": "Withheld",
+      "private": "Private",
+      "trashedTitle": "This mod was removed from GameBanana.",
+      "trashedByAuthorTitle": "The author removed this mod from GameBanana.",
+      "trashedByModeratorTitle": "A GameBanana moderator removed this mod.",
+      "withheldTitle": "GameBanana moderators are holding this mod back until its author fixes a problem.",
+      "privateTitle": "The author made this mod private on GameBanana.",
+      "reason": "Reason given: {{reason}}",
+      "goneNote": "Your copy still works. It can no longer be updated or downloaded again.",
+      "hiddenNote": "Your copy still works. It can't be updated or downloaded again until it comes back.",
+      "filter": "Removed from GameBanana",
+      "filterTitle": "Show only mods whose GameBanana page was trashed, withheld or made private"
+    },
     "solo": {
       "banner": "Testing {{name}} solo: every other mod is disabled.",
       "restore": "Restore mods",

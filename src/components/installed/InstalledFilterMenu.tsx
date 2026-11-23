@@ -3,7 +3,7 @@ import { Check, ChevronDown, Funnel } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AnchoredPopover } from '../common/AnchoredPopover';
 import { HeroSelect } from '../common/HeroSelect';
-import { Button, MultiSelectSegments } from '../common/ui';
+import { Button, CheckboxMark, MultiSelectSegments } from '../common/ui';
 import { FilterCheckList, type FilterCheckOption } from './FilterCheckList';
 import { InstalledTagSelect, type InstalledTagOption, type InstalledTagSelectProps } from './InstalledTagSelect';
 import { HeroIconStack } from './chips';
@@ -22,6 +22,10 @@ export interface InstalledFilterMenuProps {
   sourceSel: readonly InstalledSourceFilter[];
   onSourceChange: (values: InstalledSourceFilter[]) => void;
   sourceCounts: { gamebanana: number; local: number };
+  /** Show only mods whose GameBanana page was trashed, withheld or made private. */
+  removedOnly: boolean;
+  onRemovedOnlyChange: (value: boolean) => void;
+  removedCount: number;
   statusSel: readonly InstalledStatusFilter[];
   onStatusChange: (values: InstalledStatusFilter[]) => void;
   statusCounts: { enabled: number; disabled: number };
@@ -54,7 +58,7 @@ function toggleValue<T extends string>(selected: readonly T[], value: T): T[] {
 
 export function InstalledFilterMenu({
   sortMode, onSortModeChange, view, onViewChange,
-  sourceSel, onSourceChange, sourceCounts,
+  sourceSel, onSourceChange, sourceCounts, removedOnly, onRemovedOnlyChange, removedCount,
   statusSel, onStatusChange, statusCounts, heroFilter, onHeroChange, heroOptions,
   tagFilter, onTagChange, tagOptions, listFilter, onListChange, listOptions,
   excludedTagFilter, onExcludedTagChange, onCreateTag, onRenameTag, onDeleteTag,
@@ -110,6 +114,13 @@ export function InstalledFilterMenu({
             options={([
               ['gamebanana', t('installed.filters.gamebanana')], ['local', t('installed.filters.local')],
             ] as const).map(([value, label]) => ({ value, label: <>{label}<span className="opacity-60">{sourceCounts[value]}</span></> }))} />
+          {(removedCount > 0 || removedOnly) && <button type="button" role="checkbox" aria-checked={removedOnly}
+            onClick={() => onRemovedOnlyChange(!removedOnly)} title={t('installed.removed.filterTitle')}
+            className="mt-1.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-hl/5 hover:text-text-primary cursor-pointer">
+            <CheckboxMark variant="menu" checked={removedOnly} />
+            <span className="flex-1 truncate">{t('installed.removed.filter')}</span>
+            <span className="text-2xs opacity-60">{removedCount}</span>
+          </button>}
         </div>
         <div>
           <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('installed.filters.status')}</div>

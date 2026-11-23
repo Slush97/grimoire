@@ -1,3 +1,4 @@
+import type { GameBananaRemoval } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 import { canonicalHeroName, modLoadOrder } from './lockerUtils';
 import { installedVariantGroupKey, isLocalMod } from './localVariantEligibility';
@@ -176,6 +177,20 @@ export function entrySize(entry: ModEntry): number {
 /** A group exposes local-only controls only when every file is locally imported. */
 export function entryIsLocal(entry: ModEntry): boolean {
   return entry.kind === 'single' ? isLocalMod(entry.mod) : entry.variants.every(isLocalMod);
+}
+
+/** Why an entry's GameBanana page is gone, if the update check found it so.
+ *  A group's variants share one page, so the first hit speaks for all. */
+export function entryRemoval(
+  entry: ModEntry,
+  removedById: ReadonlyMap<string, GameBananaRemoval>,
+): GameBananaRemoval | undefined {
+  if (entry.kind === 'single') return removedById.get(entry.mod.id);
+  for (const variant of entry.variants) {
+    const removal = removedById.get(variant.id);
+    if (removal) return removal;
+  }
+  return undefined;
 }
 
 export function entryHeroNames(entry: ModEntry, context?: InstalledTaxonomyContext): string[] {

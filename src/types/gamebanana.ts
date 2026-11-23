@@ -144,9 +144,20 @@ export interface GameBananaModFileListEntry {
   dateAdded?: number;
 }
 
+/** Why a submission can no longer be opened or downloaded on GameBanana. */
+export interface GameBananaRemoval {
+  kind: 'trashed' | 'withheld' | 'private';
+  /** Trashed only: the author removed it. False means a moderator did. */
+  byOwner?: boolean;
+  /** Trashed only: the reason GameBanana shows on the page, when it shows one. */
+  reason?: string;
+}
+
 export interface GameBananaModFileList {
   id: number;
   files: GameBananaModFileListEntry[];
+  /** Set when the submission is gone from GameBanana. `files` is then empty. */
+  removal?: GameBananaRemoval;
 }
 
 export interface GameBananaComment {

@@ -1,3 +1,4 @@
+import type { GameBananaRemoval } from '../types/gamebanana';
 import type { MergedModSource } from '../types/mod';
 import {
   classifyModFiles,
@@ -113,6 +114,20 @@ export function computeUpdateFlags(
   }
 
   return { updatesAvailable, staleMergeSources, updatableMergeSources };
+}
+
+/** Local mod ids whose submission is gone from GameBanana, with what happened
+ *  to it. The installed copy keeps working, so this is never an update. */
+export function removedMods(
+  mods: readonly UpdateCheckMod[],
+  removalsByModId: ReadonlyMap<number, GameBananaRemoval>,
+): Map<string, GameBananaRemoval> {
+  const removed = new Map<string, GameBananaRemoval>();
+  for (const mod of mods) {
+    const removal = typeof mod.gameBananaId === 'number' ? removalsByModId.get(mod.gameBananaId) : undefined;
+    if (removal) removed.set(mod.id, removal);
+  }
+  return removed;
 }
 
 /** Sources with GameBanana provenance, grouped by mod id. */

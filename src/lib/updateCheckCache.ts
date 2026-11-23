@@ -1,9 +1,16 @@
 import type { DownloadEventData } from '../types/electron';
+import type { GameBananaRemoval } from '../types/gamebanana';
 import type { UpdateFileRow } from './updateFileMatch';
 
 // Every expiry refetches one GameBanana file list per installed mod, so focus
 // refreshes need to stay rare.
 const FILE_ROWS_TTL_MS = 30 * 60 * 1000;
+
+/** What one update-check request says about a submission. */
+export interface UpdateCheckList {
+  files: readonly UpdateFileRow[];
+  removal?: GameBananaRemoval;
+}
 
 interface CacheEntry {
   expiresAt: number;
@@ -13,11 +20,17 @@ interface CacheEntry {
 /** File lists shared across page visits. Invalidation also refreshes the badges. */
 export class UpdateCheckCache {
   private fileRows = new Map<number, readonly UpdateFileRow[]>();
+  private removed = new Map<number, GameBananaRemoval>();
   private entries = new Map<number, CacheEntry>();
   private listeners = new Set<() => void>();
 
   get rows(): ReadonlyMap<number, readonly UpdateFileRow[]> {
     return this.fileRows;
+  }
+
+  /** Submissions the last check found trashed, withheld or private. */
+  get removals(): ReadonlyMap<number, GameBananaRemoval> {
+    return this.removed;
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -33,6 +46,7 @@ export class UpdateCheckCache {
     for (const modId of modIds) {
       this.entries.delete(modId);
       this.fileRows.delete(modId);
+      this.removed.delete(modId);
       changed = true;
     }
     if (changed) this.notify();
@@ -50,17 +64,19 @@ export class UpdateCheckCache {
     if (changed) this.notify();
   }
 
-  load(modId: number, fetchRows: () => Promise<readonly UpdateFileRow[]>): Promise<void> {
+  load(modId: number, fetchList: () => Promise<UpdateCheckList>): Promise<void> {
     const cached = this.entries.get(modId);
     if (cached?.request) return cached.request;
     if (cached && cached.expiresAt > Date.now()) return Promise.resolve();
 
     const entry: CacheEntry = { expiresAt: 0 };
     this.entries.set(modId, entry);
-    entry.request = Promise.resolve().then(fetchRows).then((rows) => {
+    entry.request = Promise.resolve().then(fetchList).then(({ files, removal }) => {
       // A download or update may invalidate this request while it is in flight.
       if (this.entries.get(modId) !== entry) return;
-      this.fileRows.set(modId, rows);
+      this.fileRows.set(modId, files);
+      if (removal) this.removed.set(modId, removal);
+      else this.removed.delete(modId);
       entry.expiresAt = Date.now() + FILE_ROWS_TTL_MS;
       entry.request = undefined;
     }).catch((error: unknown) => {
