@@ -662,7 +662,8 @@ export default function VariantPickerModal({
                         >
                             <Pencil className="w-4 h-4" />
                         </button>
-                        {onDetachVariant && canJoinLocalVariantGroup(v) && (
+                        {/* A mod's only file has no group to leave. */}
+                        {onDetachVariant && variants.length > 1 && canJoinLocalVariantGroup(v) && (
                             <button
                                 type="button"
                                 onClick={() => handleDetach(v)}
