@@ -9,6 +9,7 @@ import {
     applyProfile,
     deleteProfile,
     renameProfile,
+    reorderProfiles,
     removeProfileCrosshair,
     type Profile,
     type ProfileCrosshairSettings,
@@ -113,6 +114,14 @@ ipcMain.handle('delete-profile', (_, profileId: string): void => {
 // rename-profile
 ipcMain.handle('rename-profile', (_, profileId: string, newName: string): Profile => {
     return renameProfile(profileId, newName);
+});
+
+// reorder-profiles: saves the order the user dragged the profiles into.
+ipcMain.handle('reorder-profiles', (_, orderedIds: unknown): Profile[] => {
+    if (!Array.isArray(orderedIds) || !orderedIds.every(id => typeof id === 'string')) {
+        throw new Error('Invalid profile order');
+    }
+    return reorderProfiles(orderedIds);
 });
 
 // remove-profile-crosshair: drops the crosshair from a profile without

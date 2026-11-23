@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Layers, Plus, Trash2, Play, Save, AlertTriangle, User, ChevronDown, ChevronUp, Terminal, Check, Pencil, X, Upload, Share2, Globe, History, RotateCcw, Camera } from 'lucide-react';
 import {
@@ -8,6 +8,7 @@ import {
   updateProfile,
   deleteProfile,
   renameProfile,
+  reorderProfiles,
   removeProfileCrosshair,
   getSettings,
   createSnapshot,
@@ -29,11 +30,13 @@ import { Skeleton } from '../components/common/Skeleton';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import ExportProfileModal from '../components/profiles/ExportProfileModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
+import { SortableProfile, SortableProfileGrid } from '../components/profiles/SortableProfiles';
 import PublishDialog from '../components/social/PublishDialog';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import Tx from '../components/translation/Tx';
 import type { Mod } from '../types/mod';
 import { profileModDisplayGroupKey } from '../lib/profileModGrouping';
+import { applyProfileOrder } from '../lib/profileOrder';
 
 type ProfileModEntry = Profile['mods'][number];
 
@@ -456,6 +459,17 @@ export default function Profiles() {
     }
   };
 
+  const handleReorderProfiles = async (orderedIds: string[]) => {
+    // Move the card at once: waiting for the save would snap it back first.
+    setProfiles((current) => applyProfileOrder(current, orderedIds));
+    try {
+      await reorderProfiles(orderedIds);
+    } catch (err) {
+      setError(String(err));
+      await loadProfileList({ silent: true });
+    }
+  };
+
   const handleDeleteProfile = async (profileId: string) => {
     try {
       await deleteProfile(profileId);
@@ -784,7 +798,11 @@ export default function Profiles() {
           />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-6">
+        <SortableProfileGrid
+          profiles={profiles}
+          onReorder={(orderedIds) => void handleReorderProfiles(orderedIds)}
+          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-6"
+        >
           {profilesWithGroups.map(({ profile, profileModGroups }) => {
             const isApplying = applyingId === profile.id;
             const isUpdating = updatingId === profile.id;
@@ -794,9 +812,8 @@ export default function Profiles() {
 
             const isRenamingThis = renamingId === profile.id;
 
-            return (
+            const renderCard = ({ handle, dragging }: { handle: ReactNode; dragging: boolean }) => (
               <Card
-                key={profile.id}
                 title={
                   isRenamingThis ? (
                     <input
@@ -818,8 +835,9 @@ export default function Profiles() {
                   )
                 }
                 icon={Layers}
+                leading={handle}
                 accentEdge={isActive ? 'active' : 'none'}
-                className={`@container/profile-card transition-all duration-300 ${isActive ? '' : 'hover:border-hl/10'}`}
+                className={`@container/profile-card h-full transition-all duration-300 ${dragging ? 'border-accent/60! bg-bg-secondary! shadow-lg' : isActive ? '' : 'hover:border-hl/10'}`}
                 action={
                   <div className="flex items-center gap-2">
                     {!isRenamingThis && (
@@ -1112,8 +1130,13 @@ export default function Profiles() {
                 </div>
               </Card>
             );
+            return (
+              <SortableProfile key={profile.id} id={profile.id} name={profile.name} disabled={profiles.length < 2}>
+                {renderCard}
+              </SortableProfile>
+            );
           })}
-        </div>
+        </SortableProfileGrid>
       )}
 
       {/* Update (overwrite) Confirmation Modal. Gated on confirmProfileUpdate so

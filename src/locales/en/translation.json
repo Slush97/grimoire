@@ -2792,6 +2792,12 @@
       "update": "Update",
       "deleting": "Deleting..."
     },
+    "reorder": {
+      "handle": "Drag to reorder {{name}}",
+      "instructions": "Press Space to pick up a profile. Use the arrow keys to move it, Space to drop, or Escape to cancel.",
+      "saved": "Profile order saved.",
+      "pickedUp": "Reordering {{name}}."
+    },
     "snapshots": {
       "title_zero": "Snapshots",
       "title_one": "Snapshots ({{count}})",
