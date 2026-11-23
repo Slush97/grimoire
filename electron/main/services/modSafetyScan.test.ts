@@ -246,6 +246,14 @@ describe('VPK safety inspection', () => {
         const result = await scan(safetyVpk([{ path: 'panorama/styles/test.vcss_c', bytes: safetyResource(css) }]));
         expect(result.verdict).toBe('no-findings');
     });
+    it('does not prompt for the browser panel selector in an edited copy of the game base styles', async () => {
+        const css = Buffer.concat([Buffer.alloc(6), Buffer.from('.MousePanning #MousePanningImage{opacity: 0.5;}CitadelHTMLPanel TextTooltip{opacity: 0.0;}')]);
+        const styles = { path: 'panorama/styles/base/citadel_base_styles.vcss_c', bytes: safetyResource(css) };
+        expect((await scan(safetyVpk([styles]))).verdict).toBe('no-findings');
+        // The same panel in a layout is the real thing.
+        const report = await scan(safetyVpk([styles, { path: 'panorama/layout/news.xml', bytes: Buffer.from('<root><CitadelHTMLPanel id="Web"/></root>') }]));
+        expect(report.findings).toEqual([{ entry: 'panorama/layout/news.xml', reason: 'browser' }]);
+    });
     it.each(['../escape.js', 'C:/outside.js', 'CON.js', 'folder/../x.js'])('rejects unsafe entry paths: %s', async path => {
         expect((await scan(safetyVpk([{ path, bytes: Buffer.from('run()') }]))).verdict).toBe('blocked');
     });

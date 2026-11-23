@@ -107,13 +107,16 @@ function panoramaEventSource(source: string): string {
 const STRING_DECODERS = new Set(['atob', 'fromCharCode', 'fromCodePoint', 'unescape', 'decodeURI', 'decodeURIComponent']);
 const PANEL_FACTORIES = new Set(['CreatePanel', 'CreatePanelWithProperties', 'BLoadLayoutFromString', 'BLoadLayoutFromStringAsync']);
 
-export function inspectModSource(entry: string, source: string, javascript: boolean): ModSafetyFinding[] {
+export function inspectModSource(entry: string, source: string, javascript: boolean, stylesheet = false): ModSafetyFinding[] {
     const reasons = new Set<ModSafetyReason>();
     if (javascript) reasons.add('executable');
     function inspectText(text: string): void {
         // file://{images}/ and the other Panorama roots resolve inside the game's own content.
         if (/(?:\bfile\s*:(?!\/\/\{\w+\}\/)|\\\\[^\\\s"'<>]+\\)/i.test(text)) reasons.add('local-file');
-        if (/\bjavascript\s*:|\b(?:CitadelHTMLPanel|HTMLPanel|HTMLTitle|HTMLFinishRequest|SetURL|SetURLWithParams|OpenURL|OpenExternalBrowserURL)\b/i.test(text)) reasons.add('browser');
+        // A stylesheet names a panel type only to style it and cannot call a method. The game's
+        // own citadel_base_styles has a CitadelHTMLPanel rule, which every edited copy carries.
+        if (/\bjavascript\s*:/i.test(text) || (!stylesheet
+            && /\b(?:CitadelHTMLPanel|HTMLPanel|HTMLTitle|HTMLFinishRequest|SetURL|SetURLWithParams|OpenURL|OpenExternalBrowserURL)\b/i.test(text))) reasons.add('browser');
         if (/\b(?:eval|Function)\s*\(/.test(text) || text === 'eval' || text === 'Function') reasons.add('dynamic-code');
         if (['fetch', 'XMLHttpRequest', 'WebSocket', 'importScripts', 'RunScriptInPanelContext'].includes(text)) reasons.add('remote-code');
     }

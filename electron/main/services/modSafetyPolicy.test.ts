@@ -39,6 +39,13 @@ describe('mod source policy', () => {
         expect(result).toEqual(expect.arrayContaining(['browser', 'local-file']));
         expect(reasons('<root><CitadelHTMLPanel url="file:///C:/Users/me/secret.txt"/></root>', false)).toEqual(expect.arrayContaining(['browser', 'local-file']));
     });
+    it('reads a panel type in a stylesheet as a selector', () => {
+        // The rule the game ships in citadel_base_styles.
+        const rule = 'CitadelHTMLPanel TextTooltip{opacity: 0.0;}';
+        expect(inspectModSource('fixture', rule, false, true)).toEqual([]);
+        expect(reasons(rule, false)).toEqual(['browser']);
+        expect(inspectModSource('fixture', '.a{background-image: url("javascript:run()");}', false, true).map(f => f.reason)).toEqual(['browser']);
+    });
     it('requires consent for every script, even when nothing else fires', () => {
         expect(reasons('$.Schedule(0.1, () => $("#timer").text = String(Game.GetGameTime()));')).toEqual(['executable']);
         expect(reasons('!function(a){a(1)}(run);')).toEqual(['executable']);
