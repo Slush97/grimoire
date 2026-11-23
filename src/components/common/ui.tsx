@@ -11,6 +11,8 @@ interface CardProps {
     contentClassName?: string;
     title?: ReactNode;
     icon?: LucideIcon;
+    // Stands in for the icon when the slot has to be a control, such as a drag handle.
+    leading?: ReactNode;
     description?: ReactNode;
     action?: ReactNode;
     // Controls the left accent bar. 'subtle' is the default HUD callout look;
@@ -19,7 +21,7 @@ interface CardProps {
     accentEdge?: 'none' | 'subtle' | 'active';
 }
 
-export function Card({ id, children, className = '', contentClassName = '', title, icon: Icon, description, action, accentEdge }: CardProps) {
+export function Card({ id, children, className = '', contentClassName = '', title, icon: Icon, leading, description, action, accentEdge }: CardProps) {
     const { visible, childrenFilter } = useContentFilter(id);
     if (!visible) return null;
     const showHeader = !!(title || action);
@@ -35,7 +37,7 @@ export function Card({ id, children, className = '', contentClassName = '', titl
                         <div className="min-w-0">
                             {title && (
                                 <div className={`flex items-center gap-2 ${description ? 'mb-1' : ''}`}>
-                                    {Icon && <Icon className="w-4 h-4 text-accent" />}
+                                    {leading ?? (Icon && <Icon className="w-4 h-4 text-accent" />)}
                                     <h3 className="text-lg font-semibold text-text-primary tracking-wide font-reaver">{title}</h3>
                                 </div>
                             )}

@@ -1318,6 +1318,10 @@ export async function renameProfile(profileId: string, newName: string): Promise
   return window.electronAPI.renameProfile(profileId, newName);
 }
 
+export async function reorderProfiles(orderedIds: string[]): Promise<Profile[]> {
+  return window.electronAPI.reorderProfiles(orderedIds);
+}
+
 export async function removeProfileCrosshair(profileId: string): Promise<Profile> {
   return window.electronAPI.removeProfileCrosshair(profileId);
 }

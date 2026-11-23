@@ -25,6 +25,7 @@ import {
     syncRunningGameModSnapshotFromMods,
 } from './gameSessionMods';
 import { generateCrosshairCommands, normalizeCrosshairSettings } from '../../../src/lib/crosshair';
+import { applyProfileOrder } from '../../../src/lib/profileOrder';
 
 // The Profile wire types are single-sourced in src/types/electron.ts
 // (docstrings included); re-exported because portableProfile.ts and the
@@ -652,6 +653,16 @@ export function deleteProfile(profileId: string): void {
     }
 
     saveProfiles(filtered);
+}
+
+/**
+ * Save the order profiles are listed in. profiles.json is an array, and every
+ * list of profiles in the app shows it as stored.
+ */
+export function reorderProfiles(orderedIds: readonly string[]): Profile[] {
+    const profiles = applyProfileOrder(loadProfiles(), orderedIds);
+    saveProfiles(profiles);
+    return profiles;
 }
 
 /**
