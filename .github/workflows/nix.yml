@@ -58,7 +58,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@v32
 
       # Catches eval-level rot: a nixpkgs attribute that disappeared
       # (pnpm_9 and Electron majors both get dropped), a syntax error, or a
@@ -80,7 +80,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@v32
 
       - name: Build package
         run: nix build -L .#grimoire
